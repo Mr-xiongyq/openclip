@@ -652,3 +652,11 @@ and fixed SF Symbol sample actions, with a presenter that ignores saved action c
 Its stable preview viewport pins the contextual island at a left inset as the main bar grows.
 Per-action contextual exclusions do not change the static sample. The main bar's Actions Per Page setting
 and width budget apply to the standard island independently of the contextual island.
+
+## Actions per page ([#148](https://github.com/ganeshmshetty/openclip/issues/148))
+
+Appearance uses a Liquid Glass count stepper (2–24) with native press-and-hold repetition
+and a separate Fit to width toggle.
+Fit to width defaults off and preserves the saved manual count (default 6); both main and
+group bars pass an unlimited count to the existing width-budget layout when enabled.
+Actual capacity depends on the popup display, scale, controls, and rendered action widths.
