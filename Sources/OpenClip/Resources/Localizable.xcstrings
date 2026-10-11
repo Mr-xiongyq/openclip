@@ -20413,6 +20413,34 @@
         }
       }
     },
+    "Updates are disabled in development builds.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开发版本中已禁用更新。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開發版本中已停用更新。"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les mises à jour sont désactivées dans les versions de développement."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開発ビルドではアップデートが無効になっています。"
+          }
+        }
+      }
+    },
     "Updating…": {
       "localizations": {
         "zh-Hans": {
@@ -20801,6 +20829,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "README を表示"
+          }
+        }
+      }
+    },
+    "View Update…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看更新…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看更新…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voir la mise à jour…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アップデートを表示…"
           }
         }
       }

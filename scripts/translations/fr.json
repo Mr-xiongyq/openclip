@@ -773,5 +773,7 @@
   "Automatically Update Extensions": "Mettre à jour automatiquement les extensions",
   "Fit to width": "Adapter à la largeur",
   "Decrease actions per page": "Réduire le nombre d’actions par page",
-  "Increase actions per page": "Augmenter le nombre d’actions par page"
+  "Increase actions per page": "Augmenter le nombre d’actions par page",
+  "View Update…": "Voir la mise à jour…",
+  "Updates are disabled in development builds.": "Les mises à jour sont désactivées dans les versions de développement."
 }

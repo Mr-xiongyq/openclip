@@ -773,5 +773,7 @@
   "Automatically Update Extensions": "自动更新扩展",
   "Fit to width": "适应宽度",
   "Decrease actions per page": "减少每页动作数",
-  "Increase actions per page": "增加每页动作数"
+  "Increase actions per page": "增加每页动作数",
+  "View Update…": "查看更新…",
+  "Updates are disabled in development builds.": "开发版本中已禁用更新。"
 }

@@ -29,7 +29,22 @@ areas; stale debt notes are worse than none.
 
 ## Manual Update Window Activation
 
-- Manual Sparkle checks share `AppActivationPolicy` with Settings. A single activation lease spans
+- Production builds use Sparkle's standard UI and daily scheduler, with no forced launch check.
+  Development/unknown bundle IDs never create an updater. The standard user-driver delegate adds
+  a menu bar dot and one quiet optional notification per version, persisted only after delivery.
+  Attention clears the dot/notification; session completion clears unstaged availability and
+  releases activation. Staged-on-quit updates retain the existing menu/settings entry.
+  Silent staging on quit also creates a reminder without announcing the same version twice.
+  Each notification task owns a unique request ID; a late canceled delivery only removes its own
+  request and cannot overwrite the newer announcement history. AppKit menu validation enforces
+  the development-build restriction even when automatic item enabling runs.
+  Settings shows “View Update…” for available updates. Notifications remain supplementary;
+  Sparkle retains its normal presentation, skip, download, verification and relaunch behavior.
+  The app does not retain/use the immediate-install callback while returning `false` from
+  `willInstallUpdateOnQuit`; that callback requires taking ownership of installation.
+  Tests cover reminder state, notification history, development gating and overlapping activation
+  leases. A signed two-version installation/relaunch smoke test remains a release validation step.
+- Manual and scheduled Sparkle windows share `AppActivationPolicy` with Settings. A single activation lease spans
   the update flow and is released by `didFinishUpdateCycleFor`, including cancellation, errors, and
   no-update outcomes. Repeated checks during a session do not acquire extra leases. The last lease
   restores the original activation policy once no regular windows remain visible; a Settings window

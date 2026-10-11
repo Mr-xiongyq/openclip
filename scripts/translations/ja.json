@@ -773,5 +773,7 @@
   "Automatically Update Extensions": "拡張機能を自動更新",
   "Fit to width": "幅に合わせる",
   "Decrease actions per page": "1ページあたりのアクション数を減らす",
-  "Increase actions per page": "1ページあたりのアクション数を増やす"
+  "Increase actions per page": "1ページあたりのアクション数を増やす",
+  "View Update…": "アップデートを表示…",
+  "Updates are disabled in development builds.": "開発ビルドではアップデートが無効になっています。"
 }
