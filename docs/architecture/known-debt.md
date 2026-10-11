@@ -258,6 +258,12 @@ areas; stale debt notes are worse than none.
   model are gone, and the inline status banner is gone too: every `StatusFeedback` renders as a
   floating toast (`ToastPanelController`) with no queue — a status shows over the card — and
   `showsLoading` actions (manifest `"loading"`) use the early-close spinner toast.
+  All toasts, including cancellable loading pills, reserve `toastShadowInset` inside the
+  window. Cancellable pills use a subtle theme-aware inset rounded hover tint,
+  preserving their outer chrome while displaying an × and “Cancel Task”. Shadows render inside the
+  window so they are not clipped. The container excludes the ring from
+  view hit-testing; true cross-application click-through for interactive toast rings still
+  requires window-level mouse-event routing (returning nil from hit-testing alone is insufficient).
 - **Search and result-card footers share separate theme-aware buttons.**
   `PopupFooterButtonChrome` uses a native `.glassEffect` rounded rectangle for the glass theme on
   macOS 26+, with a material/tint fallback; secondary actions are neutral and the primary action
