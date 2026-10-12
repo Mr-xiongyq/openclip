@@ -7,15 +7,20 @@ All notable user-facing changes to OpenClip.
 ## v1.8.2 - 2026-10-12
 
 ### Features & Improvements
-- **Removed modifier key selection triggers**: Removed modifier key selection trigger options (Option, Shift, Control, Command) to ensure text selection popup appearance remains completely reliable across all applications, restoring the direct "Appear Automatically" toggle in General Settings and the menu bar status menu.
-- **Automatic OCR text copying & capture feedback**: Automatically copy recognized text from screen captures to the clipboard by default (toggleable via the new "Copy to Clipboard Automatically" setting under **General ▸ Shortcuts**), paired with lightweight cursor-relative status feedback.
+- **Removed modifier key triggers**: Reverted modifier key selection triggers to ensure 100% reliable popup appearance across all apps, restoring the direct "Appear Automatically" toggle.
+- **OCR auto-copy setting**: Added a "Copy to Clipboard Automatically" setting under **General ▸ Shortcuts** with cursor status feedback.
+- **Script action options in env**: Exposed custom script options to child processes via `OPENCLIP_OPTION_<NAME>`.
+- **Popup paging & UI polish**: Added fit-to-width paging and refined count stepper in glass theme.
 
 ### Fixes & Stability
-- **Classic card shadow clipping fix**: Rasterize the solid surface and card shadow in classic theme with dedicated padding to prevent shadow buffer clipping when AppKit promotes buttons to backing layers.
-- **Toast placement above cursor and action bar**: Status toasts now prefer placement above the cursor and action/group bars (avoiding screen edges and tall cards), remaining fixed during mouse movement.
-- **Fullscreen Spaces support for status toasts**: Made toast windows eligible for other apps' fullscreen Spaces (`canJoinAllApplications`) with bounded recovery for stale window membership without activating the app.
-- **Popup hover insets and contextual edge rounding**: Refined outer popup bar and group sub-bar hover insets, and corrected contextual edge rounding to use island-local offsets independently of the global hover index.
-- **Loading pill shadow refinement**: Reserved shadow insets inside the toast window to prevent shadow clipping on cancellable loading pills, paired with refined theme-aware hover highlights.
+- **Fixed JS extension memory leaks (#46, #47)**: Prevented the fetch bridge from retaining `JSContext` and per-run `URLSession` instances.
+- **Calculator bounds & safety (#50)**: Bounded recursion depth in `MathEvaluator` and safely rejected overflowing inputs.
+- **AI stream cancellation (#43)**: Correctly surfaced stream cancellations for Cloud and Local AI actions.
+- **AI key persistence (#42)**: Prevented recursion on API key save failures.
+- **Classic card shadow clipping**: Added rasterization padding to prevent shadow buffer clipping on promoted AppKit layers.
+- **Toast placement & Spaces**: Fixed status toasts to prefer placement above cursor and bars, and enabled them across fullscreen Spaces.
+- **Loading pill shadow**: Reserved insets to eliminate shadow clipping on cancellable loading pills.
+- **Update reminders**: Added reliable menu bar update badges and reminders.
 
 ---
 
