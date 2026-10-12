@@ -33,7 +33,6 @@ public enum SettingsCatalog {
 
             // App / behavior toggles
             SettingKey.isAppEnabled.erased,
-            SettingKey.selectionModifier.erased,
             SettingKey.isAIEnabled.erased,
             SettingKey.isMouseHoldEnabled.erased,
             SettingKey.hasCompletedOnboarding.erased,

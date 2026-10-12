@@ -203,6 +203,16 @@ areas; stale debt notes are worse than none.
 
 ## Action-Search Palette & Popup Growth
 
+- **Classic popup shadows use a separate padded rendering buffer.** `PopupCardChromeModifier`
+  rasterizes only the solid rounded surface and its contact/ambient shadows, with
+  `popupShadowInset` inside the buffer. The buttons and other live content remain outside that
+  rasterization. This prevents the rectangular shadow cut-off observed a few seconds after
+  presentation as AppKit adds backing layers. The negative outer padding preserves the surface's
+  layout size; the panel still reserves its existing shadow ring. Glass retains its live material
+  rendering. The isolated live panel confirmed the fix on the affected Mac; offscreen captures
+  check idle stability and fading at the panel boundary but cannot reproduce WindowServer's
+  delayed compositing by themselves.
+
 - **Action bar hover chrome** uses a rounded highlight in the system accent color softened 8% toward white, with no horizontal inset for interior text buttons and 2 scaled points for end text buttons; icon buttons retain 2 points for interiors and 3 for ends. All highlights are inset by 3 scaled points vertically, shared by the main and sub-action bars. Interior corners use a 7-point radius; outer edge corners use 10 points (both scaled). Foregrounds and full button hit areas stay unchanged; hovered buttons use a white foreground and the highlight snaps between them with no transition; search chrome is unchanged.
 
 - **AI presets can leave AI Tools.** `SettingKey.standaloneAIActionIDs` records presets dragged
@@ -694,13 +704,6 @@ Its stable preview viewport pins the contextual island at a left inset as the ma
 Per-action contextual exclusions do not change the static sample. The main bar's Actions Per Page setting
 and width budget apply to the standard island independently of the contextual island.
 
-`PopupHoverCaptureTests` renders production main/contextual bars and group sub-bars offscreen,
-with light/dark classic appearances and contextual islands on either side. Main-bar hover uses
-injected cursor positions and checks the reported action; sub-bar captures inject its hover target.
-Run `./scripts/test.sh PopupHoverCaptureTests`; PNGs land in `/tmp/openclip-hover-captures`
-and are retained as XCTest attachments. These are visual inspection artifacts, not golden-image
-comparisons or live mouse-tracking tests. `PopupView` and `GroupSubActionBarView` accept an
-optional settings store so captures use `MemorySettingsStore` without changing user preferences.
 Outer bar hover insets are 3 pt on each exposed edge, matching the vertical inset; sub-bars
 account for their existing 1 pt row padding. Contextual edge rounding uses island-local offsets
 independently of the global hover index, including when the contextual island is on the right.

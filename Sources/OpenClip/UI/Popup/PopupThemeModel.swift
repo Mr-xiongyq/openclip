@@ -398,24 +398,37 @@ public struct PopupCardChromeModifier: ViewModifier {
         self.colorScheme = colorScheme
     }
 
+    @ViewBuilder
     public func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        return content
-            .background(
-                Group {
-                    if effectiveTheme == "glass" && !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
-                        LayeredGlassBackground(cornerRadius: cornerRadius, colorScheme: colorScheme)
-                    } else {
-                        PopupThemeModel.classicSurfaceBackground(for: colorScheme, in: shape)
-                    }
-                }
+        if effectiveTheme == "glass" && !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
+            shadowed(
+                content
+                    .background(LayeredGlassBackground(cornerRadius: cornerRadius, colorScheme: colorScheme))
+                    .clipShape(shape)
+                    .overlay(outerBorder(shape))
+                    .overlay(rimHighlight(shape))
             )
-            .clipShape(shape)
-            .overlay(outerBorder(shape))
-            .overlay(rimHighlight(shape))
-            // Edge-lit depth: a tight contact shadow grounds the card, a low-alpha ambient lifts
-            // it. Geometry lives in `PopupMetrics` (`cardShadow*`) because `popupShadowInset` must
-            // cover the ambient's full blur tail or the panel frame hard-clips it.
+        } else {
+            content
+                .clipShape(shape)
+                .background {
+                    // Rasterize only the solid surface and its shadow, with enough transparent
+                    // space for the blur. AppKit can promote the live buttons to backing layers
+                    // after presentation; their clipping must not change the shadow's buffer.
+                    shadowed(PopupThemeModel.classicSurfaceBackground(for: colorScheme, in: shape))
+                        .padding(PopupMetrics.popupShadowInset)
+                        .drawingGroup()
+                        .padding(-PopupMetrics.popupShadowInset)
+                        .allowsHitTesting(false)
+                }
+                .overlay(outerBorder(shape))
+                .overlay(rimHighlight(shape))
+        }
+    }
+
+    private func shadowed<Surface: View>(_ surface: Surface) -> some View {
+        surface
             .shadow(
                 color: .black.opacity(colorScheme == .dark ? 0.38 : 0.14),
                 radius: PopupMetrics.cardShadowContactRadius,

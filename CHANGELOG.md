@@ -4,6 +4,21 @@ All notable user-facing changes to OpenClip.
 
 ---
 
+## v1.8.2 - 2026-10-12
+
+### Features & Improvements
+- **Removed modifier key selection triggers**: Removed modifier key selection trigger options (Option, Shift, Control, Command) to ensure text selection popup appearance remains completely reliable across all applications, restoring the direct "Appear Automatically" toggle in General Settings and the menu bar status menu.
+- **Automatic OCR text copying & capture feedback**: Automatically copy recognized text from screen captures to the clipboard by default (toggleable via the new "Copy to Clipboard Automatically" setting under **General ▸ Shortcuts**), paired with lightweight cursor-relative status feedback.
+
+### Fixes & Stability
+- **Classic card shadow clipping fix**: Rasterize the solid surface and card shadow in classic theme with dedicated padding to prevent shadow buffer clipping when AppKit promotes buttons to backing layers.
+- **Toast placement above cursor and action bar**: Status toasts now prefer placement above the cursor and action/group bars (avoiding screen edges and tall cards), remaining fixed during mouse movement.
+- **Fullscreen Spaces support for status toasts**: Made toast windows eligible for other apps' fullscreen Spaces (`canJoinAllApplications`) with bounded recovery for stale window membership without activating the app.
+- **Popup hover insets and contextual edge rounding**: Refined outer popup bar and group sub-bar hover insets, and corrected contextual edge rounding to use island-local offsets independently of the global hover index.
+- **Loading pill shadow refinement**: Reserved shadow insets inside the toast window to prevent shadow clipping on cancellable loading pills, paired with refined theme-aware hover highlights.
+
+---
+
 ## v1.8.1 - 2026-10-09
 
 ### Features & Improvements

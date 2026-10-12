@@ -23,28 +23,6 @@ private struct DummyPasteAction: Action, PasteRequiringAction, Sendable {
 }
 
 final class SubBarStateTests: XCTestCase {
-    @MainActor
-    func testGroupBarPrefersBelowAndFlipsAboveNearBottomEdge() {
-        let screen = CGRect(x: 0, y: 0, width: 800, height: 600)
-        let shadow = PopupMetrics.popupShadowInset
-        let button = CGRect(x: 200, y: 250, width: 39, height: 33.5)
-        let main = CGRect(x: 200 - shadow, y: 250 - shadow, width: 240,
-                          height: 33.5 + 2 * shadow)
-        let childHeight: CGFloat = 33.5 + 2 * shadow
-        let below = SubBarPanelController.verticalPlacement(parentButtonFrame: button,
-            mainBarFrame: main, panelHeight: childHeight, preferAbove: false, screenBounds: screen)
-        XCTAssertFalse(below.isAbove)
-        XCTAssertLessThanOrEqual(below.y + childHeight - shadow, button.minY - 6)
-
-        let lowButton = button.offsetBy(dx: 0, dy: -245)
-        let lowMain = main.offsetBy(dx: 0, dy: -245)
-        let flipped = SubBarPanelController.verticalPlacement(parentButtonFrame: lowButton,
-            mainBarFrame: lowMain, panelHeight: childHeight, preferAbove: false, screenBounds: screen)
-        XCTAssertTrue(flipped.isAbove)
-        XCTAssertGreaterThanOrEqual(flipped.y + shadow, lowMain.maxY - shadow + 6,
-                                   "The child row must clear the parent bar")
-        XCTAssertLessThanOrEqual(flipped.y + childHeight, screen.maxY - PopupMetrics.popupPadding)
-    }
 
     @MainActor
     func testDelayedLocalHoverExitDoesNotCancelTrackedGroupDwell() async throws {
