@@ -40,6 +40,7 @@ public enum SettingsCatalog {
             SettingKey.hasDismissedPostOnboardingCoachMark.erased,
             SettingKey.startAtLogin.erased,
             SettingKey.completionCopyToClipboard.erased,
+            SettingKey.captureTextAutoCopy.erased,
 
             // Updates
             SettingKey.automaticallyChecksForUpdates.erased,

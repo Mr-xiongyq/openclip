@@ -17,6 +17,7 @@ struct GeneralTab: View {
     @State private var selectionModifier: String
     @State private var showMenuBarIcon: Bool
     @State private var isMouseHoldEnabled: Bool
+    @Setting(SettingKey.captureTextAutoCopy) private var captureTextAutoCopy
     @State private var fileSaveLocation: String
     @ObservedObject private var launchManager = LaunchAtLoginManager.shared
     @ObservedObject private var permissionManager = PermissionManager.shared
@@ -83,13 +84,25 @@ struct GeneralTab: View {
 
                     SettingsDivider()
 
-                    SettingsRow(
-                        title: "Capture Text",
-                        subtitle: "Select a screen region and extract text via OCR.",
-                        systemImage: "viewfinder",
-                        plainIcon: true
-                    ) {
-                        Shortcut(for: .captureText)
+                    VStack(alignment: .leading, spacing: 0) {
+                        SettingsRow(
+                            title: "Capture Text",
+                            subtitle: "Select a screen region to extract text.",
+                            systemImage: "viewfinder",
+                            plainIcon: true
+                        ) {
+                            Shortcut(for: .captureText)
+                        }
+
+                        Toggle("Copy to Clipboard Automatically", isOn: $captureTextAutoCopy)
+                            .toggleStyle(.checkbox)
+                            .controlSize(.small)
+                            .font(.system(size: 12))
+                            .foregroundStyle(SettingsDesignTokens.secondaryText)
+                            .help(String(localized: "The action popup still opens after capture."))
+                            .padding(.leading, SettingsDesignTokens.dividerInsetLeading + 4)
+                            .padding(.trailing, SettingsDesignTokens.sectionCardPaddingH)
+                            .padding(.bottom, SettingsDesignTokens.sectionCardPaddingV)
                     }
                 }
 

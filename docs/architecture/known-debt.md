@@ -265,14 +265,22 @@ areas; stale debt notes are worse than none.
   (`PopupWindowController.swift:591,612,622`), so typing with the mouse elsewhere doesn't close the
   palette, and the result card stays open until it is collapsed or the popup hides.
 - **The floating bubble panel is gone; content renders inline.** The second `PopupPanel` (and its
-  `showBubble`/`hideBubble`/`bubbleBlocksDismiss` machinery) was removed — all action/AI/status
+  `showBubble`/`hideBubble`/`bubbleBlocksDismiss` machinery) was removed — action/AI result
   content renders inside the single panel via `.content` mode (`PopupModeStore`) as a native
   SwiftUI `ResultCardView`. The card is general, not AI-specific: any text-returning action lands
   there with its customization-resolved icon (`DeliveryContext.actionIcon`, snapshotted by the same
   perform paths as `actionTitle`); AI streaming deliveries pass no icon and keep the sparkles glyph. `StatusBadgeModel` and the old `.info`/`.result`/`.menu` emphasis
   model are gone, and the inline status banner is gone too: every `StatusFeedback` renders as a
-  floating toast (`ToastPanelController`) with no queue — a status shows over the card — and
+  floating toast (`ToastPanelController`) with no queue — statuses appear near the cursor — and
   `showsLoading` actions (manifest `"loading"`) use the early-close spinner toast.
+  Fresh toasts capture the cursor position, prefer above it, and avoid the popup/group bars and
+  screen edges. They stay fixed during mouse movement; loading completion retains the initial
+  position. Toasts without a popup use the same cursor-relative placement. Capture-toast ownership
+  is tracked by presentation ID, so closing an OCR popup does not hide a newer action-result toast.
+  Toast windows also use `canJoinAllApplications` for other apps' fullscreen Spaces. A bounded
+  150 ms visibility check replaces an invisible/off-Space window once per presentation, retaining
+  the content, position, and dismissal timer without activating OpenClip. New shows and hide
+  invalidate the check. Actual fullscreen pixels still require validation on the affected Mac.
   All toasts, including cancellable loading pills, reserve `toastShadowInset` inside the
   window. Cancellable pills use a subtle theme-aware inset rounded hover tint,
   preserving their outer chrome while displaying an × and “Cancel Task”. Shadows render inside the
@@ -399,8 +407,18 @@ to Copy and simulated paste is dropped, including direct and loading action path
 require a live or editable selection recheck the captured selection generation and target before
 their effects run. This check does not sandbox scripts or prevent arbitrary side effects authored
 inside them. Catalog manifests using the new fields must wait for the first app release that enforces
-them; the current source version (1.7.3) is not a confirmed compatibility floor. The OCR flow writes
-nothing to the pasteboard until the user chooses Copy. Screen Recording access is
+them; the current source version (1.7.3) is not a confirmed compatibility floor. The OCR flow automatically copies nonempty recognized text by default, then opens the action
+bar. The “Copy to Clipboard Automatically” checkbox beneath Capture Text in General → Shortcuts
+can disable this behavior. Successful capture shows a content-free “Text copied” toast
+when auto-copy is enabled, or “Text captured” when disabled, in a separate `ToastPanel` near
+the pointer position captured at recognition completion. Placement prefers above the cursor and
+chooses a clear nearby side when the popup, a group bar, or screen edges obstruct it. The position
+never follows mouse movement. It auto-dismisses after 1.2 seconds using the existing toast lifecycle;
+the action panel never grows, shrinks, or moves for feedback. Search stays an explicit action.
+OCR group sub-bars prefer opening below the actions; toast placement avoids either side without
+restarting its timer. Hover tooltips avoid the toast. Dismissal and new sessions clear it.
+Copy uses the shared clipboard coordinator and rechecks cancellation/session validity after
+acquiring its lease, so superseded recognition does not overwrite the clipboard. Screen Recording access is
 requested by the system on
 first capture; capture errors show System Settings guidance. Selection monitoring is suppressed
 and pending OCR is cancelled through the capture request token, so stale OCR results cannot
@@ -673,6 +691,17 @@ and fixed SF Symbol sample actions, with a presenter that ignores saved action c
 Its stable preview viewport pins the contextual island at a left inset as the main bar grows.
 Per-action contextual exclusions do not change the static sample. The main bar's Actions Per Page setting
 and width budget apply to the standard island independently of the contextual island.
+
+`PopupHoverCaptureTests` renders production main/contextual bars and group sub-bars offscreen,
+with light/dark classic appearances and contextual islands on either side. Main-bar hover uses
+injected cursor positions and checks the reported action; sub-bar captures inject its hover target.
+Run `./scripts/test.sh PopupHoverCaptureTests`; PNGs land in `/tmp/openclip-hover-captures`
+and are retained as XCTest attachments. These are visual inspection artifacts, not golden-image
+comparisons or live mouse-tracking tests. `PopupView` and `GroupSubActionBarView` accept an
+optional settings store so captures use `MemorySettingsStore` without changing user preferences.
+Outer bar hover insets are 3 pt on each exposed edge, matching the vertical inset; sub-bars
+account for their existing 1 pt row padding. Contextual edge rounding uses island-local offsets
+independently of the global hover index, including when the contextual island is on the right.
 
 ## Actions per page ([#148](https://github.com/ganeshmshetty/openclip/issues/148))
 

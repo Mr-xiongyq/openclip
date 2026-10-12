@@ -489,6 +489,7 @@ extension View {
         isText: Bool = false,
         leadingEdge: Bool = false,
         trailingEdge: Bool = false,
+        outerInset: CGFloat = 3,
         isHovered: Bool,
         namespace: Namespace.ID
     ) -> some View {
@@ -508,7 +509,8 @@ extension View {
                     shape.fill(fill)
                 }
             }
-            .padding(.horizontal, (isText ? (leadingEdge || trailingEdge ? 2 : 0) : (leadingEdge || trailingEdge ? 3 : 2)) * scale)
+            .padding(.leading, (leadingEdge ? outerInset : (isText ? 0 : 2)) * scale)
+            .padding(.trailing, (trailingEdge ? outerInset : (isText ? 0 : 2)) * scale)
             .padding(.vertical, 3 * scale)
         }
     }
