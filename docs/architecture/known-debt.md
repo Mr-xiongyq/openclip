@@ -273,8 +273,10 @@ areas; stale debt notes are worse than none.
   model are gone, and the inline status banner is gone too: every `StatusFeedback` renders as a
   floating toast (`ToastPanelController`) with no queue — statuses appear near the cursor — and
   `showsLoading` actions (manifest `"loading"`) use the early-close spinner toast.
-  Fresh toasts capture the cursor position, prefer above it, and avoid the popup/group bars and
-  screen edges. They stay fixed during mouse movement; loading completion retains the initial
+  Fresh toasts capture the cursor position and prefer a clear position above the pointer or
+  action/group bar before using space below or beside it. Above-bar preference is limited to
+  140 pt from the cursor so tall cards do not send feedback far away. Toasts avoid screen edges.
+  They stay fixed during mouse movement; loading completion retains the initial
   position. Toasts without a popup use the same cursor-relative placement. Capture-toast ownership
   is tracked by presentation ID, so closing an OCR popup does not hide a newer action-result toast.
   Toast windows also use `canJoinAllApplications` for other apps' fullscreen Spaces. A bounded

@@ -77,6 +77,34 @@ final class ToastPlacementTests: XCTestCase {
         XCTAssertFalse(content.contains(point))
     }
 
+    func testToastClearsPopupAboveBeforeChoosingFreeSpaceBelowCursor() {
+        let cursor = CGPoint(x: 400, y: 300)
+        let size = CGSize(width: 150, height: 24)
+        let bar = CGRect(x: 300, y: 306, width: 200, height: 33.5)
+        let anchor = bar.insetBy(dx: -PopupMetrics.popupShadowInset, dy: -PopupMetrics.popupShadowInset)
+        let origin = ToastPanelController.contentOrigin(size: size, anchor: anchor,
+            visible: CGRect(x: 0, y: 0, width: 800, height: 600), placement: .nearCursor(cursor))
+        XCTAssertGreaterThan(origin.y, bar.maxY)
+        XCTAssertFalse(CGRect(origin: origin, size: size).intersects(bar))
+    }
+
+    func testToastStillUsesNearbyFallbackAtTopEdgeOrBelowTallCard() {
+        let size = CGSize(width: 150, height: 24)
+        let shadow = PopupMetrics.popupShadowInset
+        let topCursor = CGPoint(x: 400, y: 590)
+        let screen = CGRect(x: 0, y: 0, width: 800, height: 600)
+        let topOrigin = ToastPanelController.contentOrigin(size: size, anchor: .zero, visible: screen,
+                                                         placement: .nearCursor(topCursor))
+        XCTAssertLessThan(topOrigin.y + size.height, topCursor.y)
+        XCTAssertTrue(screen.contains(CGRect(origin: topOrigin, size: size)))
+
+        let cursor = CGPoint(x: 400, y: 300)
+        let card = CGRect(x: 300, y: 306, width: 200, height: 400).insetBy(dx: -shadow, dy: -shadow)
+        let origin = ToastPanelController.contentOrigin(size: size, anchor: card,
+            visible: CGRect(x: 0, y: 0, width: 800, height: 1200), placement: .nearCursor(cursor))
+        XCTAssertLessThan(origin.y + size.height, cursor.y, "Do not move far above a tall result card")
+    }
+
     func testExplicitToastPointIsRespected() {
         let point = cursor
         let toast = ToastPanelController(cursorLocation: { CGPoint(x: point.x + 100, y: point.y) })

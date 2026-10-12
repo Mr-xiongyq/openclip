@@ -72,6 +72,8 @@ public enum PopupMetrics {
     public static let toastMaxCharacterLength: Int = 40
     /// Gap between a toast bubble and the popup edge it attaches to.
     public static let toastAnchorGap: CGFloat = 8.0
+    /// Prefer clearing the action/group bar above, without moving feedback far past a tall card.
+    public static let toastPreferredAboveDistance: CGFloat = 140.0
     /// Separation between the OCR toast window and the visible action bar.
     public static let captureStatusGap: CGFloat = 6.0
     /// Transparent ring (pt) around the toast bubble inside the panel frame: the controller centers

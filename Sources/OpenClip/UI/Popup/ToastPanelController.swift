@@ -323,7 +323,7 @@ public final class ToastPanelController {
             CGPoint(x: cursor.x + gap, y: cursor.y - size.height / 2),
             CGPoint(x: cursor.x - gap - size.width, y: cursor.y - size.height / 2)
         ].map(clamp)
-        if let clear = candidates.first(where: isClear) { return clear }
+        if let above = candidates.first, above.y >= cursor.y + gap, isClear(above) { return above }
         var alternatives: [CGPoint] = []
         for rect in contentRects {
             alternatives.append(CGPoint(x: cursor.x - size.width / 2, y: rect.maxY + gap))
@@ -336,6 +336,12 @@ public final class ToastPanelController {
         }
         alternatives = alternatives.map(clamp)
         alternatives.sort { distance($0) < distance($1) }
+        // Clear the bar above before falling back below the pointer. Keep feedback nearby
+        // rather than jumping to the far edge of a tall result card.
+        if let above = alternatives.first(where: {
+            $0.y >= cursor.y + gap && distance($0) <= PopupMetrics.toastPreferredAboveDistance && isClear($0)
+        }) { return above }
+        if let clear = candidates.first(where: isClear) { return clear }
         if let clear = alternatives.first(where: isClear) { return clear }
         candidates += alternatives
         // Extremely constrained screens: minimize overlap while keeping the bubble onscreen.
