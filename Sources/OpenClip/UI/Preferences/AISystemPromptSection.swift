@@ -78,6 +78,8 @@ struct AISystemPromptSection: View {
                 Text("Sent with every AI action, before the action's own prompt. OpenClip always adds the action's prompt, how to treat the selected text, and the answer format after it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .disabled(!aiManager.isAIEnabled)
