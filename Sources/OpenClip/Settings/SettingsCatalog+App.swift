@@ -13,6 +13,7 @@ extension SettingsCatalog {
             SettingKey.showMenuBarIcon.erased,
             SettingKey.preferencesActionsSectionExpanded.erased,
             SettingKey.preferencesInstalledSectionExpanded.erased,
+            SettingKey.preferencesSystemPromptExpanded.erased,
             SettingKey.resultCardWidth.erased,
             SettingKey.resultCardHeight.erased,
 

@@ -784,5 +784,7 @@
   "Text copied": "文本已复制",
   "Text captured": "文本已捕获",
   "System Prompt": "系统提示词",
-  "Sent with every AI action, before the action's own prompt. OpenClip always adds the action's prompt, how to treat the selected text, and the answer format after it.": "随每个 AI 操作发送，位于操作自身的提示词之前。OpenClip 总会在其后附加操作的提示词、处理所选文本的方式以及回答格式。"
+  "Sent with every AI action, before the action's own prompt. OpenClip always adds the action's prompt, how to treat the selected text, and the answer format after it.": "随每个 AI 操作发送，位于操作自身的提示词之前。OpenClip 总会在其后附加操作的提示词、处理所选文本的方式以及回答格式。",
+  "Expanded": "已展开",
+  "Collapsed": "已折叠"
 }

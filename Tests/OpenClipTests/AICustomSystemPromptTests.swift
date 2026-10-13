@@ -97,5 +97,7 @@ final class AICustomSystemPromptTests: XCTestCase {
 
     func testSettingIsPartOfTheSettingsSnapshot() {
         XCTAssertTrue(SettingsCatalog.appKeys.contains { $0.name == "aiCustomSystemPrompt" })
+        XCTAssertTrue(SettingsCatalog.appKeys.contains { $0.name == "preferencesAI.systemPromptExpanded" })
+        XCTAssertFalse(SettingKey.preferencesSystemPromptExpanded.defaultValue, "The section starts collapsed")
     }
 }
