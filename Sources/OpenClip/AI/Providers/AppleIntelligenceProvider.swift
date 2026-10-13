@@ -27,7 +27,13 @@ struct AppleIntelligenceResponse {
 public final class AppleIntelligenceProvider: AIProvider {
     public var type: AIProviderType { .apple }
 
-    public init() {}
+    /// Replacement for the system prompt's role and behavior rules (Settings → AI → System Prompt);
+    /// nil uses the built-in text.
+    public let customGuidelines: String?
+
+    public init(customGuidelines: String? = nil) {
+        self.customGuidelines = customGuidelines
+    }
 
     /// Selections shorter than this skip token counting: the extra round-trip is only worth paying
     /// when the input could plausibly overflow the on-device context window.
@@ -56,7 +62,7 @@ public final class AppleIntelligenceProvider: AIProvider {
                 let streamTask = Task {
                     do {
                         let hasInputText = !validated.text.isEmpty
-                        let instructions = AIRequestSupport.systemPrompt(for: validated.prompt, hasInputText: hasInputText, structuredResult: true)
+                        let instructions = AIRequestSupport.systemPrompt(for: validated.prompt, hasInputText: hasInputText, structuredResult: true, customGuidelines: customGuidelines)
                         let userContent = AIRequestSupport.userContent(for: validated.text, fallbackPrompt: validated.prompt)
 
                         try await Self.ensureWithinContext(instructions: instructions, userContent: userContent)

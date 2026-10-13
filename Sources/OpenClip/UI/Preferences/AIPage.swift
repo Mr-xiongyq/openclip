@@ -63,6 +63,8 @@ struct AIPage: View {
             AIConfigureForm(embedded: true)
 
             AIActionsSection()
+
+            AISystemPromptSection()
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)

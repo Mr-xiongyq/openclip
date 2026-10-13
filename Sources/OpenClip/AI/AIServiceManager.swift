@@ -159,6 +159,29 @@ public final class AIServiceManager: ObservableObject {
         get { localModel }
         set { localModel = newValue }
     }
+    /// The custom system prompt guidelines as stored; empty means the built-in prompt. Read
+    /// through `effectiveCustomSystemPrompt` when building a provider.
+    public var customSystemPrompt: String {
+        get { settingsStore.get(.aiCustomSystemPrompt) }
+        set { objectWillChange.send(); settingsStore.set(.aiCustomSystemPrompt, value: Self.normalizedCustomSystemPrompt(newValue)) }
+    }
+
+    /// The guidelines handed to providers: nil unless the user changed the built-in text.
+    public var effectiveCustomSystemPrompt: String? {
+        let stored = Self.normalizedCustomSystemPrompt(customSystemPrompt)
+        return stored.isEmpty ? nil : stored
+    }
+
+    /// What is persisted for an edited system prompt: blank, or the unchanged built-in text, is
+    /// stored as "" so the built-in prompt (and any later improvement to it) keeps applying.
+    public static func normalizedCustomSystemPrompt(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed == AIRequestSupport.defaultGuidelines.trimmingCharacters(in: .whitespacesAndNewlines) {
+            return ""
+        }
+        return trimmed
+    }
+
     public var actionPresetsJSON: String {
         get { settingsStore.get(.aiActionPresetsJSON) }
         set { objectWillChange.send(); settingsStore.set(.aiActionPresetsJSON, value: newValue) }
@@ -372,15 +395,16 @@ public final class AIServiceManager: ObservableObject {
         if let providerOverride {
             return providerOverride
         }
+        let guidelines = effectiveCustomSystemPrompt
         switch activeProviderType {
         case .apple:
-            return AppleIntelligenceProvider()
+            return AppleIntelligenceProvider(customGuidelines: guidelines)
         case .local:
-            return LocalLLMProvider(baseURL: localURL, model: effectiveLocalModel, disableThinking: localPreset.disablesThinking)
+            return LocalLLMProvider(baseURL: localURL, model: effectiveLocalModel, disableThinking: localPreset.disablesThinking, customGuidelines: guidelines)
         case .cli:
-            return CLIProvider(preset: cliPreset, customCommand: cliCustomCommand, modelOverride: effectiveCLIModel)
+            return CLIProvider(preset: cliPreset, customCommand: cliCustomCommand, modelOverride: effectiveCLIModel, customGuidelines: guidelines)
         case .cloud:
-            return CloudAPIProvider(apiKey: cloudAPIKey, model: effectiveCloudModel, serviceProvider: cloudServiceProvider, customBaseURL: cloudCustomURL)
+            return CloudAPIProvider(apiKey: cloudAPIKey, model: effectiveCloudModel, serviceProvider: cloudServiceProvider, customBaseURL: cloudCustomURL, customGuidelines: guidelines)
         }
     }
 }

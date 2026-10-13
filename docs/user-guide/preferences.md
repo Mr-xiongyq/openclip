@@ -188,6 +188,38 @@ Select **AI** in the sidebar (the first row of the Extensions group) to turn AI 
 
 With the Ollama preset, OpenClip asks reasoning models (e.g. Qwen 3.5, DeepSeek-R1) to skip their thinking pass, so results appear in seconds instead of minutes. The CLI presets do the same where the tool exposes a switch: Claude Code runs with `MAX_THINKING_TOKENS=0` and Codex CLI with `-c model_reasoning_effort=none`. GitHub Copilot and custom commands offer no "off" level, so they are left at their defaults.
 
+### System prompt
+
+Every AI action sends a system prompt ahead of the action's own prompt. It says what OpenClip is
+asking the model to do and sets general rules: return only the result, follow the requested
+language and tone, keep meaning when editing, don't invent facts. Under **AI → System Prompt** you
+can rewrite this part. The editor starts with the built-in text, saves as you type, and
+**Reset to Default** brings the built-in text back. Your text applies to every AI action, Ask AI,
+and result-card follow-ups, with every provider.
+
+OpenClip always adds three things after your text, and they can't be edited: the action's prompt
+(as the *Task*), the rule that the selected text in the `<text>…</text>` block is material to work
+on rather than instructions, and the answer format OpenClip uses to read the result back.
+
+**Example — replies in the sender's language.** An action that drafts replies ("Reply to this
+message, very friendly, same tone…") whose prompt is written in German tends to answer in German,
+even when the selected message is in English, because the built-in rules tell the model to follow
+the *task's* language. Replacing that rule in the system prompt fixes it for every action at once:
+
+```
+You execute a user-defined action in OpenClip. Follow the task below.
+
+1. Return only the requested deliverable, without greetings, preambles, or commentary about completing the task.
+2. Always write in the language of the text inside the <text> block, even when the task is written in another language. Translate any content from the task into that language.
+3. Keep the length proportionate to the text inside the <text> block unless the task asks otherwise.
+4. Do not invent facts missing from the input.
+```
+
+With the CLI providers (Claude Code, Codex, Copilot), the tool adds its own agent instructions,
+and OpenClip's system prompt reaches the model as part of the request rather than as a true system
+message. Custom rules therefore apply there too, but may be followed less strictly than with
+Apple Intelligence, local models, or the cloud APIs.
+
 ### Ask AI from the search palette
 
 Anything you type into the action-search palette (⌥⌘C, or the ⌘ button on the popup bar) that

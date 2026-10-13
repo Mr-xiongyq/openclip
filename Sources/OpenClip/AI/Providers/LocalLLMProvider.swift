@@ -70,8 +70,12 @@ public final class LocalLLMProvider: AIProvider {
     public let baseURL: String
     public let model: String
     public let disableThinking: Bool
+    /// Replacement for the system prompt's role and behavior rules (Settings → AI → System Prompt);
+    /// nil uses the built-in text.
+    public let customGuidelines: String?
 
-    public init(baseURL: String, model: String, disableThinking: Bool = false) {
+    public init(baseURL: String, model: String, disableThinking: Bool = false, customGuidelines: String? = nil) {
+        self.customGuidelines = customGuidelines
         self.baseURL = AIRequestSupport.normalizedBaseURL(baseURL, fallback: "http://localhost:1234/v1")
         let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
         self.model = trimmedModel.isEmpty ? "default" : trimmedModel
@@ -84,7 +88,7 @@ public final class LocalLLMProvider: AIProvider {
                 do {
                     let validated = try AIRequestSupport.validateInput(prompt: prompt, text: text)
                     let hasInputText = !validated.text.isEmpty
-                    let systemInstruction = AIRequestSupport.systemPrompt(for: validated.prompt, hasInputText: hasInputText)
+                    let systemInstruction = AIRequestSupport.systemPrompt(for: validated.prompt, hasInputText: hasInputText, customGuidelines: self.customGuidelines)
                     let userContent = AIRequestSupport.userContent(for: validated.text, fallbackPrompt: validated.prompt)
 
                     // 1. Try standard OpenAI-compatible /chat/completions endpoint

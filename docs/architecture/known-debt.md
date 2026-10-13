@@ -26,6 +26,14 @@ areas; stale debt notes are worse than none.
   applies to both stored and default presets. Translate still targets English. Fix Code requests minimal corrections preserving intended
   behavior and interfaces, returns raw corrected code, and permits a brief missing-context response
   when a reliable fix cannot be determined.
+- **Custom system prompt.** `SettingKey.aiCustomSystemPrompt` (Settings → AI → System Prompt)
+  replaces only `AIRequestSupport.defaultGuidelines` (role + behavior rules 1–4). The task, the
+  `<text>` input rule and the tagged/structured output contract are always appended and renumbered,
+  so parsing never depends on user text. Blank or unchanged-default text is stored as `""`, and the
+  built-in prompt is then byte-identical to the pre-setting one (pinned by
+  `AICustomSystemPromptTests`). `AIServiceManager.currentProvider` passes the value into every
+  provider's `customGuidelines`. CLI providers send it as part of the prompt argument, beneath the
+  tool's own agent instructions.
 
 ## Manual Update Window Activation
 

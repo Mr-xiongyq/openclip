@@ -117,8 +117,12 @@ public final class CLIProvider: AIProvider {
     public let preset: CLIPreset
     public let customCommand: String
     public let modelOverride: String
+    /// Replacement for the system prompt's role and behavior rules (Settings → AI → System Prompt);
+    /// nil uses the built-in text.
+    public let customGuidelines: String?
 
-    public init(preset: CLIPreset, customCommand: String = "", modelOverride: String = "") {
+    public init(preset: CLIPreset, customCommand: String = "", modelOverride: String = "", customGuidelines: String? = nil) {
+        self.customGuidelines = customGuidelines
         self.preset = preset
         self.customCommand = customCommand.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedModel = modelOverride.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -129,13 +133,14 @@ public final class CLIProvider: AIProvider {
         let preset = self.preset
         let customCommand = self.customCommand
         let modelOverride = self.modelOverride
+        let customGuidelines = self.customGuidelines
 
         return AsyncThrowingStream { continuation in
             let task = Task.detached {
                 do {
                     let validated = try AIRequestSupport.validateInput(prompt: prompt, text: text)
                     let hasInputText = !validated.text.isEmpty
-                    let systemInstruction = AIRequestSupport.systemPrompt(for: validated.prompt, hasInputText: hasInputText)
+                    let systemInstruction = AIRequestSupport.systemPrompt(for: validated.prompt, hasInputText: hasInputText, customGuidelines: customGuidelines)
                     let userContent = AIRequestSupport.userContent(for: validated.text, fallbackPrompt: validated.prompt)
 
                     let invocation = try Self.buildInvocation(

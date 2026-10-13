@@ -69,4 +69,10 @@ extension SettingKey where Value == String {
     static var aiActionPresetsJSON: SettingKey<String> {
         SettingKey<String>("aiActionPresetsJSON", defaultValue: "")
     }
+
+    /// The user's replacement for the system prompt's role and behavior rules (Settings → AI →
+    /// System Prompt). Empty means the built-in prompt.
+    static var aiCustomSystemPrompt: SettingKey<String> {
+        SettingKey<String>("aiCustomSystemPrompt", defaultValue: "")
+    }
 }

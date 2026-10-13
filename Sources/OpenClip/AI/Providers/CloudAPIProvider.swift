@@ -13,8 +13,12 @@ public final class CloudAPIProvider: AIProvider {
     public let model: String
     public let serviceProvider: CloudServiceProvider
     public let customBaseURL: String
+    /// Replacement for the system prompt's role and behavior rules (Settings → AI → System Prompt);
+    /// nil uses the built-in text.
+    public let customGuidelines: String?
 
-    public init(apiKey: String, model: String, serviceProvider: CloudServiceProvider = .openai, customBaseURL: String = "") {
+    public init(apiKey: String, model: String, serviceProvider: CloudServiceProvider = .openai, customBaseURL: String = "", customGuidelines: String? = nil) {
+        self.customGuidelines = customGuidelines
         self.apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
         self.model = trimmedModel.isEmpty ? (serviceProvider.defaultModels.first ?? "gpt-4o-mini") : trimmedModel
@@ -38,7 +42,7 @@ public final class CloudAPIProvider: AIProvider {
             }
 
             let hasInputText = !validated.text.isEmpty
-            let systemInstruction = AIRequestSupport.systemPrompt(for: validated.prompt, hasInputText: hasInputText)
+            let systemInstruction = AIRequestSupport.systemPrompt(for: validated.prompt, hasInputText: hasInputText, customGuidelines: customGuidelines)
             let userContent = AIRequestSupport.userContent(for: validated.text, fallbackPrompt: validated.prompt)
 
             let streamTask: Task<Void, Never>

@@ -782,5 +782,7 @@
   "Copy to Clipboard Automatically": "Copier automatiquement dans le presse-papiers",
   "The action popup still opens after capture.": "La fenêtre d’actions s’ouvre toujours après la capture.",
   "Text copied": "Texte copié",
-  "Text captured": "Texte capturé"
+  "Text captured": "Texte capturé",
+  "System Prompt": "Invite système",
+  "Sent with every AI action, before the action's own prompt. OpenClip always adds the action's prompt, how to treat the selected text, and the answer format after it.": "Envoyée avec chaque action IA, avant l’invite propre à l’action. OpenClip ajoute toujours ensuite l’invite de l’action, la façon de traiter le texte sélectionné et le format de réponse."
 }
