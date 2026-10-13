@@ -7,11 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		001495E3397EE96EB3EF17C8 /* SelectionGestureTargetProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BFF5F5285ED63AE2C951923 /* SelectionGestureTargetProbeTests.swift */; };
 		00F0A9839339C1E8829D2A6D /* ExtensionTrustStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7065CFC746479DF29BD1525F /* ExtensionTrustStateTests.swift */; };
 		00F99CE9A59716DFB7EF8A58 /* PaletteRowShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4953987A3DEEA1E3E220311D /* PaletteRowShortcuts.swift */; };
 		0144B49CB0F92F93428F0AA4 /* BrandColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F4A03EAAAED8DD581B6D60 /* BrandColor.swift */; };
 		016ACDECE2BC05DB5A380F65 /* CustomAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8DAACCC7C82CE7BB96D5F0D /* CustomAction.swift */; };
 		01A2A263D4D44A93E3409667 /* PopupGesturePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 842374852607342FFC468020 /* PopupGesturePolicy.swift */; };
+		0281A6E52E64AF82C70C7F3C /* SelectionGestureTargetProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = A572E4695E355E2C2BC916D2 /* SelectionGestureTargetProbe.swift */; };
 		02AF81963047538ADE0363F5 /* RuleEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E8EC4414979D75CE50BA12 /* RuleEngine.swift */; };
 		02DEE5ADB21D74B0CE5C31EA /* AIToolsActionSubActionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB2405B7995F2DC5F45C474 /* AIToolsActionSubActionTests.swift */; };
 		04189A9019D949E0F4AC1313 /* FileOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B55371F5400350570C84202 /* FileOutputTests.swift */; };
@@ -527,6 +529,7 @@
 		296DBB8D2CA1C1D578E27343 /* StoreIcon.svg */ = {isa = PBXFileReference; path = StoreIcon.svg; sourceTree = "<group>"; };
 		2A96CF5AAB17BF23E200921A /* ToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastView.swift; sourceTree = "<group>"; };
 		2B8E594506CA8101F91FE94C /* AIConversationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConversationTests.swift; sourceTree = "<group>"; };
+		2BFF5F5285ED63AE2C951923 /* SelectionGestureTargetProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionGestureTargetProbeTests.swift; sourceTree = "<group>"; };
 		2C2E0CE18FC287126307E67B /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		2D0B6A4A79189F0D076BE588 /* LocalLLMProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMProvider.swift; sourceTree = "<group>"; };
 		2D1221805EFDD065CA543A00 /* CalendarActionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarActionTests.swift; sourceTree = "<group>"; };
@@ -725,6 +728,7 @@
 		A4569F410A617490B0538051 /* TextRetrieving.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextRetrieving.swift; sourceTree = "<group>"; };
 		A4A87CFA084BCF3B940A37EC /* ActionResultHandlerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionResultHandlerTests.swift; sourceTree = "<group>"; };
 		A4F2434073F85AB2FC61E746 /* BuiltinActionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuiltinActionsTests.swift; sourceTree = "<group>"; };
+		A572E4695E355E2C2BC916D2 /* SelectionGestureTargetProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionGestureTargetProbe.swift; sourceTree = "<group>"; };
 		A574D624ED260AC9A43E5D22 /* DebugLogCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogCommand.swift; sourceTree = "<group>"; };
 		A84739BEC83F5FF50303C867 /* ActionRegistryGroupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionRegistryGroupTests.swift; sourceTree = "<group>"; };
 		A85D6B583DAD8DA3E981C226 /* StatusFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusFeedback.swift; sourceTree = "<group>"; };
@@ -919,6 +923,7 @@
 			children = (
 				F5F4AFF322060F5A1943DFDD /* OpenSelectionBridge.swift */,
 				C68D58BC0D8D00D9FAA3D89D /* SelectionEditabilityProbe.swift */,
+				A572E4695E355E2C2BC916D2 /* SelectionGestureTargetProbe.swift */,
 			);
 			path = Selection;
 			sourceTree = "<group>";
@@ -1588,6 +1593,7 @@
 				C7987E34A7967713991DA9F3 /* SecretActionOptionStoreTests.swift */,
 				85746337A5CBFD58E5584EE7 /* SelectionEditabilityProbeTests.swift */,
 				F4AD51BBA1C1F3ABEF4061B8 /* SelectionGatePolicyTests.swift */,
+				2BFF5F5285ED63AE2C951923 /* SelectionGestureTargetProbeTests.swift */,
 				8D8A87C79135F4CF21CF2AF8 /* SelectionRetrievalCoordinatorTests.swift */,
 				C11A4CF4CA3DB3FB261289FA /* SemanticVersionTests.swift */,
 				DB51CCF85D073D65583B8B60 /* SettingsRouterTests.swift */,
@@ -1866,6 +1872,7 @@
 				935725012DC74D36432AB713 /* SecretActionOptionStoreTests.swift in Sources */,
 				654FA1B02644765D7E1E4B9A /* SelectionEditabilityProbeTests.swift in Sources */,
 				C29F35CC3C92862EF2972660 /* SelectionGatePolicyTests.swift in Sources */,
+				001495E3397EE96EB3EF17C8 /* SelectionGestureTargetProbeTests.swift in Sources */,
 				8A768A0D221B74CC422DE0C7 /* SelectionRetrievalCoordinatorTests.swift in Sources */,
 				9460536EEABCEF2149F00781 /* SemanticVersionTests.swift in Sources */,
 				81DE7F9D785C381BD5BC32E7 /* SettingsRouterTests.swift in Sources */,
@@ -2133,6 +2140,7 @@
 				BCD32C05AB22670492608CB7 /* SecretActionOptionStore.swift in Sources */,
 				A0AFEE7C0160491BE2D7F44A /* SecretStore.swift in Sources */,
 				15C5141D5230B99E9F2ED832 /* SelectionEditabilityProbe.swift in Sources */,
+				0281A6E52E64AF82C70C7F3C /* SelectionGestureTargetProbe.swift in Sources */,
 				307CE5BBD003397FC5D34113 /* Setting.swift in Sources */,
 				15ABF278FF9D44A2B1764BFA /* SettingKey+AI.swift in Sources */,
 				F3605465C595AC6C4AD817D6 /* SettingKey+MenuBar.swift in Sources */,
@@ -2531,7 +2539,7 @@
 			repositoryURL = "https://github.com/ganeshmshetty/OpenSelection.git";
 			requirement = {
 				kind = exactVersion;
-				version = 2.15.3;
+				version = 2.15.4;
 			};
 		};
 		6F6B418BC685195C47AA367E /* XCRemoteSwiftPackageReference "SDWebImageSVGCoder" */ = {

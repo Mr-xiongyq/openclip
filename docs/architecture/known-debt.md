@@ -533,6 +533,12 @@ replace a newer popup.
 
 ## Selection Retrieval
 
+- **Mouse gesture checks precede retrieval.** A bounded AX hit-test of the original press rejects
+  identifiable toolbar/titlebar/window chrome, including unchanged fullscreen windows, while
+  allowing embedded text controls and web content. Unknown AX hierarchies fail open; generic
+  document groups are not treated as chrome merely because they have a window ancestor.
+  Multi-clicks also recheck window geometry after 50 ms for delayed zoom/resize updates.
+  Mouse-up Paste availability inspection begins only after a valid text result is accepted.
 - **Clipboard operations share ownership.** OpenSelection's pasteboard coordinator reserves
   the clipboard through preparation, activation, and the bounded delivery window. Posted
   captures drain independently of caller cancellation; permanent OpenClip copies queue behind
@@ -541,7 +547,10 @@ replace a newer popup.
   the configured capture/delivery window, or between an OS clipboard check and write, remains
   a platform limitation.
 - **Automatic copy is authorized separately from AX evidence.** Weak evidence consults the
-  Command-C menu state; only a confirmed disabled command refuses capture. Strong evidence
+  Command-C menu state; evidence-required automatic capture needs a confirmed enabled command.
+  Unknown or disabled commands refuse weak-evidence capture before clipboard mutation.
+  Opaque media/item surfaces no longer waive the evidence requirement. Explicit hotkey and
+  legacy opt-out callers retain their permissive fallback. Strong evidence
   bypasses the menu walk. Probes run off the main actor with independent caller deadlines and
   a cap held until workers exit. Capture checks cancellation, source PID, and overlays before
   posting. All hotkey retrieval paths bind authorization to their captured source PID.
@@ -566,8 +575,9 @@ replace a newer popup.
   switches; programmatic focus changes without an observed gesture are not detected.
   It is not an AX focused-element identity guarantee, and arbitrary extension keystrokes
   remain outside this paste-result check.
-- **OpenSelection is published and pinned to 2.15.3.** `project.yml` resolves the remote
-  tag at `a421effaebe473eb121fe0ebc469117a1de325e0`; the local checkout is optional.
+- **OpenSelection 2.15.4 contains the issue #159 automatic-Copy fix.** `project.yml` resolves
+  the remote exact version; the release points to `7bad227`. The package repository remains
+  separate from OpenClip.
   Inspect and menu budgets use monotonic clocks. Inspect deliberately leaves the initial
   system-wide focused-app lookup at the process-default timeout to avoid mutating the
   process-global AX timeout. That call remains residual exposure; subsequent element

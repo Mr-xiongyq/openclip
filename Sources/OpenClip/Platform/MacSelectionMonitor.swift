@@ -77,6 +77,13 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
     internal var isSystemChromeAt: @MainActor (CGPoint) -> Bool = { MacSelectionMonitor.isSystemChromeLocation($0) }
     internal var windowAtPoint: @MainActor (CGPoint) -> SelectionGestureWindow? = { SelectionGestureWindow.at($0) }
     internal var windowFrame: @MainActor (CGWindowID) -> CGRect? = { SelectionGestureWindow.currentFrame(for: $0) }
+    internal var isPressOnWindowChrome: @MainActor (CGPoint, pid_t) async -> Bool = { point, pid in
+        guard NSClassFromString("XCTestCase") == nil else { return false }
+        let screenTop = NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame.maxY
+            ?? NSScreen.screens.first?.frame.maxY ?? 0
+        return await SelectionGestureTargetProbe.default.isWindowChrome(
+            at: CGPoint(x: point.x, y: screenTop - point.y), pid: pid)
+    }
     /// Whether the press at `point` is over editable text, decided structurally (AX hit-test plus
     /// focused-element correlation), never by cursor shape. Anchors the hold's clipboard fallback
     /// to the field actually under the finger, rather than whichever element happens to be focused —
@@ -113,6 +120,7 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
     internal static let holdFireDriftSquared: CGFloat = OpenSelectionMonitor.holdFireDriftSquared
     internal static let dragThresholdSquared: CGFloat = OpenSelectionMonitor.dragThresholdSquared
     private static let holdStationaryConfirmDelayNanoseconds: UInt64 = 90_000_000
+    private static let multiClickWindowSettleDelayNanoseconds: UInt64 = 50_000_000
 
     internal static func holdStationary(downPoint: CGPoint?, pointer: CGPoint, buttonPressed: Bool) -> Bool {
         OpenSelectionMonitor.holdStationary(downPoint: downPoint, pointer: pointer, buttonPressed: buttonPressed)
@@ -601,6 +609,30 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
             guard self.isSelectionSourceActive(app) else {
                 self.recordRead(.init(status: Task.isCancelled ? .cancelled : .targetChanged)); return
             }
+            if let downPoint, await self.isPressOnWindowChrome(downPoint, app.processIdentifier) {
+                guard self.isSelectionSourceActive(app) else { return }
+                self.latestSelection = nil
+                self.recordRead(.init(status: .copyBlocked))
+                return
+            }
+            guard self.isSelectionSourceActive(app) else { return }
+            // Native title-bar double-click zoom can update the window frame just after mouse-up.
+            // Let AppKit settle that operation before treating a multi-click as a text gesture.
+            if clickCount >= 2 {
+                do {
+                    try await Task.sleep(nanoseconds: Self.multiClickWindowSettleDelayNanoseconds)
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled, self.isSelectionSourceActive(app) else {
+                    self.recordRead(.init(status: Task.isCancelled ? .cancelled : .targetChanged)); return
+                }
+                if let gestureWindow, self.windowFrame(gestureWindow.id) != gestureWindow.frame {
+                    self.recordRead(.init(status: .copyBlocked))
+                    self.latestSelection = nil
+                    return
+                }
+            }
             if let bundleID = app.bundleIdentifier, AppFilter.isExcluded(bundleID: bundleID) {
                 return
             }
@@ -611,7 +643,6 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
             }
             
             let appIdentity = AppIdentity(app)
-            let probeTask = self.preparePasteProbe?(app, policy)
             // Keep monitoring (so `latestSelection` stays warm for ⌥⌘C) but never post a synthetic
             // ⌘C when:
             // 1. "Appear Automatically" is disabled (passive background caching must stay non-invasive)
@@ -635,7 +666,7 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
                 policy: policy,
                 cursor: cursor,
                 mouseDownLocation: downPoint,
-                probeTask: probeTask
+                probeTask: nil
             )
         }
     }
@@ -750,7 +781,10 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
             pasteTargetAvailable: nil,
             traceID: response.traceID
         )
-        let canPaste = await probeTask?.value
+        // Mouse-up starts this only after the retrieval has produced valid text. Keyboard callers
+        // may pass a probe started alongside retrieval; hold-to-popup keeps its separate flow.
+        let pasteProbeTask = probeTask ?? preparePasteProbe?(app, policy)
+        let canPaste = await pasteProbeTask?.value
         guard isSelectionSourceActive(app) else {
             recordRead(.init(status: Task.isCancelled ? .cancelled : .targetChanged, traceID: response.traceID)); return
         }

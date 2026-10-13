@@ -853,6 +853,81 @@ final class MacSelectionMonitorTests: XCTestCase {
         XCTAssertEqual(cached.context.sourceApp.bundleIdentifier, "com.apple.TextEdit")
     }
 
+    func testMouseUpDoesNotStartPasteProbeWhenRetrievalHasNoSelection() async throws {
+        let monitor = makeMonitor()
+        monitor.isExcludedBundle = { _ in false }
+        monitor.policyResolver = { _ in .default }
+        monitor.currentCursorProvider = { .arrow }
+        monitor.retriever = SelectionRetrievalCoordinator(inspect: {
+            Self.fixtureTarget(role: "AXTextField", selectedText: nil)
+        }, copyCapture: { _ in nil })
+
+        var probeCalls = 0
+        monitor.preparePasteProbe = { _, _ in
+            probeCalls += 1
+            return Task { true }
+        }
+        var outcome: SelectionTriggerResponse?
+        monitor.onReadOutcome = { outcome = $0 }
+
+        let app = MockTestApp(bundleID: "com.apple.TextEdit")
+        monitor.handleMouseDown(at: CGPoint(x: 100, y: 100))
+        monitor.handleMouseUp(app: app, cursor: CGPoint(x: 200, y: 100), clickCount: 1)
+        await monitor.debounceTask?.value
+
+        XCTAssertEqual(outcome?.status, .noSelection)
+        XCTAssertEqual(probeCalls, 0, "A missing selection must not start the Paste menu walk")
+    }
+
+    func testMouseUpDoesNotStartPasteProbeWhenCopyIsBlocked() async throws {
+        let monitor = makeMonitor()
+        monitor.isExcludedBundle = { _ in false }
+        monitor.policyResolver = { _ in .default }
+        monitor.retriever = SelectionRetrievalCoordinator(inspect: {
+            Self.fixtureTarget(role: "AXButton", selectedText: nil)
+        }, copyCapture: { _ in XCTFail("A gated control must not attempt Copy"); return nil })
+
+        var probeCalls = 0
+        monitor.preparePasteProbe = { _, _ in
+            probeCalls += 1
+            return Task { true }
+        }
+        var outcome: SelectionTriggerResponse?
+        monitor.onReadOutcome = { outcome = $0 }
+
+        let app = MockTestApp(bundleID: "com.apple.TextEdit")
+        monitor.handleMouseDown(at: CGPoint(x: 100, y: 100))
+        monitor.handleMouseUp(app: app, cursor: CGPoint(x: 200, y: 100), clickCount: 1)
+        await monitor.debounceTask?.value
+
+        XCTAssertEqual(outcome?.status, .copyBlocked)
+        XCTAssertEqual(probeCalls, 0, "A blocked retrieval must not start the Paste menu walk")
+    }
+
+    func testMouseUpStartsPasteProbeAfterValidSelection() async throws {
+        let monitor = makeMonitor()
+        monitor.isExcludedBundle = { _ in false }
+        monitor.policyResolver = { _ in .default }
+        monitor.retriever = SelectionRetrievalCoordinator(inspect: {
+            Self.fixtureTarget(role: "AXTextField", selectedText: "valid selection")
+        }, copyCapture: { _ in nil })
+
+        var probeCalls = 0
+        monitor.preparePasteProbe = { _, _ in
+            probeCalls += 1
+            return Task { true }
+        }
+
+        let app = MockTestApp(bundleID: "com.apple.TextEdit")
+        monitor.handleMouseDown(at: CGPoint(x: 100, y: 100))
+        monitor.handleMouseUp(app: app, cursor: CGPoint(x: 200, y: 100), clickCount: 1)
+        await monitor.debounceTask?.value
+
+        XCTAssertEqual(monitor.latestSelection?.context.text, "valid selection")
+        XCTAssertEqual(monitor.latestSelection?.canPaste, true)
+        XCTAssertEqual(probeCalls, 1, "A valid selection should still probe Paste availability")
+    }
+
     func testCurrentSelectionReturnsCachedForMatchingBundleAndNilForMismatch() async throws {
         let monitor = makeMonitor()
         let app = AppIdentity(bundleIdentifier: "com.apple.TextEdit", localizedName: "TextEdit")
@@ -1008,6 +1083,105 @@ final class MacSelectionMonitorTests: XCTestCase {
             XCTAssertNil(monitor.debounceTask)
             XCTAssertNil(monitor.latestSelection)
         }
+    }
+
+    func testMultiClickOnWindowChromeIsRejectedEvenWhenFrameDoesNotChange() async {
+        let store = MemorySettingsStore()
+        store.set(.isMouseHoldEnabled, value: false)
+        let monitor = makeMonitor(settingsStore: store)
+        let frame = CGRect(x: 100, y: 100, width: 500, height: 400)
+        monitor.isSystemChromeAt = { _ in false }
+        monitor.windowAtPoint = { _ in SelectionGestureWindow(id: 123, frame: frame) }
+        monitor.windowFrame = { _ in frame }
+        monitor.isPressOnWindowChrome = { _, _ in true }
+        monitor.retriever = SelectionRetrievalCoordinator(inspect: {
+            XCTFail("A multi-click on window chrome must be rejected before AX retrieval")
+            return Self.fixtureTarget(role: "AXTextField", selectedText: "stale selection")
+        }, copyCapture: { _ in
+            XCTFail("A multi-click on window chrome must not attempt Copy")
+            return nil as Core.TextResult?
+        })
+        var pasteProbeCalls = 0
+        monitor.preparePasteProbe = { _, _ in
+            pasteProbeCalls += 1
+            return Task { true }
+        }
+
+        let app = MockTestApp(bundleID: "com.apple.TextEdit")
+        monitor.handleMouseDown(at: CGPoint(x: 120, y: 470))
+        monitor.handleMouseUp(app: app, cursor: CGPoint(x: 120, y: 470), clickCount: 2)
+        await monitor.debounceTask?.value
+
+        XCTAssertNil(monitor.latestSelection)
+        XCTAssertEqual(pasteProbeCalls, 0)
+    }
+
+    func testMultiClickRejectsWindowChangedAfterMouseUpBeforeSettle() async throws {
+        let store = MemorySettingsStore()
+        store.set(.isMouseHoldEnabled, value: false)
+        let monitor = makeMonitor(settingsStore: store)
+        let originalFrame = CGRect(x: 100, y: 100, width: 500, height: 400)
+        var currentFrame: CGRect? = originalFrame
+        monitor.isSystemChromeAt = { _ in false }
+        monitor.windowAtPoint = { _ in SelectionGestureWindow(id: 123, frame: originalFrame) }
+        monitor.windowFrame = { _ in currentFrame }
+        monitor.isPressOnWindowChrome = { _, _ in false }
+        monitor.retriever = SelectionRetrievalCoordinator(inspect: {
+            XCTFail("A window changed during the settle interval must be rejected before AX retrieval")
+            return Self.fixtureTarget(role: "AXTextField", selectedText: "stale selection")
+        }, copyCapture: { _ in
+            XCTFail("A window changed during the settle interval must not attempt Copy")
+            return nil as Core.TextResult?
+        })
+        var pasteProbeCalls = 0
+        monitor.preparePasteProbe = { _, _ in
+            pasteProbeCalls += 1
+            return Task { true }
+        }
+
+        let app = MockTestApp(bundleID: "com.apple.TextEdit")
+        monitor.handleMouseDown(at: CGPoint(x: 200, y: 200))
+        monitor.handleMouseUp(app: app, cursor: CGPoint(x: 200, y: 200), clickCount: 2)
+        let readTask = try XCTUnwrap(monitor.debounceTask)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000)
+            currentFrame = nil // closed or otherwise no longer present at the captured window ID
+        }
+        await readTask.value
+
+        XCTAssertNil(monitor.latestSelection)
+        XCTAssertEqual(pasteProbeCalls, 0)
+    }
+
+    func testMultiClickInContentWithStableWindowStillRetrievesSelection() async {
+        let store = MemorySettingsStore()
+        store.set(.isMouseHoldEnabled, value: false)
+        let monitor = makeMonitor(settingsStore: store)
+        let frame = CGRect(x: 100, y: 100, width: 500, height: 400)
+        monitor.isSystemChromeAt = { _ in false }
+        monitor.windowAtPoint = { _ in SelectionGestureWindow(id: 123, frame: frame) }
+        monitor.windowFrame = { _ in frame }
+        monitor.isPressOnWindowChrome = { _, _ in false }
+        monitor.isExcludedBundle = { _ in false }
+        monitor.policyResolver = { _ in .default }
+        monitor.retriever = SelectionRetrievalCoordinator(inspect: {
+            Self.fixtureTarget(role: "AXTextField", selectedText: "content selection")
+        }, copyCapture: { _ in nil })
+        var pasteProbeCalls = 0
+        monitor.preparePasteProbe = { _, _ in
+            pasteProbeCalls += 1
+            return Task { true }
+        }
+
+        let app = MockTestApp(bundleID: "com.apple.TextEdit")
+        let contentPoint = CGPoint(x: 200, y: 200)
+        monitor.handleMouseDown(at: contentPoint)
+        monitor.handleMouseUp(app: app, cursor: contentPoint, clickCount: 2)
+        await monitor.debounceTask?.value
+
+        XCTAssertEqual(monitor.latestSelection?.context.text, "content selection")
+        XCTAssertEqual(monitor.latestSelection?.canPaste, true)
+        XCTAssertEqual(pasteProbeCalls, 1)
     }
 
     func testTextDragWithinStationaryWindowStillRetrievesSelection() async {

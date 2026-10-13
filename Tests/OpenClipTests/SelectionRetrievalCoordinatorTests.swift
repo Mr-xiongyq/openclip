@@ -505,6 +505,37 @@ final class SelectionRetrievalCoordinatorTests: XCTestCase {
         XCTAssertEqual(result?.text, "explicit hotkey capture")
     }
 
+    func testCopyEvidencePolicyReachesDetailedCaptureThroughOpenClipBridge() async {
+        final class RequestRecorder: @unchecked Sendable {
+            var request: CopyRequest?
+        }
+
+        let recorder = RequestRecorder()
+        let coordinator = SelectionRetrievalCoordinator(
+            configuration: SelectionConfiguration(evidenceSettleMaxRetries: 0),
+            inspect: { _ in Self.textFieldTarget(selectedText: nil, role: "AXTextField") },
+            detailedCopyCapture: { request in
+                recorder.request = request
+                return SelectionReadResponse(
+                    result: SelectionResult(text: "captured text"),
+                    status: .selection
+                )
+            }
+        )
+
+        let response = await coordinator.retrieveResponse(
+            for: AppIdentity(bundleIdentifier: "com.sublimetext.3"),
+            policy: AppPolicyContext(retrievalMode: .keyboardCopy),
+            cursor: .unknown
+        )
+
+        XCTAssertEqual(response.result?.text, "captured text")
+        XCTAssertEqual(recorder.request?.evidence.reason, "ax-text-control")
+        XCTAssertEqual(recorder.request?.evidence.strength, .weak)
+        XCTAssertTrue(recorder.request?.requiresEnabledCopyMenu == true,
+                      "Evidence-required retrieval must ask the detailed capture to validate weak evidence against the enabled Copy menu")
+    }
+
     /// A row container nested above the focused element still refuses — the Finder/Mail case the
     /// guard exists for reaches it through `containedInRoles`, not the focused role.
     func testSelectAllSkippedInsideRowContainer() async {
