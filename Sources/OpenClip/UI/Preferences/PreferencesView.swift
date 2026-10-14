@@ -398,70 +398,27 @@ public struct PreferencesView: View {
         SettingsPage.systemPages.map { SettingsSidebarRow(systemPage: $0) }
     }
 
-    private var secondGroupRows: [SettingsSidebarRow] {
-        var rows: [SettingsSidebarRow] = [
-            SettingsSidebarRow(
-                page: .ai,
-                title: SettingsPage.ai.staticTitle ?? "AI",
-                keywords: SettingsPage.ai.searchKeywords,
-                tile: .bare(.symbol(SettingsPage.ai.systemImage)),
-                isDisabled: !aiManager.isAIEnabled
-            )
-        ]
-
-        for action in coordinator.actions where ActionIdentity.isBuiltin(action)
-            && !action.chrome.launchesAI
-            && action.chrome.rowStyle != .actionGroup {
-            let presentation = customizationManager.presented(action, surface: .table)
-            let isActionDisabled = disabledActionIDs.contains(action.id)
-            rows.append(SettingsSidebarRow(
-                page: .builtinAction(id: action.id),
-                title: presentation.title,
-                keywords: action.keywords + [action.id],
-                tile: .bare(SettingsHeroHeader.glyph(for: action, presented: presentation)),
-                isDisabled: isActionDisabled
-            ))
-        }
-
-        for info in InstalledExtensionInfo.all(from: coordinator.actions) {
-            var keywords = info.commands.map { customizationManager.presented($0, surface: .table).title }
-            keywords.append(contentsOf: info.commands.flatMap(\.keywords))
-            keywords.append(info.packageID)
-            let isPkgDisabled = disabledPackages.contains(info.packageID)
-                || info.gatedReason != nil
-                || (!info.commands.isEmpty && info.commands.allSatisfy { disabledActionIDs.contains($0.id) })
-            rows.append(SettingsSidebarRow(
-                page: .extensionPackage(id: info.packageID),
-                title: info.name,
-                keywords: keywords,
-                tile: .bare(Self.plainGlyph(info.icon)),
-                isDisabled: isPkgDisabled
-            ))
-        }
-
-        let customTitles = coordinator.actions
-            .filter { SettingsDestination.isCustomAction($0) }
-            .map { customizationManager.presented($0, surface: .table).title }
-        rows.append(SettingsSidebarRow(
-            page: .customActions,
-            title: SettingsPage.customActions.staticTitle ?? "",
-            keywords: SettingsPage.customActions.searchKeywords + customTitles,
-            tile: .bare(.symbol(SettingsPage.customActions.systemImage))
-        ))
-
-        return SettingsSidebarOrder.sorted(rows)
-    }
-
-    private static func plainGlyph(_ icon: ActionIcon) -> ActionIcon {
-        if case .text(let text) = icon, text.count > 2 {
-            return .symbol("puzzlepiece.extension")
-        }
-        return icon
-    }
-
     private var sidebarSelection: Binding<SettingsPage?> {
         Binding(
-            get: { router.sidebarPage },
+            get: {
+                switch router.sidebarPage {
+                case .general:
+                    return .general
+                case .appearance:
+                    return .appearance
+                case .customize, .shortcuts, .extensionPackage, .builtinAction, .customActions,
+                     .action, .newCustomAction, .newGroup, .iconPicker:
+                    return .customize
+                case .ai, .aiPreset, .aiNewPreset:
+                    return .ai
+                case .appRules, .addApplication:
+                    return .appRules
+                case .store:
+                    return .store
+                case .about:
+                    return .about
+                }
+            },
             set: { newValue in
                 if let newValue { router.select(newValue) }
             }
@@ -472,8 +429,7 @@ public struct PreferencesView: View {
         SettingsSidebar(
             selection: sidebarSelection,
             query: $sidebarQuery,
-            systemRows: systemRows,
-            extensionRows: secondGroupRows
+            systemRows: systemRows
         )
         .id(systemColorsToken)
     }
@@ -866,7 +822,7 @@ public struct PreferencesView: View {
                let singleAction = info.commands.first {
                 ActionEditorPage(
                     action: singleAction,
-                    isSidebarPage: true,
+                    isSidebarPage: false,
                     disabledActionIDs: $disabledActionIDs,
                     disabledPackages: $disabledPackages
                 )
@@ -883,7 +839,7 @@ public struct PreferencesView: View {
             if let action = coordinator.actions.first(where: { $0.id == id }) {
                 ActionEditorPage(
                     action: action,
-                    isSidebarPage: true,
+                    isSidebarPage: false,
                     disabledActionIDs: $disabledActionIDs,
                     disabledPackages: $disabledPackages
                 )

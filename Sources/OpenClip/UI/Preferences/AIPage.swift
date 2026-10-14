@@ -28,11 +28,17 @@ struct AIPage: View {
 
                     ZStack {
                         squircle
-                            .fill(SettingsTint.neutral)
+                            .fill(
+                                LinearGradient(
+                                    colors: [SettingsTint.ai.opacity(0.96), SettingsTint.ai],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
                             .shadow(color: Color.black.opacity(0.12), radius: 2, y: 1)
 
                         Image(systemName: SettingsPage.ai.systemImage)
-                            .font(.system(size: 20, weight: .medium))
+                            .font(.system(size: 20, weight: .semibold))
                             .foregroundStyle(.white)
                     }
                     .frame(width: size, height: size)

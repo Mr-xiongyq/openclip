@@ -315,7 +315,7 @@ public enum SettingsDesignTokens {
         case .about:
             return SettingsTint.about
         case .ai, .aiNewPreset, .aiPreset:
-            return SettingsTint.openClip
+            return SettingsTint.ai
         case .customActions, .newCustomAction:
             return SettingsTint.openClip
         case .newGroup, .iconPicker, .addApplication:

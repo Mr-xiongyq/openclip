@@ -79,16 +79,16 @@ public enum SettingsPage: Hashable, Identifiable, Sendable {
 
     /// The sidebar's first group, in order.
     public static let systemPages: [SettingsPage] = [
-        .general, .appearance, .customize, .appRules, .store, .about
+        .general, .appearance, .customize, .ai, .appRules, .store, .about
     ]
 
     /// True for pages the sidebar lists; false for pages reached from one of them.
     public var isSidebarPage: Bool {
         switch self {
-        case .general, .appearance, .customize, .shortcuts, .appRules, .store, .about, .ai, .extensionPackage,
-             .builtinAction, .customActions:
+        case .general, .appearance, .customize, .shortcuts, .ai, .appRules, .store, .about:
             return true
-        case .action, .newCustomAction, .newGroup, .iconPicker, .aiPreset, .aiNewPreset, .addApplication:
+        case .extensionPackage, .builtinAction, .customActions,
+             .action, .newCustomAction, .newGroup, .iconPicker, .aiPreset, .aiNewPreset, .addApplication:
             return false
         }
     }

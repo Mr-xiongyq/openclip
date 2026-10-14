@@ -132,6 +132,7 @@ enum SettingsTint {
     static let customize = Color(red: 0.65, green: 0.35, blue: 0.95)
     static let shortcuts = Color(red: 0.68, green: 0.35, blue: 0.98)
     static let appRules = Color(red: 0.98, green: 0.52, blue: 0.12)
+    static let ai = Color(red: 0.10, green: 0.72, blue: 0.84)
     static let store = Color(red: 0.05, green: 0.52, blue: 0.98)
     static let about = Color(red: 0.20, green: 0.78, blue: 0.42)
     static let neutral = Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
@@ -251,25 +252,15 @@ struct SettingsSidebar: View {
     @Binding var selection: SettingsPage?
     @Binding var query: String
     let systemRows: [SettingsSidebarRow]
-    let extensionRows: [SettingsSidebarRow]
-    @Setting(SettingKey.preferencesActionsSectionExpanded) private var actionsSectionExpanded
-    @Setting(SettingKey.preferencesInstalledSectionExpanded) private var installedSectionExpanded
+    var extensionRows: [SettingsSidebarRow] = []
     @State private var hoveredRowID: String? = nil
 
     private var filteredSystemRows: [SettingsSidebarRow] {
         SettingsSidebarFilter.filter(systemRows, query: query)
     }
 
-    private var filteredExtensionRows: [SettingsSidebarRow] {
-        SettingsSidebarFilter.filter(extensionRows, query: query)
-    }
-
     private var hasResults: Bool {
-        !filteredSystemRows.isEmpty || !filteredExtensionRows.isEmpty
-    }
-
-    private var isFiltering: Bool {
-        !SettingsSidebarRow.words(in: query).isEmpty
+        !filteredSystemRows.isEmpty
     }
 
     var body: some View {
@@ -292,40 +283,6 @@ struct SettingsSidebar: View {
                             ForEach(filteredSystemRows) { row in
                                 rowView(row)
                                     .id(row.page.id)
-                            }
-                        }
-
-                        let (bundled, installed) = SettingsSidebarOrder.split(filteredExtensionRows)
-                        let actionsExpanded = actionsSectionExpanded || isFiltering
-                        let installedExpanded = installedSectionExpanded || isFiltering
-
-                        if !bundled.isEmpty {
-                            VStack(alignment: .leading, spacing: 2) {
-                                sectionHeader("Actions", isExpanded: actionsExpanded) {
-                                    actionsSectionExpanded.toggle()
-                                }
-
-                                if actionsExpanded {
-                                    ForEach(bundled) { row in
-                                        rowView(row)
-                                            .id(row.page.id)
-                                    }
-                                }
-                            }
-                        }
-
-                        if !installed.isEmpty {
-                            VStack(alignment: .leading, spacing: 2) {
-                                sectionHeader("Installed", isExpanded: installedExpanded) {
-                                    installedSectionExpanded.toggle()
-                                }
-
-                                if installedExpanded {
-                                    ForEach(installed) { row in
-                                        rowView(row)
-                                            .id(row.page.id)
-                                    }
-                                }
                             }
                         }
 
@@ -353,33 +310,6 @@ struct SettingsSidebar: View {
                 scrollSelectionIntoView(proxy, animated: false)
             }
         }
-    }
-
-    private func sectionHeader(
-        _ title: LocalizedStringKey,
-        isExpanded: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 8, weight: .bold))
-                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    .frame(width: 10)
-
-                Text(title)
-                    .font(.system(size: 11, weight: .semibold))
-
-                Spacer(minLength: 0)
-            }
-            .foregroundStyle(SettingsDesignTokens.secondaryText.opacity(0.7))
-            .contentShape(Rectangle())
-            .padding(.leading, 10)
-            .padding(.top, SettingsDesignTokens.sidebarGroupSpacing)
-            .padding(.bottom, 4)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
     }
 
     private var searchField: some View {

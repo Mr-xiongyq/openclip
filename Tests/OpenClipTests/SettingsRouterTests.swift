@@ -15,6 +15,11 @@ import SwiftUI
 @MainActor
 final class SettingsRouterTests: XCTestCase {
 
+    override func setUp() {
+        super.setUp()
+        TestIsolation.reset()
+    }
+
     // MARK: - Path and history
 
     func testStartsOnGeneralWithNowhereToGo() {
@@ -531,7 +536,7 @@ final class SettingsRouterTests: XCTestCase {
                               "\(page.id) must not wear an extension's generated colour")
         }
 
-        XCTAssertEqual(SettingsPage.ai.tint, SettingsTint.openClip)
+        XCTAssertEqual(SettingsPage.ai.tint, SettingsTint.ai)
         XCTAssertEqual(SettingsPage.customActions.tint, SettingsTint.openClip)
         XCTAssertEqual(SettingsPage.builtinAction(id: "builtin.copy").tint, SettingsTint.openClip)
 
