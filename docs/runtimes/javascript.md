@@ -6,6 +6,13 @@ reached via [`JavaScriptAction`](../../Sources/OpenClip/Platform/Runtimes/JavaSc
 read-only `openclip` object into the global scope and resolves collected effects into an
 [`ActionResult`](../../Sources/Core/Actions/ActionResult.swift).
 
+An action that consumes rich source input can declare `"captureRtf": true` and/or
+`"captureHtml": true` in its action object. Missing rich representations are captured
+when the action is invoked, before `openclip.input.rtf` / `openclip.input.html` are populated.
+The clipboard is restored before JavaScript runs. Existing rich input is reused; plain-text
+source apps may still provide no rich representation. These flags also supply `{rtf}` / `{html}`
+and the existing shell/AppleScript inputs. They cannot be combined with inline previews.
+
 Extensions opt into **asynchronous** execution with the manifest flag `"async": true`
 (`ExtensionActionMetadata.isAsync`). Async extensions get a `fetch()` polyfill bridged to URLSession,
 and the host awaits the action's returned promise (or the promise an entry function returns) before

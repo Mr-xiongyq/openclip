@@ -1121,6 +1121,34 @@
         }
       }
     },
+    "Actions & Extensions": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "操作和扩展"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "動作與擴充功能"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actions et extensions"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アクションと拡張機能"
+          }
+        }
+      }
+    },
     "Actions Per Page": {
       "localizations": {
         "zh-Hans": {
@@ -8401,6 +8429,34 @@
         }
       }
     },
+    "Finish the screen capture before copying.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先完成屏幕截图，再复制。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請先完成螢幕擷取，再拷貝。"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminez la capture d’écran avant de copier."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面キャプチャを終了してからコピーしてください。"
+          }
+        }
+      }
+    },
     "Fit to width": {
       "localizations": {
         "zh-Hans": {
@@ -10637,6 +10693,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "拡張機能を管理…"
+          }
+        }
+      }
+    },
+    "Matches “%@”": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匹配“%@”"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "符合「%@」"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correspond à « %@ »"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」に一致"
           }
         }
       }
@@ -16017,6 +16101,34 @@
         }
       }
     },
+    "Save Location": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存位置"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存位置"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emplacement d’enregistrement"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存場所"
+          }
+        }
+      }
+    },
     "Save as AI Tool": {
       "localizations": {
         "zh-Hans": {
@@ -16185,6 +16297,34 @@
         }
       }
     },
+    "Search Actions": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索操作"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋動作"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher des actions"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アクションを検索"
+          }
+        }
+      }
+    },
     "Search Engine URL Template": {
       "localizations": {
         "zh-Hans": {
@@ -16297,6 +16437,90 @@
         }
       }
     },
+    "Search Store": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索商店"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋商店"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher dans la boutique"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ストアを検索"
+          }
+        }
+      }
+    },
+    "Search Store for “%@”": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在商店中搜索“%@”"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在商店中搜尋「%@」"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher « %@ » dans la boutique"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ストアで「%@」を検索"
+          }
+        }
+      }
+    },
+    "Search Store for… %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在商店中搜索：%@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在商店中搜尋：%@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher dans la boutique : %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ストアで検索：%@"
+          }
+        }
+      }
+    },
     "Search actions, shortcuts, or aliases": {
       "localizations": {
         "zh-Hans": {
@@ -16321,6 +16545,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "アクション、ショートカット、エイリアスを検索"
+          }
+        }
+      }
+    },
+    "Search actions...": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索操作…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋動作…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher des actions..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アクションを検索…"
           }
         }
       }
@@ -16433,6 +16685,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "設定を検索"
+          }
+        }
+      }
+    },
+    "Search settings...": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索设置…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋設定…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher dans les réglages…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定を検索…"
           }
         }
       }
@@ -18985,6 +19265,62 @@
         }
       }
     },
+    "The application did not confirm Copy in time.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "应用程序未能及时确认复制操作。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "應用程式未能及時確認拷貝操作。"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’application n’a pas confirmé la copie à temps."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アプリが時間内にコピーを確認しませんでした。"
+          }
+        }
+      }
+    },
+    "The application's Copy command is unavailable.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "应用程序的复制命令不可用。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "應用程式的拷貝指令無法使用。"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La commande Copier de l’application n’est pas disponible."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アプリのコピーコマンドは利用できません。"
+          }
+        }
+      }
+    },
     "The extension package could not be found at the specified location.": {
       "localizations": {
         "zh-Hans": {
@@ -19093,6 +19429,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "アクションの実行時、選択したテキストが指示の後に追加されます。"
+          }
+        }
+      }
+    },
+    "The source selection is no longer available.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "源文本选择已不可用。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "來源文字選取已無法使用。"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La sélection source n’est plus disponible."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "元の選択範囲は利用できなくなりました。"
           }
         }
       }

@@ -76,6 +76,18 @@ final class ActionResultDeliveryTests: XCTestCase {
         assertCase(result, .copy("hello"))
     }
 
+    func testNativeCopyPreservesClickBehaviorAndReportsCopied() {
+        let selection = SelectionContext(text: "Selected", selectionGeneration: 7)
+        for intent in [ActionResultDelivery.ClickIntent.primary, .secondary] {
+            let (result, toast) = ActionResultDelivery.resolve(
+                raw: .copySelection(selection), clickIntent: intent, canPaste: false, delivery: .none
+            )
+            guard case .copySelection(let copied) = result else { return XCTFail("Native Copy must stay native") }
+            XCTAssertEqual(copied.selectionGeneration, 7)
+            XCTAssertEqual(toast?.message, "Copied")
+        }
+    }
+
     func testCutStaysCut() {
         let (result, _) = ActionResultDelivery.resolve(
             raw: .cut("hello"),

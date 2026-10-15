@@ -19,6 +19,7 @@
 		04189A9019D949E0F4AC1313 /* FileOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B55371F5400350570C84202 /* FileOutputTests.swift */; };
 		0532F7FF8BA7A439A30D8EA9 /* ActionRegistryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E86D685379782075566534F /* ActionRegistryTests.swift */; };
 		05A18C707EEB8A5776CC438E /* AIServiceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90B84517D03AB3D9A5BB0D1D /* AIServiceManager.swift */; };
+		0703D6E45CC6D037F92D0148 /* PreferencesSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6BA23684331F464E53C0F36 /* PreferencesSearch.swift */; };
 		07AD3DB565E57EDADBBC73EA /* TooltipPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF9BC6017410358A72E64420 /* TooltipPresenter.swift */; };
 		0875DA9C238F752BCDBB8EC9 /* ManifestValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31413D1B3A41341818B8B6F6 /* ManifestValidationTests.swift */; };
 		08B4A887BE963B687978A950 /* PopupThemeModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2E5E713FFF659BDC452D55 /* PopupThemeModelTests.swift */; };
@@ -30,6 +31,7 @@
 		0D2A9ED17EFBDC8259536BBC /* PopupSwatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 008D32978D99AC38A9BFE8F1 /* PopupSwatch.swift */; };
 		0DB40D898F2B38135F0E61F5 /* SettingsSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81AAACCF97417074C7D92379 /* SettingsSnapshotTests.swift */; };
 		0E3D68AFA4DDEDAA15DEC3F5 /* MacSelectionMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD213AE6ECE1B6BFDBCDE342 /* MacSelectionMonitorTests.swift */; };
+		0FF2BD8FB90315FE56963A51 /* RichInputAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28738CA98A3B9F200561D4C4 /* RichInputAction.swift */; };
 		104969A805A5B24DC86357C2 /* ActionGroupIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3890F41894C5F466658419C /* ActionGroupIntegrationTests.swift */; };
 		1093E6E51DBCFB31D0D97796 /* PopupSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA6733CB7FD55544834DC9B /* PopupSearchView.swift */; };
 		1212F22C9E08D7C8E92EE51F /* SettingsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9339A9EA492106E0205D123D /* SettingsCatalog.swift */; };
@@ -217,6 +219,7 @@
 		86540F70063960FDB5D44324 /* ValidateExpression.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34B69B093ED3342ADFC46D78 /* ValidateExpression.swift */; };
 		86870EB533704BC58F41F797 /* SettingsSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26894120EC6BA0D7E2A226B2 /* SettingsSnapshot.swift */; };
 		869D8DE376911B2D5633501D /* ActionResultDismissPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30E6ABB38EB5BC9DD5A41259 /* ActionResultDismissPolicyTests.swift */; };
+		87498D69697A8939527462C7 /* ActionSelectionCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DA4A90456579EBD22D3EF86 /* ActionSelectionCapture.swift */; };
 		87B7B3D8AAA1E4C9D01750FE /* RotatingFileLogSinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A3B31A9407EA4D8E0EBF6E /* RotatingFileLogSinkTests.swift */; };
 		88C18C71A618595197BCA38A /* CustomizePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5632DBA8086544C5074C0309 /* CustomizePage.swift */; };
 		897705A35F84197F2592EA85 /* ToastPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6FFA9C68FDEE2E193E3ADDA /* ToastPanelController.swift */; };
@@ -227,6 +230,7 @@
 		8AA40165FA1BF2E026ED4C1A /* AIProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FF20DB76BDB47222A26CBAC /* AIProviderTests.swift */; };
 		8AB5DA8220E66C8D77EA64FA /* GroupSubActionBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFEB96F8C47927BF0E4EF7FD /* GroupSubActionBarView.swift */; };
 		8B884D4135324DC919D8941A /* PopupSpaceRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC483BDCE6EE16D011D865E8 /* PopupSpaceRecoveryTests.swift */; };
+		8C2E4BA3A05F994AFC60F063 /* ActionSelectionCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 463D68764560F056BEE26517 /* ActionSelectionCaptureTests.swift */; };
 		8CABBF132C8D96FB5362D7E1 /* PasteboardCopyEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40068DD0346E93060C2DE55A /* PasteboardCopyEngineTests.swift */; };
 		8D26F2D7A7F2388B28EF7E03 /* DeepLinkHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFE7151632E620F610F28030 /* DeepLinkHandlerTests.swift */; };
 		8D96F0F84D1CFC88E268B2AA /* ActionAppearanceFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4284E18DE06D8BB8FF933E15 /* ActionAppearanceFields.swift */; };
@@ -523,6 +527,7 @@
 		26AA38CCEB64711C1129F135 /* DebugLogEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogEntry.swift; sourceTree = "<group>"; };
 		2743FB4C51D500429A462F33 /* CustomGroupAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomGroupAction.swift; sourceTree = "<group>"; };
 		27C565B3E87AC475CEE12B3E /* LogExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogExporter.swift; sourceTree = "<group>"; };
+		28738CA98A3B9F200561D4C4 /* RichInputAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RichInputAction.swift; sourceTree = "<group>"; };
 		287DF09DC26BE3ACE16F3B53 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		2880EA47FA384B00CFAD2877 /* OpenClipSnippetParser+DefaultFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OpenClipSnippetParser+DefaultFactory.swift"; sourceTree = "<group>"; };
 		28C251D684663DDC867A7E7C /* DebugLogStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogStoreTests.swift; sourceTree = "<group>"; };
@@ -533,6 +538,7 @@
 		2C2E0CE18FC287126307E67B /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		2D0B6A4A79189F0D076BE588 /* LocalLLMProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMProvider.swift; sourceTree = "<group>"; };
 		2D1221805EFDD065CA543A00 /* CalendarActionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarActionTests.swift; sourceTree = "<group>"; };
+		2DA4A90456579EBD22D3EF86 /* ActionSelectionCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionSelectionCapture.swift; sourceTree = "<group>"; };
 		2EA880751E87F795D5A87C8F /* ExtensionsStoreIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionsStoreIntegrationTests.swift; sourceTree = "<group>"; };
 		2ED31C601F7A882DF744E329 /* ReorderableRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReorderableRows.swift; sourceTree = "<group>"; };
 		2F38F3BCCF8CDF7BE3D3F35C /* CLIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIProvider.swift; sourceTree = "<group>"; };
@@ -578,6 +584,7 @@
 		4584DE4382B6EBE7C2653643 /* DeepLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkTests.swift; sourceTree = "<group>"; };
 		459B709840D3A9F1DFD49761 /* ToastPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastPanel.swift; sourceTree = "<group>"; };
 		45EDC48BB789417097D3B8A4 /* ExtensionUpdatePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionUpdatePlanner.swift; sourceTree = "<group>"; };
+		463D68764560F056BEE26517 /* ActionSelectionCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionSelectionCaptureTests.swift; sourceTree = "<group>"; };
 		46F35FE3A8EA5549603E53B4 /* PermissionRecoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionRecoveryView.swift; sourceTree = "<group>"; };
 		472E7385DBCBD7C2443AC1B9 /* WindowConfigurator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowConfigurator.swift; sourceTree = "<group>"; };
 		47E51843D196C894F4B98910 /* SettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStoreTests.swift; sourceTree = "<group>"; };
@@ -600,6 +607,7 @@
 		4EBF2237CD3B7F39A13015BE /* PDFPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPreviewView.swift; sourceTree = "<group>"; };
 		4FD963C9E0D372414ECC705E /* ShortcutRecorderPopover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutRecorderPopover.swift; sourceTree = "<group>"; };
 		503C3147E869802CD5FF0867 /* AIPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIPage.swift; sourceTree = "<group>"; };
+		50497A4F3040C1F1460E1B5D /* openselection */ = {isa = PBXFileReference; lastKnownFileType = folder; name = openselection; path = openselection; sourceTree = SOURCE_ROOT; };
 		5056C8C6C08BF8DC3FFAAC3C /* SubBarState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubBarState.swift; sourceTree = "<group>"; };
 		535B6891DB044AC163B4E2CF /* RotatingFileLogSink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RotatingFileLogSink.swift; sourceTree = "<group>"; };
 		5403DA3AA5ED80810759AB76 /* ActionIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionIconView.swift; sourceTree = "<group>"; };
@@ -833,6 +841,7 @@
 		E4F4A03EAAAED8DD581B6D60 /* BrandColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandColor.swift; sourceTree = "<group>"; };
 		E54AEEA54ADE3106E777F448 /* ActionResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionResult.swift; sourceTree = "<group>"; };
 		E64E77AACA56DB3C341E5044 /* LocalIconCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalIconCacheTests.swift; sourceTree = "<group>"; };
+		E6BA23684331F464E53C0F36 /* PreferencesSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesSearch.swift; sourceTree = "<group>"; };
 		E74EC58C6E636CC1388565D9 /* DefaultActionFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultActionFactory.swift; sourceTree = "<group>"; };
 		E7D67EF0F01017315F0E775B /* ActionResultHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionResultHandler.swift; sourceTree = "<group>"; };
 		E7F63399A1C7D78E9E1667DF /* GeneralTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralTabView.swift; sourceTree = "<group>"; };
@@ -903,6 +912,14 @@
 			path = Providers;
 			sourceTree = "<group>";
 		};
+		047E55EBDA4F3AE88B1291A0 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				50497A4F3040C1F1460E1B5D /* openselection */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
 		0A2AE4010C5A2D86AD53D563 /* Extensions */ = {
 			isa = PBXGroup;
 			children = (
@@ -921,7 +938,9 @@
 		0B026D1A0A5D84310A4E7E5E /* Selection */ = {
 			isa = PBXGroup;
 			children = (
+				2DA4A90456579EBD22D3EF86 /* ActionSelectionCapture.swift */,
 				F5F4AFF322060F5A1943DFDD /* OpenSelectionBridge.swift */,
+				28738CA98A3B9F200561D4C4 /* RichInputAction.swift */,
 				C68D58BC0D8D00D9FAA3D89D /* SelectionEditabilityProbe.swift */,
 				A572E4695E355E2C2BC916D2 /* SelectionGestureTargetProbe.swift */,
 			);
@@ -1229,6 +1248,7 @@
 				D1C60AD211354ED2FF2C562D /* Core */,
 				3BFB332B47278C5BC2AE4229 /* OpenClip */,
 				E5550E18E26D2F31A7B43491 /* OpenClipTests */,
+				047E55EBDA4F3AE88B1291A0 /* Packages */,
 				C7914DC6A469A7C9C9E3D4F9 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -1370,6 +1390,7 @@
 				569412EFC877FF5E34F89619 /* InstalledExtensionInfo.swift */,
 				43164B559184ADE5F08C1FDD /* NewCustomActionPage.swift */,
 				C48F2C371E4126CE67142FC0 /* NewGroupPage.swift */,
+				E6BA23684331F464E53C0F36 /* PreferencesSearch.swift */,
 				7F26242B60606C743CBBA169 /* PreferencesToolbar.swift */,
 				F660BE562891C148ECA1E083 /* PreferencesView.swift */,
 				2ED31C601F7A882DF744E329 /* ReorderableRows.swift */,
@@ -1498,6 +1519,7 @@
 				30E6ABB38EB5BC9DD5A41259 /* ActionResultDismissPolicyTests.swift */,
 				A4A87CFA084BCF3B940A37EC /* ActionResultHandlerTests.swift */,
 				0A76FF3CB8BB271D95028A50 /* ActionSearchTests.swift */,
+				463D68764560F056BEE26517 /* ActionSelectionCaptureTests.swift */,
 				CE52A2746613B843A8CD5AB5 /* ActionUsageStoreTests.swift */,
 				6D2CD73334B7B4D222062C30 /* ActionVisibilityTests.swift */,
 				3A55EA02DDDA4E6CD7B599D1 /* AIActionTests.swift */,
@@ -1721,10 +1743,10 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				08D4D3F56FD0A85127E5EBAF /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
-				52FC89888BBA9C48D51282B2 /* XCRemoteSwiftPackageReference "OpenSelection" */,
 				6F6B418BC685195C47AA367E /* XCRemoteSwiftPackageReference "SDWebImageSVGCoder" */,
 				0BBBF5D087479FC9C36D0D54 /* XCRemoteSwiftPackageReference "SDWebImageSwiftUI" */,
 				2F5F308890722E78493B7EEE /* XCRemoteSwiftPackageReference "Sparkle" */,
+				F53D4DCB52499A0000EEC5B0 /* XCLocalSwiftPackageReference "openselection" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C7914DC6A469A7C9C9E3D4F9 /* Products */;
@@ -1787,6 +1809,7 @@
 				869D8DE376911B2D5633501D /* ActionResultDismissPolicyTests.swift in Sources */,
 				12645EE314DA461467D5F2F4 /* ActionResultHandlerTests.swift in Sources */,
 				DA6A2127C40D94FF8C182A2B /* ActionSearchTests.swift in Sources */,
+				8C2E4BA3A05F994AFC60F063 /* ActionSelectionCaptureTests.swift in Sources */,
 				C63E6C48A533FAF5D6C89CA6 /* ActionUsageStoreTests.swift in Sources */,
 				1A67EEB5C426858848AD9B5C /* ActionVisibilityTests.swift in Sources */,
 				94F6165DD10ED76B25170C1C /* AppFilterTests.swift in Sources */,
@@ -2027,6 +2050,7 @@
 				5A14DE3CC0CA1D776F8A6036 /* ActionIconImageHelper.swift in Sources */,
 				6A92D05EC5B07D80B3C833C3 /* ActionIconView.swift in Sources */,
 				6B40A0FD70FC637EF0736DDC /* ActionResultHandler.swift in Sources */,
+				87498D69697A8939527462C7 /* ActionSelectionCapture.swift in Sources */,
 				AD118FFD5F5D03FF31363446 /* ActionSettingsRow.swift in Sources */,
 				36AA21AC4ACFF3351BC40330 /* ActionsOutlineView.swift in Sources */,
 				9C5C5A56EBFDFBB19A51A2A3 /* AddApplicationPage.swift in Sources */,
@@ -2125,6 +2149,7 @@
 				52BEF3963FD28FB56E10A235 /* PopupThemeSelector.swift in Sources */,
 				0ABD4746A74B3657C3550DCE /* PopupView.swift in Sources */,
 				7E44D09AC94810898D6E5D1D /* PopupWindowController.swift in Sources */,
+				0703D6E45CC6D037F92D0148 /* PreferencesSearch.swift in Sources */,
 				23079CE2CEE3E41027A6413A /* PreferencesToolbar.swift in Sources */,
 				FAE8B480FE55D8C3ACC20A29 /* PreferencesView.swift in Sources */,
 				A580D05C2847CE1E3838B371 /* QuickLookPresenter.swift in Sources */,
@@ -2134,6 +2159,7 @@
 				BEBB1B8BEAF167340FB72CF4 /* ReorderableRows.swift in Sources */,
 				502E0EAB60D92A89C1F8957F /* ResultCardView.swift in Sources */,
 				FACD7D36C9F9D59E235C615A /* RevealInFinderAction.swift in Sources */,
+				0FF2BD8FB90315FE56963A51 /* RichInputAction.swift in Sources */,
 				857EA7E19F4C4D01AD6E0C5F /* RotatingFileLogSink.swift in Sources */,
 				632B4C8AE8C5808FDAA18AB0 /* SandboxTextView.swift in Sources */,
 				3B2A2D89FA04D2CEE87C117E /* SearchHoverSupport.swift in Sources */,
@@ -2509,6 +2535,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		F53D4DCB52499A0000EEC5B0 /* XCLocalSwiftPackageReference "openselection" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = openselection;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		08D4D3F56FD0A85127E5EBAF /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -2532,14 +2565,6 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 2.6.4;
-			};
-		};
-		52FC89888BBA9C48D51282B2 /* XCRemoteSwiftPackageReference "OpenSelection" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ganeshmshetty/OpenSelection.git";
-			requirement = {
-				kind = exactVersion;
-				version = 2.15.4;
 			};
 		};
 		6F6B418BC685195C47AA367E /* XCRemoteSwiftPackageReference "SDWebImageSVGCoder" */ = {
@@ -2575,12 +2600,10 @@
 		};
 		BB2C97C1C543D89191FBB976 /* OpenSelection */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 52FC89888BBA9C48D51282B2 /* XCRemoteSwiftPackageReference "OpenSelection" */;
 			productName = OpenSelection;
 		};
 		CCBD9EA1BA1F06020AF01851 /* OpenSelection */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 52FC89888BBA9C48D51282B2 /* XCRemoteSwiftPackageReference "OpenSelection" */;
 			productName = OpenSelection;
 		};
 /* End XCSwiftPackageProductDependency section */

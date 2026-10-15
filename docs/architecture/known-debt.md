@@ -50,6 +50,26 @@ areas; stale debt notes are worse than none.
   restores the original activation policy once no regular windows remain visible; a Settings window
   opened during the check keeps its own lease.
 
+## Preferences Search
+
+- The sidebar keeps its seven static rows when the query is blank. A nonblank query searches the
+  local settings-page index, concrete General controls, registered actions/extensions, and AI
+  presets by displayed name and explicit alias only. English settings labels remain alternate
+  names for localized settings. Broad action keywords, internal ids, breadcrumbs, package metadata,
+  preference values, secrets and the Store catalog are excluded from matching. Store search is an
+  explicit handoff row that applies the captured query only after activation. Action entries are
+  rebuilt from the coordinator, customization, binding aliases, and AI manager so installed and
+  disabled actions remain discoverable without enabling them. General control results use stable
+  row ids to scroll into view and briefly highlight the control. Search results use flat text-only
+  rows, a neutral selected/hover state and just a title and location. One/two-character queries
+  require a name/alias prefix; longer queries match tokens within a name/alias. At most six ranked
+  local results are shown, with no expansion control. Up/down arrows move selection through those
+  results and the separated Store row;
+  Return opens the selected destination. Store is never implicitly selected for zero local results.
+  Query state stays in the sidebar so typing does not invalidate the full preferences/detail view.
+  The catalog is normalized only when entries change; results and ids are cached once
+  per query, rather than filtering the full catalog from each row’s selection/hover rendering.
+
 ## Settings Migration (UserDefaults → SettingsStore)
 
 - The typed settings abstraction is `SettingsStore` + `SettingKey<T>` (see `Sources/Core/Settings/`).
@@ -532,6 +552,32 @@ replace a newer popup.
   the snapshot is unreachable by any pid walk.
 
 ## Selection Retrieval
+
+- **Extension rich input is captured on demand.** Per-action manifest flags `captureRtf`
+  and `captureHtml` ask `RichInputAction` to prepare missing representations before the
+  runtime executes, shared by bar/search/hotkey/loading entry points. The app's injected
+  generation validator and source PID are rechecked after clipboard acquisition.
+  `PasteboardCopyEngine` accepts a user-action lease and an awaited menu trigger, then
+  restores the user's clipboard before returning captured input. Existing representations
+  skip the extra copy; clipboard/OCR contexts never copy from another app. No unavailable
+  source representation is guaranteed (HTML/RTF conversions remain the engine's fallback).
+  Inline previews cannot request rich capture, preventing clipboard operations on hover.
+  Explicit action-time Copy/capture ignores floating System UI recording panels after source
+  activation, but still refuses full-screen screenshot pickers; a picker refusal has its
+  own feedback instead of being mislabeled as a changed source.
+
+- **Built-in Copy uses the source application's native command for live selections.**
+  `CopyAction` returns the typed `copySelection` effect; the platform handler validates the
+  captured PID and selection generation again after acquiring the clipboard lease and
+  activating the source. OpenSelection's `NativeCopyOperation` holds user-action ownership
+  through the bounded response window and leaves the app's clipboard items, private formats,
+  and lazy data providers intact. Menu-copy policies use bounded AX menu workers. Cancellation
+  after posting drains the response window; no plain-text fallback or restoration overwrites
+  a successful/native or external copy. Clipboard change count confirms an observed update,
+  not its provenance; external apps cannot be locked and late writes beyond the response
+  window remain a platform limitation. OCR and explicit text/rich-payload results retain
+  their supplied-output behavior. Cut still reconstructs plain text and is separate work.
+  The development project currently consumes the local `openselection` package.
 
 - **Mouse gesture checks precede retrieval.** A bounded AX hit-test of the original press rejects
   identifiable toolbar/titlebar/window chrome, including unchanged fullscreen windows, while

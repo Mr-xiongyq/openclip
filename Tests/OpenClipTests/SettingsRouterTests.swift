@@ -115,6 +115,22 @@ final class SettingsRouterTests: XCTestCase {
         XCTAssertEqual(router.history, [[.general], [.customize], [.shortcuts]])
     }
 
+    func testGeneralRevealRequestsRepeatOnTheSamePageAndIgnoreStaleClears() throws {
+        let router = SettingsRouter()
+        router.revealGeneralControl(GeneralSearchTarget.captureText)
+        let first = try XCTUnwrap(router.generalRevealRequest)
+        XCTAssertEqual(router.path, [.general])
+
+        router.revealGeneralControl(GeneralSearchTarget.captureText)
+        let second = try XCTUnwrap(router.generalRevealRequest)
+        XCTAssertNotEqual(first.id, second.id)
+        router.clearGeneralRevealRequest(first.id)
+        XCTAssertEqual(router.generalRevealRequest, second)
+
+        router.clearGeneralRevealRequest(second.id)
+        XCTAssertNil(router.generalRevealRequest)
+    }
+
     func testShowingTheCurrentPathAgainRecordsNothing() {
         let router = SettingsRouter()
         router.select(.customize)
@@ -198,6 +214,111 @@ final class SettingsRouterTests: XCTestCase {
         XCTAssertEqual(SettingsSidebarFilter.filter(rows, query: "").map(\.page), SettingsPage.systemPages)
         XCTAssertEqual(SettingsSidebarFilter.filter(rows, query: "hotkey").map(\.page), [.general, .customize])
         XCTAssertEqual(SettingsSidebarFilter.filter(rows, query: "licence").map(\.page), [.about])
+    }
+
+    func testPreferencesSearchOnlyMatchesNamesAndExplicitAliases() {
+        let entries = [
+            PreferencesSearchEntry.page(id: "settings", title: "General", breadcrumb: "Settings", path: [.general]),
+            PreferencesSearchEntry.page(id: "extension", title: "Café Tools", breadcrumb: "Extensions · Coffee", aliases: ["brew"], path: [.extensionPackage(id: "cafe")], section: .actions),
+            PreferencesSearchEntry.page(id: "builtin", title: "Capture Text", breadcrumb: "Actions", path: [.builtinAction(id: "capture")], section: .actions),
+        ]
+        XCTAssertEqual(PreferencesSearch.results(in: entries, query: "  CAPTURE TEXT ").map(\.id), ["builtin"])
+        XCTAssertEqual(PreferencesSearch.results(in: entries, query: "cafe").map(\.id), ["extension"])
+        XCTAssertEqual(PreferencesSearch.results(in: entries, query: "brew").map(\.id), ["extension"])
+        XCTAssertTrue(PreferencesSearch.results(in: entries, query: "coffee").isEmpty)
+        XCTAssertTrue(PreferencesSearch.results(in: entries, query: "builtin").isEmpty)
+        XCTAssertTrue(PreferencesSearch.results(in: entries, query: "ocr").isEmpty)
+        XCTAssertTrue(PreferencesSearch.results(in: entries, query: "  \n").isEmpty)
+    }
+
+    func testShortQueriesOnlyMatchPrefixesAndLongerQueriesCanMatchWithinNames() {
+        let entry = PreferencesSearchEntry.page(id: "save", title: "Save Location", breadcrumb: "General", aliases: ["Downloads"], path: [.general])
+        XCTAssertEqual(PreferencesSearch.results(in: [entry], query: "sa").count, 1)
+        XCTAssertEqual(PreferencesSearch.results(in: [entry], query: "do").count, 1)
+        XCTAssertTrue(PreferencesSearch.results(in: [entry], query: "lo").isEmpty)
+        XCTAssertEqual(PreferencesSearch.results(in: [entry], query: "loc").count, 1)
+        XCTAssertEqual(PreferencesSearch.results(in: [entry], query: "location save").count, 1)
+    }
+
+    func testSearchReturnsOnlySixBestResults() {
+        var entries = (0..<12).map { number in
+            PreferencesSearchEntry.page(id: "copy-\(number)", title: "Copy Tool \(number)", breadcrumb: "Actions", path: [.action(id: "copy-\(number)")])
+        }
+        entries.append(.page(id: "exact", title: "Copy", breadcrumb: "Actions", path: [.builtinAction(id: "copy")]))
+        XCTAssertEqual(PreferencesSearch.results(in: entries, query: "copy").map(\.id), [
+            "exact", "copy-0", "copy-1", "copy-2", "copy-3", "copy-4"
+        ])
+    }
+
+    func testPreferencesSearchTypingPerformance() {
+        let entries = (0..<300).map { index in
+            PreferencesSearchEntry.page(
+                id: "action-\(index)", title: "Sample Action \(index)", breadcrumb: "Extensions › Tools",
+                aliases: ["save", "clipboard", "screenshot", "翻译", "検索", "saisie automatique"],
+                path: [.action(id: "action-\(index)")], section: .actions
+            )
+        }
+        let index = PreferencesSearch.Index(entries: entries)
+        measure {
+            for query in ["s", "sa", "sam", "samp", "sample"] {
+                XCTAssertEqual(index.results(query: query).count, 6)
+            }
+        }
+    }
+
+    func testSearchKeyboardSelectionClampsAndRecoversAfterResultsChange() {
+        let ids = ["first", "second", "store"]
+        XCTAssertEqual(PreferencesSearch.movedSelection(from: nil, in: ids, direction: 1), "first")
+        XCTAssertEqual(PreferencesSearch.movedSelection(from: "first", in: ids, direction: -1), "first")
+        XCTAssertEqual(PreferencesSearch.movedSelection(from: "first", in: ids, direction: 1), "second")
+        XCTAssertEqual(PreferencesSearch.movedSelection(from: "second", in: ids, direction: 1), "store")
+        XCTAssertEqual(PreferencesSearch.movedSelection(from: "store", in: ids, direction: 1), "store")
+        XCTAssertEqual(PreferencesSearch.movedSelection(from: "removed", in: ids, direction: -1), "first")
+        XCTAssertNil(PreferencesSearch.movedSelection(from: nil, in: [], direction: 1))
+    }
+
+    func testPreferencesSearchRankingKeepsNamesAndAliasesInOneStableOrder() {
+        let entries = [
+            PreferencesSearchEntry.page(id: "keyword", title: "Other Tool", breadcrumb: "Settings", aliases: ["café"], path: [.general]),
+            PreferencesSearchEntry.page(id: "prefix", title: "Cafe Tools", breadcrumb: "Settings", path: [.about]),
+            PreferencesSearchEntry.page(id: "exact", title: "Café", breadcrumb: "Settings", path: [.store]),
+            PreferencesSearchEntry.page(id: "keyword-2", title: "Another", breadcrumb: "Settings", aliases: ["cafe"], path: [.ai]),
+        ]
+
+        XCTAssertEqual(PreferencesSearch.results(in: entries, query: "cafe").map(\.id), [
+            "exact", "keyword", "keyword-2", "prefix"
+        ])
+    }
+
+    func testPreferencesSearchDeduplicatesSameDestinationAndTitleAndKeepsGeneralTarget() {
+        let destination = PreferencesSearchEntry.page(
+            id: "action",
+            title: "Translate",
+            breadcrumb: "Extensions · Language Tools",
+            aliases: ["translate"],
+            path: [.extensionPackage(id: "language-tools"), .action(id: "translate")],
+            section: .actions
+        )
+        let duplicate = PreferencesSearchEntry.page(
+            id: "duplicate",
+            title: "Translate",
+            breadcrumb: "Extensions",
+            aliases: ["translate", "language"],
+            path: [.extensionPackage(id: "language-tools"), .action(id: "translate")],
+            section: .actions
+        )
+        let generalControl = PreferencesSearchEntry.generalControl(
+            id: GeneralSearchTarget.accessibilityAccess,
+            title: "Accessibility Access",
+            aliases: ["permission"]
+        )
+
+        let results = PreferencesSearch.results(in: [destination, duplicate, generalControl], query: "translate")
+        XCTAssertEqual(results.map(\.id), ["action"])
+        XCTAssertEqual(results[0].target, .page([.extensionPackage(id: "language-tools"), .action(id: "translate")]))
+        XCTAssertEqual(generalControl.target, .generalControl(id: "general.accessibilityAccess"))
+        XCTAssertEqual(GeneralSearchTarget.all.count, 9)
+        XCTAssertEqual(Set(GeneralSearchTarget.all).count, GeneralSearchTarget.all.count)
     }
 
     func testTheSidebarListsWhatShippedBeforeWhatWasInstalled() {

@@ -224,6 +224,12 @@ public final class SettingsRouter: ObservableObject {
     @Published public private(set) var history: [[SettingsPage]] = [[.general]]
     @Published public private(set) var historyIndex: Int = 0
 
+    struct GeneralRevealRequest: Identifiable, Equatable {
+        let id: UUID
+        let targetID: String
+    }
+    @Published private(set) var generalRevealRequest: GeneralRevealRequest?
+
     /// The notice the detail column is showing, if any.
     @Published public var notice: SettingsNotice?
 
@@ -263,6 +269,16 @@ public final class SettingsRouter: ObservableObject {
     /// sidebar tabs is instant — a cross-fade between two panes reads as lag, not navigation.
     public func select(_ page: SettingsPage) {
         show(path: [page], animated: false)
+    }
+
+    func revealGeneralControl(_ targetID: String) {
+        generalRevealRequest = GeneralRevealRequest(id: UUID(), targetID: targetID)
+        select(.general)
+    }
+
+    func clearGeneralRevealRequest(_ id: UUID) {
+        guard generalRevealRequest?.id == id else { return }
+        generalRevealRequest = nil
     }
 
     /// Drills into `page` from the current one. Drilling into a page that is already in the path

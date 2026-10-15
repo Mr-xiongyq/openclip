@@ -20,9 +20,18 @@ public protocol ActionResultHandler: Sendable {
     func handle(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication?) async throws
     @MainActor
     func handleWithoutDismissal(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication?) async
+
+    @MainActor
+    func handle(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication?,
+                isSelectionCurrent: @escaping @MainActor (SelectionContext) -> Bool) async throws
 }
 
 extension ActionResultHandler {
+    @MainActor
+    public func handle(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication?,
+                       isSelectionCurrent: @escaping @MainActor (SelectionContext) -> Bool) async throws {
+        try await handle(result, in: view, targetApp: targetApp)
+    }
     @MainActor
     public func handle(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication?) async throws {
         try await handle(result, in: view)
@@ -85,6 +94,8 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
     private let openURLInApp: @MainActor @Sendable (URL, String) async -> Void
     private let appActivator: AppActivator
     private let targetActiveChecker: TargetActiveChecker
+    private let frontmostPID: @MainActor () -> pid_t?
+    private let copyOverlayPresent: @MainActor () -> Bool
 
     public init(settingsStore: SettingsStore = DefaultSettingsStore.shared,
                 keyboardPoster: KeyboardEventPosting = SessionEventTapPoster(),
@@ -104,6 +115,10 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         }
         self.appActivator = appActivator
         self.targetActiveChecker = targetActiveChecker
+        self.frontmostPID = { NSWorkspace.shared.frontmostApplication?.processIdentifier }
+        self.copyOverlayPresent = {
+            CopyTriggerGate.isForeignOverlayPresent(at: NSEvent.mouseLocation, intent: .explicitUserCopy)
+        }
     }
 
     public init(settingsStore: SettingsStore = DefaultSettingsStore.shared,
@@ -117,7 +132,11 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
                     await BrowserTabOpener().open(url, inApp: bundleID)
                 },
                 appActivator: @escaping AppActivator = { $0.activate() },
-                targetActiveChecker: @escaping TargetActiveChecker = SelectionReplacer.defaultTargetActiveChecker) {
+                targetActiveChecker: @escaping TargetActiveChecker = SelectionReplacer.defaultTargetActiveChecker,
+                frontmostPID: @escaping @MainActor () -> pid_t? = { NSWorkspace.shared.frontmostApplication?.processIdentifier },
+                copyOverlayPresent: @escaping @MainActor () -> Bool = {
+                    CopyTriggerGate.isForeignOverlayPresent(at: NSEvent.mouseLocation, intent: .explicitUserCopy)
+                }) {
         self.settingsStore = settingsStore
         self.keyboardPoster = keyboardPoster
         self.pasteboard = pasteboard
@@ -128,6 +147,8 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         self.openURLInApp = openURLInApp
         self.appActivator = appActivator
         self.targetActiveChecker = targetActiveChecker
+        self.frontmostPID = frontmostPID
+        self.copyOverlayPresent = copyOverlayPresent
     }
 
 
@@ -145,6 +166,11 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
 
     public func handle(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication?) async throws {
         try await execute(result, in: view, targetApp: targetApp)
+    }
+
+    public func handle(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication?,
+                       isSelectionCurrent: @escaping @MainActor (SelectionContext) -> Bool) async throws {
+        try await execute(result, in: view, targetApp: targetApp, isSelectionCurrent: isSelectionCurrent)
     }
 
     public func handleWithoutDismissal(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication?) async {
@@ -169,8 +195,23 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
 
     /// The single side-effect body shared by `handle` (throws) and `handleWithoutDismissal`
     /// (swallows). Deliberately no dismissal step — hiding is decided by the presenter, never here.
-    private func execute(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication? = nil) async throws {
+    private func execute(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication? = nil,
+                         isSelectionCurrent: @escaping @MainActor (SelectionContext) -> Bool = { _ in true }) async throws {
         switch result {
+        case .copySelection(let selection):
+            do {
+                try await copySelection(selection, targetApp: targetApp, isSelectionCurrent: isSelectionCurrent)
+            } catch let failure as NativeCopyOperation.Failure {
+                let message: String
+                switch failure {
+                case .targetChanged: message = String(localized: "The source selection is no longer available.")
+                case .commandUnavailable: message = String(localized: "The application's Copy command is unavailable.")
+                case .timedOut: message = String(localized: "The application did not confirm Copy in time.")
+                case .copyBlocked: message = String(localized: "Finish the screen capture before copying.")
+                }
+                throw NSError(domain: Constants.actionErrorDomain, code: Int(Constants.actionErrorCode),
+                              userInfo: [NSLocalizedDescriptionKey: message])
+            }
         case .copy(let text):
             try await copyText(text)
 
@@ -453,6 +494,47 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         content.body = body
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         try await center.add(request)
+    }
+
+    private func copySelection(_ selection: SelectionContext, targetApp: NSRunningApplication?,
+                               isSelectionCurrent: @escaping @MainActor (SelectionContext) -> Bool) async throws {
+        guard selection.source == .selection,
+              let pid = selection.sourceApp.processIdentifier, pid > 0,
+              let sourceApp = targetApp ?? NSRunningApplication(processIdentifier: pid),
+              sourceApp.processIdentifier == pid else {
+            throw NativeCopyOperation.Failure.targetChanged
+        }
+        let sourceIsCurrent: @MainActor () -> Bool = {
+            let generationMatches = isSelectionCurrent(selection)
+            let frontmost = self.frontmostPID()
+            let matches = generationMatches && (frontmost == pid || frontmost == ProcessInfo.processInfo.processIdentifier)
+            if !matches {
+                Log.selection.debug("[Trace#\(selection.traceID ?? 0, privacy: .public)] native Copy refused: generationCurrent=\(generationMatches, privacy: .public) sourcePID=\(pid, privacy: .public) frontmostPID=\(frontmost ?? -1, privacy: .public)")
+            }
+            return matches
+        }
+        guard sourceIsCurrent() else { throw NativeCopyOperation.Failure.targetChanged }
+        let timeout = PasteboardCopyEngine.pollingTimeout(for: selection.sourceApp.bundleIdentifier)
+        try await NativeCopyOperation().perform(pasteboard: pasteboard, timeout: timeout,
+                                               isAuthorized: sourceIsCurrent) {
+            guard sourceIsCurrent() else { throw NativeCopyOperation.Failure.targetChanged }
+            self.appActivator(sourceApp)
+            let active = await self.targetActiveChecker(sourceApp)
+            guard active, isSelectionCurrent(selection),
+                  self.frontmostPID() == pid else { throw NativeCopyOperation.Failure.targetChanged }
+            let canPost: @MainActor () -> Bool = {
+                isSelectionCurrent(selection) && self.frontmostPID() == pid && !Task.isCancelled
+            }
+            guard canPost() else { throw NativeCopyOperation.Failure.targetChanged }
+            guard !self.copyOverlayPresent() else {
+                throw NativeCopyOperation.Failure.copyBlocked
+            }
+            if selection.appPolicy.useMenuCopy || selection.appPolicy.retrievalMode == .menuCopy {
+                try await NativeCopyOperation.pressMenuCopy(processIdentifier: pid, timeout: 0.5, isAuthorized: canPost)
+            } else {
+                self.postKey(keyCode: Constants.copyVirtualKey, flags: .maskCommand)
+            }
+        }
     }
 
     private func activateTarget(_ targetApp: NSRunningApplication?) async throws {

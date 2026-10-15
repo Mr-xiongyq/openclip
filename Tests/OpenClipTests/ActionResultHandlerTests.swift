@@ -7,7 +7,118 @@ final class ActionResultHandlerTests: XCTestCase {
     @MainActor
     private final class RecordingPoster: KeyboardEventPosting {
         var keys: [CGKeyCode] = []
-        func postKey(keyCode: CGKeyCode, flags: CGEventFlags) { keys.append(keyCode) }
+        var onPost: (() -> Void)?
+        func postKey(keyCode: CGKeyCode, flags: CGEventFlags) {
+            keys.append(keyCode)
+            onPost?()
+        }
+    }
+
+    private final class SourceApp: NSRunningApplication {
+        override var processIdentifier: pid_t { 99999 }
+        override var bundleIdentifier: String? { "md.obsidian" }
+    }
+
+    func testCapturePickerRefusalIsNotReportedAsChangedSource() async throws {
+        let board = NSPasteboard(name: .init("OpenClipNativeCopy-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.setString("Original", forType: .string)
+        let source = SourceApp()
+        let poster = RecordingPoster()
+        let handler = DefaultActionResultHandler(
+            settingsStore: MemorySettingsStore(), keyboardPoster: poster, pasteboard: board,
+            pasteboardRestoreDelay: 0.01, appActivator: { _ in }, targetActiveChecker: { _ in true },
+            frontmostPID: { 99999 }, copyOverlayPresent: { true }
+        )
+        do {
+            try await handler.handle(.copySelection(SelectionContext(text: "Text", sourceApp: AppIdentity(source))),
+                                     in: nil, targetApp: source)
+            XCTFail("A capture picker must block Copy")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "Finish the screen capture before copying.")
+        }
+        XCTAssertTrue(poster.keys.isEmpty)
+        XCTAssertEqual(board.string(forType: .string), "Original")
+    }
+
+    func testLiveCopyPostsNativeCommandAndLeavesSourceFormatsIntact() async throws {
+        let board = NSPasteboard(name: .init("OpenClipNativeCopy-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.setString("Old clipboard", forType: .string)
+        let source = SourceApp()
+        let poster = RecordingPoster()
+        let custom = NSPasteboard.PasteboardType("com.test.obsidian-table")
+        var copiedCount = 0
+        poster.onPost = {
+            let item = NSPasteboardItem()
+            item.setString("**Bold**", forType: .string)
+            item.setString("<b>Bold</b>", forType: .html)
+            item.setData(Data([1, 2, 3]), forType: custom)
+            board.clearContents()
+            board.writeObjects([item])
+            copiedCount = board.changeCount
+        }
+        let handler = DefaultActionResultHandler(
+            settingsStore: MemorySettingsStore(), keyboardPoster: poster, pasteboard: board,
+            pasteboardRestoreDelay: 0.01, appActivator: { _ in }, targetActiveChecker: { _ in true },
+            frontmostPID: { 99999 }
+        )
+        let selection = SelectionContext(text: "AX plain text", sourceApp: AppIdentity(source), selectionGeneration: 12)
+        try await handler.handle(.copySelection(selection), in: nil, targetApp: source,
+                                 isSelectionCurrent: { $0.selectionGeneration == 12 })
+        XCTAssertEqual(poster.keys, [Constants.copyVirtualKey])
+        XCTAssertEqual(board.changeCount, copiedCount)
+        XCTAssertEqual(board.data(forType: custom), Data([1, 2, 3]))
+        XCTAssertEqual(board.string(forType: .html), "<b>Bold</b>")
+        XCTAssertEqual(board.string(forType: .string), "**Bold**")
+    }
+
+    func testLiveCopyRejectsSelectionChangedDuringActivation() async throws {
+        let board = NSPasteboard(name: .init("OpenClipNativeCopy-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.setString("Original", forType: .string)
+        let source = SourceApp()
+        let poster = RecordingPoster()
+        var current = true
+        let handler = DefaultActionResultHandler(
+            settingsStore: MemorySettingsStore(), keyboardPoster: poster, pasteboard: board,
+            pasteboardRestoreDelay: 0.01, appActivator: { _ in },
+            targetActiveChecker: { _ in current = false; return true }, frontmostPID: { 99999 }
+        )
+        let selection = SelectionContext(text: "Old selection", sourceApp: AppIdentity(source))
+        do {
+            try await handler.handle(.copySelection(selection), in: nil, targetApp: source,
+                                     isSelectionCurrent: { _ in current })
+            XCTFail("A stale selection must not trigger Copy")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "The source selection is no longer available.")
+        }
+        XCTAssertTrue(poster.keys.isEmpty)
+        XCTAssertEqual(board.string(forType: .string), "Original")
+    }
+
+    func testLiveCopyRefusesDifferentForegroundApplicationWithoutActivatingSource() async throws {
+        let board = NSPasteboard(name: .init("OpenClipNativeCopy-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.setString("Original", forType: .string)
+        let poster = RecordingPoster()
+        var activated = false
+        let handler = DefaultActionResultHandler(
+            settingsStore: MemorySettingsStore(), keyboardPoster: poster, pasteboard: board,
+            pasteboardRestoreDelay: 0.01, appActivator: { _ in activated = true },
+            targetActiveChecker: { _ in true }, frontmostPID: { 88888 }
+        )
+        let source = SourceApp()
+        do {
+            try await handler.handle(.copySelection(SelectionContext(text: "Text", sourceApp: AppIdentity(source))),
+                                     in: nil, targetApp: source)
+            XCTFail("Copy must not switch back to an unrelated app")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "The source selection is no longer available.")
+        }
+        XCTAssertFalse(activated)
+        XCTAssertTrue(poster.keys.isEmpty)
+        XCTAssertEqual(board.string(forType: .string), "Original")
     }
 
     private func makeHandler(settingsStore: SettingsStore = MemorySettingsStore(),

@@ -165,6 +165,9 @@ Example (fields are sorted in actual output):
 `SelectionContext.traceID` carries the retrieval ID through mouse, hold, keyboard and
 fresh hotkey reads, cached selections, and context transformations. Search for `[Trace#N]`
 in `~/Library/Logs/OpenClip/openclip.log` across both `selection` and `presentation`.
+Native Copy refusals log the generation-match result and source/frontmost PIDs, never
+selection contents. Overlay refusal logs identify the same input-capable window used by
+the gate, excluding WindowServer shields that cannot receive Copy.
 Include the approximate time when reporting a trace: IDs restart with the app; presentation
 records include the process ID and popup session UUID. `Trace#0` denotes an untracked
 context (for example OCR or a standalone clipboard palette), not a retrieval trace.

@@ -14,6 +14,8 @@ public indirect enum ActionResult: Sendable {
     case openURL(URL)
     case openURLInApp(url: URL, appBundleIdentifier: String)
     case copy(String)
+    /// Ask the original application to copy its live selection, retaining its native formats.
+    case copySelection(SelectionContext)
     case cut(String)
     case paste(String)
     /// Rich multi-type paste (plain text, RTF, HTML).

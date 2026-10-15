@@ -146,7 +146,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         HotkeyManager.shared.setup(popupController: controller, selectionMonitor: macMonitor, captureTextController: captureController)
 
         let optionStore = SecretActionOptionStore()
-        ExtensionManager.shared.actionFactory = DefaultActionFactory(optionStore: optionStore)
+        ExtensionManager.shared.actionFactory = DefaultActionFactory(optionStore: optionStore, isSelectionCurrent: { [weak self] selection in
+            self?.popupController?.selectionIsCurrent(selection) == true
+        })
         ExtensionManager.shared.optionWriter = optionStore
         ExtensionManager.shared.optionReader = optionStore
         ExtensionManager.shared.settingsStore = DefaultSettingsStore.shared
@@ -410,7 +412,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private func runDumpLogsCommand(_ options: DebugLogCommand.DumpOptions) {
         Task {
             let optionStore = SecretActionOptionStore()
-            ExtensionManager.shared.actionFactory = DefaultActionFactory(optionStore: optionStore)
+            ExtensionManager.shared.actionFactory = DefaultActionFactory(optionStore: optionStore, isSelectionCurrent: { [weak self] selection in
+                self?.popupController?.selectionIsCurrent(selection) == true
+            })
             ExtensionManager.shared.optionWriter = optionStore
             ExtensionManager.shared.optionReader = optionStore
             ExtensionManager.shared.settingsStore = DefaultSettingsStore.shared
@@ -439,7 +443,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private func runDumpSettingsCommand() {
         Task {
             let optionStore = SecretActionOptionStore()
-            ExtensionManager.shared.actionFactory = DefaultActionFactory(optionStore: optionStore)
+            ExtensionManager.shared.actionFactory = DefaultActionFactory(optionStore: optionStore, isSelectionCurrent: { [weak self] selection in
+                self?.popupController?.selectionIsCurrent(selection) == true
+            })
             ExtensionManager.shared.optionWriter = optionStore
             ExtensionManager.shared.optionReader = optionStore
             ExtensionManager.shared.settingsStore = DefaultSettingsStore.shared

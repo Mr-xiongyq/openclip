@@ -22,10 +22,10 @@ final class BuiltinActionsTests: XCTestCase {
         XCTAssertTrue(action.isEnabled(for: context))
         
         let result = try await action.perform(context)
-        if case .copy(let text) = result {
-            XCTAssertEqual(text, "test string")
+        if case .copySelection(let selection) = result {
+            XCTAssertEqual(selection.text, "test string")
         } else {
-            XCTFail("Expected .copy result")
+            XCTFail("Expected native live-selection Copy")
         }
     }
 
@@ -43,13 +43,20 @@ final class BuiltinActionsTests: XCTestCase {
         )
         let context = ActionContext(selection: selection)
         let result = try await action.perform(context)
-        if case .copyContent(let payload) = result {
-            XCTAssertEqual(payload.plainText, "test string")
-            XCTAssertEqual(payload.html, "<b>test string</b>")
-            XCTAssertEqual(payload.rtf, "{\\rtf1 test string}")
+        if case .copySelection(let copiedSelection) = result {
+            XCTAssertEqual(copiedSelection.text, "test string")
+            XCTAssertEqual(copiedSelection.html, "<b>test string</b>")
         } else {
-            XCTFail("Expected .copyContent result when HTML/RTF present")
+            XCTFail("Even captured rich content should use the source application's native Copy")
         }
+    }
+
+    @MainActor
+    func testOCRCopyUsesRecognizedTextWithoutNativeCommand() async throws {
+        let selection = SelectionContext(text: "Recognized text", source: .ocr)
+        let result = try await CopyAction().perform(ActionContext(selection: selection))
+        guard case .copy(let text) = result else { return XCTFail("OCR has no live source selection") }
+        XCTAssertEqual(text, "Recognized text")
     }
     
     @MainActor

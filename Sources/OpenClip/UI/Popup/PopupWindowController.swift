@@ -2517,7 +2517,10 @@ public class PopupWindowController {
                 // A detached-surface result (e.g. the Look Up popover) suspends scroll dismissal
                 // for the rest of the session; anything else leaves it off.
                 isScrollDismissalSuspended = resolved.result.suspendsScrollDismissal
-                try await resultHandler.handle(resolved.result, in: panel?.contentView, targetApp: delivery?.application)
+                try await resultHandler.handle(resolved.result, in: panel?.contentView, targetApp: delivery?.application,
+                                               isSelectionCurrent: { [weak self] selection in
+                    self?.selectionIsCurrent(selection) == true
+                })
                 let toastToShow: StatusFeedback? = {
                     if let toast = resolved.toast {
                         if case .saveFile = resolved.result {

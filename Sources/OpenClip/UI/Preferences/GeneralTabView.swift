@@ -20,6 +20,8 @@ struct GeneralTab: View {
     @State private var fileSaveLocation: String
     @ObservedObject private var launchManager = LaunchAtLoginManager.shared
     @ObservedObject private var permissionManager = PermissionManager.shared
+    @ObservedObject private var router = SettingsRouter.shared
+    @State private var highlightedControlID: String?
 
     /// Initializes preference state from the shared settings store.
     init() {
@@ -30,8 +32,9 @@ struct GeneralTab: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 20) {
                 // Everything that decides how the popup and palette are summoned
                 SettingsCard("Selection & Mouse") {
                     SettingsToggleRow(
@@ -41,6 +44,8 @@ struct GeneralTab: View {
                         plainIcon: true,
                         isOn: $isAppEnabled
                     )
+                    .id(GeneralSearchTarget.appearAutomatically)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.appearAutomatically))
                     .onChange(of: isAppEnabled) { _, newValue in
                         DefaultSettingsStore.shared.set(.isAppEnabled, value: newValue)
                         NotificationCenter.default.post(name: Notification.Name("OpenClipEnabledStateChanged"), object: newValue)
@@ -55,6 +60,8 @@ struct GeneralTab: View {
                         plainIcon: true,
                         isOn: $isMouseHoldEnabled
                     )
+                    .id(GeneralSearchTarget.holdMouseToTrigger)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.holdMouseToTrigger))
                     .onChange(of: isMouseHoldEnabled) { _, newValue in
                         DefaultSettingsStore.shared.set(.isMouseHoldEnabled, value: newValue)
                     }
@@ -72,6 +79,8 @@ struct GeneralTab: View {
                     ) {
                         Shortcut(for: .togglePopup)
                     }
+                    .id(GeneralSearchTarget.commandPalette)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.commandPalette))
 
                     SettingsDivider()
 
@@ -84,6 +93,8 @@ struct GeneralTab: View {
                         ) {
                             Shortcut(for: .captureText)
                         }
+                        .id(GeneralSearchTarget.captureText)
+                        .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.captureText))
 
                         Toggle("Copy to Clipboard Automatically", isOn: $captureTextAutoCopy)
                             .toggleStyle(.checkbox)
@@ -94,6 +105,8 @@ struct GeneralTab: View {
                             .padding(.leading, SettingsDesignTokens.dividerInsetLeading + 4)
                             .padding(.trailing, SettingsDesignTokens.sectionCardPaddingH)
                             .padding(.bottom, SettingsDesignTokens.sectionCardPaddingV)
+                            .id(GeneralSearchTarget.captureTextAutoCopy)
+                            .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.captureTextAutoCopy))
                     }
                 }
 
@@ -132,6 +145,8 @@ struct GeneralTab: View {
                             .contentShape(Capsule())
                         }
                     }
+                    .id(GeneralSearchTarget.saveLocation)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.saveLocation))
                 }
 
                 SettingsCard("App") {
@@ -141,6 +156,8 @@ struct GeneralTab: View {
                         plainIcon: true,
                         isOn: $showMenuBarIcon
                     )
+                    .id(GeneralSearchTarget.showMenuBarIcon)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.showMenuBarIcon))
                     .onChange(of: showMenuBarIcon) { _, newValue in
                         DefaultSettingsStore.shared.set(.showMenuBarIcon, value: newValue)
                         NotificationCenter.default.post(
@@ -157,6 +174,8 @@ struct GeneralTab: View {
                         plainIcon: true,
                         isOn: $launchManager.isEnabled
                     )
+                    .id(GeneralSearchTarget.startAtLogin)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.startAtLogin))
 
                     if launchManager.requiresApproval {
                         SettingsDivider()
@@ -209,17 +228,39 @@ struct GeneralTab: View {
                             .contentShape(Capsule())
                         }
                     }
+                    .id(GeneralSearchTarget.accessibilityAccess)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.accessibilityAccess))
                 }
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
+            .scrollIndicators(.hidden)
+            .task(id: router.generalRevealRequest?.id) {
+                guard let request = router.generalRevealRequest else { return }
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    proxy.scrollTo(request.targetID, anchor: .center)
+                }
+                highlightedControlID = request.targetID
+                do {
+                    try await Task.sleep(for: .seconds(1.5))
+                } catch {
+                    if router.generalRevealRequest?.id == request.id {
+                        highlightedControlID = nil
+                        router.clearGeneralRevealRequest(request.id)
+                    }
+                    return
+                }
+                guard !Task.isCancelled else { return }
+                highlightedControlID = nil
+                router.clearGeneralRevealRequest(request.id)
+            }
+            .onAppear {
+                permissionManager.startMonitoring()
+                launchManager.syncStatus()
+            }
+            .onDisappear { permissionManager.stopMonitoring() }
         }
-        .scrollIndicators(.hidden)
-        .onAppear {
-            permissionManager.startMonitoring()
-            launchManager.syncStatus()
-        }
-        .onDisappear { permissionManager.stopMonitoring() }
     }
 
     private var saveLocationSubtitleText: Text {
@@ -248,5 +289,24 @@ struct GeneralTab: View {
             fileSaveLocation = chosenURL.path
             DefaultSettingsStore.shared.set(.fileSaveLocation, value: chosenURL.path)
         }
+    }
+}
+
+private struct GeneralSearchHighlight: ViewModifier {
+    let isHighlighted: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                if isHighlighted {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.13))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(Color.accentColor.opacity(0.32), lineWidth: 1)
+                        }
+                }
+            }
+            .animation(.easeInOut(duration: 0.18), value: isHighlighted)
     }
 }

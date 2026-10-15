@@ -71,6 +71,16 @@ public struct SelectionContext: Sendable {
         self.flavors = flavors
     }
 
+    /// Enrich representation fields while preserving the original text and source identity.
+    public func withRichContent(html: String?, rtf: String?, flavors: [RichPasteboardFlavor]) -> SelectionContext {
+        SelectionContext(text: text, sourceApp: sourceApp, cursorPosition: cursorPosition,
+                         mouseDownLocation: mouseDownLocation, selectionBounds: selectionBounds,
+                         timestamp: timestamp, appPolicy: appPolicy, html: html ?? self.html,
+                         rtf: rtf ?? self.rtf, flavors: flavors.isEmpty ? self.flavors : flavors,
+                         selectionGeneration: selectionGeneration, source: source, isEditable: isEditable,
+                         pasteTargetAvailable: pasteTargetAvailable, traceID: traceID)
+    }
+
     public func with(cursorPosition: CGPoint) -> SelectionContext {
         SelectionContext(
             text: text,

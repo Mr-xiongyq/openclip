@@ -256,7 +256,7 @@ public enum ActionResultDelivery {
 
     private static func deliveredIsCopyOutcome(_ result: ActionResult) -> Bool {
         switch result {
-        case .copy, .copyContent: return true
+        case .copy, .copyContent, .copySelection: return true
         default: return false
         }
     }

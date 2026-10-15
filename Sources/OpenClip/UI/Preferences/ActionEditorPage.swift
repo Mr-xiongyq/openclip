@@ -1223,6 +1223,7 @@ public struct ActionEditorPage: View {
             if let d = cur as? DeliveryDecoratedAction { cur = d.base; continue }
             if let k = cur as? KeywordDecoratedAction { cur = k.base; continue }
             if let m = cur as? MenuDecoratedAction { cur = m.base; continue }
+            if let rich = cur as? RichInputAction { cur = rich.base; continue }
             break
         }
         return cur
@@ -1611,7 +1612,9 @@ public struct ActionEditorPage: View {
             localizedTitle: (finalTitle.isEmpty || finalTitle == meta.title || finalTitle == meta.localizedTitle?.resolve()) ? meta.localizedTitle : nil,
             localizedLoadingMessage: meta.localizedLoadingMessage,
             output: meta.output,
-            result: meta.result
+            result: meta.result,
+            captureRtf: meta.captureRtf,
+            captureHtml: meta.captureHtml
         )
 
         var actions = state.manifest.actions

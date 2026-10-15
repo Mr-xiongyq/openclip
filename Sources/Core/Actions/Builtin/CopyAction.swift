@@ -26,6 +26,9 @@ public struct CopyAction: ConfigurableAction, OCRInputAction {
     
     @MainActor
     public func perform(_ context: ActionContext) async throws -> ActionResult {
+        if context.selection.source == .selection {
+            return .copySelection(context.selection)
+        }
         // Preserve every captured representation (including app-private types such as Notes
         // checklists) so a raw copy round-trips exactly; fall back to plain text otherwise.
         if context.selection.html != nil || context.selection.rtf != nil || !context.selection.flavors.isEmpty {

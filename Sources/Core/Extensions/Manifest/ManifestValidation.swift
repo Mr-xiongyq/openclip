@@ -56,7 +56,7 @@ extension ManifestValidationIssue: CustomStringConvertible {
         case .unsafeScriptPath(let script):
             return "\(path): script path escapes extension directory \"\(script)\""
         case .invalidInlineAction:
-            return "\(path): `inline: true` is only supported on synchronous javascript actions (kind \"js\"/\"javascript\" without \"async: true\")"
+            return "\(path): `inline: true` is only supported on synchronous javascript actions (kind \"js\"/\"javascript\" without \"async: true\", captureRtf, or captureHtml)"
         }
     }
 }
@@ -250,7 +250,7 @@ public struct ManifestValidator: Sendable {
             issues.append(ManifestValidationIssue(kind: .secondaryOnJavaScriptAction, path: path))
         }
         if action.inline == true {
-            if action.kind != .js || action.isAsync == true {
+            if action.kind != .js || action.isAsync == true || action.captureRtf == true || action.captureHtml == true {
                 issues.append(ManifestValidationIssue(
                     kind: .invalidInlineAction,
                     path: path

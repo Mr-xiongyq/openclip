@@ -13,9 +13,15 @@ import Core
 
 public final class DefaultActionFactory: ActionFactory, Sendable {
     private let optionStore: any ActionOptionReading
+    private let captureRichSelection: @MainActor @Sendable (SelectionContext) async throws -> SelectionContext
 
-    public init(optionStore: any ActionOptionReading = SettingsActionOptionStore()) {
+    public init(optionStore: any ActionOptionReading = SettingsActionOptionStore(),
+                isSelectionCurrent: @escaping @MainActor @Sendable (SelectionContext) -> Bool = { _ in true },
+                captureRichSelection: (@MainActor @Sendable (SelectionContext) async throws -> SelectionContext)? = nil) {
         self.optionStore = optionStore
+        self.captureRichSelection = captureRichSelection ?? { selection in
+            try await ActionSelectionCapture(isSelectionCurrent: isSelectionCurrent).capture(selection)
+        }
     }
 
     /// Reduces any `ActionIcon` to the plain symbol name `CustomAction` stores in `iconName`.
@@ -156,6 +162,10 @@ public final class DefaultActionFactory: ActionFactory, Sendable {
     /// action, with `MenuDecoratedAction` forwarding `delivery` through to the inner wrapper.
     private func decorate(_ action: any Action, metadata: ExtensionActionMetadata, manifest: ExtensionMetadata? = nil) -> any Action {
         var result = action
+        if metadata.captureRtf == true || metadata.captureHtml == true {
+            result = RichInputAction(base: result, captureRtf: metadata.captureRtf == true,
+                                     captureHtml: metadata.captureHtml == true, capture: captureRichSelection)
+        }
         let declaredKeywords = (metadata.keywords ?? []) + (manifest?.keywords ?? [])
         if !declaredKeywords.isEmpty {
             result = KeywordDecoratedAction(base: result, keywords: declaredKeywords)
