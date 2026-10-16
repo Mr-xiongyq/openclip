@@ -577,13 +577,30 @@ replace a newer popup.
   not its provenance; external apps cannot be locked and late writes beyond the response
   window remain a platform limitation. OCR and explicit text/rich-payload results retain
   their supplied-output behavior. Cut still reconstructs plain text and is separate work.
-  The development project currently consumes the local `openselection` package.
+  The project consumes the released OpenSelection package at `v2.16.0`; for local package development, switch `project.yml` back to `path: openselection`.
 
 - **Mouse gesture checks precede retrieval.** A bounded AX hit-test of the original press rejects
-  identifiable toolbar/titlebar/window chrome, including unchanged fullscreen windows, while
+  identifiable toolbar/titlebar chrome, including unchanged fullscreen windows, while
   allowing embedded text controls and web content. Unknown AX hierarchies fail open; generic
-  document groups are not treated as chrome merely because they have a window ancestor.
-  Multi-clicks also recheck window geometry after 50 ms for delayed zoom/resize updates.
+  document groups are not treated as chrome merely because they have a window ancestor, and
+  neither is a bare `AXWindow` hit — apps with flat or lazily built AX trees (terminals, canvas
+  editors, Electron before its tree exists) report their whole content area that way. Each
+  rejection logs `monitor: skipped press on window chrome`. The hit-test never sets a messaging
+  timeout on the system-wide element (that would change the process-wide AX default); its
+  deadline race bounds it instead, as in `SelectionEditabilityProbe`.
+  Multi-clicks also recheck window geometry after their settle delay for delayed zoom/resize updates.
+- **Mouse-gesture results must be where the gesture was.** AX reports the document's selection,
+  not the gesture's: Chromium's double-click selects the closest word even over a video, so a
+  player with `opacity: 0` controls yields an invisible selection far from the click (issue #162),
+  and a stale selection elsewhere looks the same. `SelectionGestureLocality` rejects a
+  double-click result whose AX bounds miss the click point, or a drag result whose bounds miss
+  the press-to-release rectangle (both padded 12 pt). Nil, empty, sub-2 pt, or off-screen bounds
+  fail open. Triple-clicks are not checked: Chromium reports paragraph ranges as a 1×1 rect or
+  offset by a line. Keyboard, hold, and hotkey reads are not checked either.
+- **Double-click reads wait out a possible third press.** A double-click read starts only after
+  `min(NSEvent.doubleClickInterval, 220 ms)`, so a triple-click's third press cancels it instead
+  of flashing a word popup that the paragraph selection immediately replaces. Triple and later
+  clicks keep the 50 ms geometry settle.
   Mouse-up Paste availability inspection begins only after a valid text result is accepted.
 - **Clipboard operations share ownership.** OpenSelection's pasteboard coordinator reserves
   the clipboard through preparation, activation, and the bounded delivery window. Posted
@@ -608,6 +625,28 @@ replace a newer popup.
   and hotkey/monitor paths. Clipboard fallback retains the original retrieval reason.
   Reports add an optional `readStatus` so older report JSON remains readable; outcome logs
   contain codes, never selected text or clipboard payloads.
+- **Mouse drags retain press-time text context.** When a genuine drag begins with an I-beam,
+  `MacSelectionMonitor` carries that weak cursor evidence into retrieval even if release happens
+  over whitespace with an arrow/custom cursor. It does not waive the selection-evidence gate:
+  unknown/disabled Copy commands and non-text object roles still block automatic Copy. The cursor
+  snapshot is consumed on release and cleared on cancellation/app switches; popup positioning
+  continues to use the actual release point.
+- **A completed drag or multi-click is itself weak Copy evidence.** Electron pages often show an
+  arrow or custom cursor over selectable text, and with no AX tree (Claude before the step below)
+  the target has no role at all, so neither the cursor nor the role could justify Copy and every
+  arrow-to-arrow drag was refused. `dragEnd`/`doubleClick`/`mouseUp` triggers now yield
+  `selection-gesture:<trigger>` weak evidence, so Copy still needs a confirmed enabled Edit ▸ Copy
+  (AppKit apps disable it with nothing selected). It never applies to hold, keyboard, or
+  programmatic triggers, to image/item surfaces, or when AX exposes a web area that reports no
+  selection (a Figma canvas object drag). A Chromium Copy command that reads stale or disabled
+  still blocks; the menu-gate refusal now logs at debug with `menuState` and `evidence`.
+- **Electron apps get their AX tree on demand.** Electron builds no web-content AX tree until a
+  client sets `AXManualAccessibility`. `ElectronAccessibilityEnabler` sets it once per process
+  (keyed by pid and launch date) for apps bundling `Electron Framework.framework`, off the main
+  actor, on monitor start, app activation, and mouse-down; a failed set is retried on the next
+  request. Chrome ignores the attribute and is not touched; enabling `AXEnhancedUserInterface`
+  there is known to disturb window animations and window managers. The first gesture after
+  activation can still race the tree build and fall back to Copy.
 - **Selection logging is summarized and correlated.** Each retrieval emits one completion
   event with configured/winning strategies, reason, timings, retry counts and observed
   clipboard restoration. Poll-level details are trace-only. Task-local correlation follows
