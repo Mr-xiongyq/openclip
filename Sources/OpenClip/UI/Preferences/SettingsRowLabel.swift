@@ -10,9 +10,7 @@
 
 import SwiftUI
 
-/// Section card container for settings cards:
-/// section heading sits OUTSIDE the card, semibold, secondary color, ~16-17pt.
-/// The card itself is a rounded rectangle (~18pt radius) with a slightly lighter fill.
+/// Section card with its heading outside a rounded, lightly filled container.
 struct SettingsCard<Content: View>: View {
     var title: LocalizedStringKey?
     var infoTooltip: String?
@@ -80,14 +78,12 @@ struct SettingsRowLabel: View {
     var subtitleText: Text?
     var systemImage: String?
     var iconTileTint: Color?
-    /// Renders the glyph as a plain, secondary-colored symbol instead of a colored tile. A neutral
-    /// anchor for control rows, where a saturated tile would just be decoration.
+    /// Plain secondary-colored glyph instead of a colored tile, for control rows where a tile is decoration.
     var plainIcon: Bool
     var descriptionOnHover: Bool
     @State private var isHovered = false
     @State private var isDescriptionPresented = false
 
-    /// Creates a settings label with an optional localized subtitle.
     init(
         title: LocalizedStringKey,
         subtitle: LocalizedStringKey? = nil,
@@ -105,7 +101,6 @@ struct SettingsRowLabel: View {
         self.descriptionOnHover = descriptionOnHover
     }
 
-    /// Creates a settings label with an optional prebuilt subtitle view.
     init(
         title: LocalizedStringKey,
         subtitleText: Text?,
@@ -205,7 +200,6 @@ struct SettingsRow<Trailing: View>: View {
     var showChevron: Bool
     @ViewBuilder var trailing: () -> Trailing
 
-    /// Creates a settings row with a localized subtitle and trailing control.
     init(
         title: LocalizedStringKey,
         subtitle: LocalizedStringKey? = nil,
@@ -227,7 +221,6 @@ struct SettingsRow<Trailing: View>: View {
         self.trailing = trailing
     }
 
-    /// Creates a settings row with a prebuilt subtitle and trailing control.
     init(
         title: LocalizedStringKey,
         subtitleText: Text?,

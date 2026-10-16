@@ -1,15 +1,12 @@
 // ToastPanelController.swift
 // OpenClip
 //
-// Owns the ToastPanel + its NSHostingView(ToastView) and the auto-dismiss timer. The single
-// status surface: replaces the removed inline banner. Info/error toasts auto-dismiss after
-// `autoDismissNanoseconds` unless `keepVisible`; loading and keep-visible toasts have no timer
-// and are cleared via swapTo/hide. An auto-dismissing toast pauses its timer while the pointer
-// rests on it (it accepts mouse events to track hover) and restarts the full duration on leave.
+// Owns the ToastPanel, its hosting view, and the auto-dismiss timer. Info/error toasts auto-dismiss
+// after `autoDismissNanoseconds` unless `keepVisible`; loading and keep-visible toasts have no timer.
+// An auto-dismissing toast pauses while the pointer rests on it and resumes the remaining time on leave.
 //
-// Toasts appear near the pointer captured when they are shown. Placement prefers above the
-// pointer, avoids the popup/group bars, and stays fixed as the mouse moves. Loading completion
-// retains the same pointer position. Explicit overlay/above placement remains available.
+// Toasts stay near the pointer captured when shown, above it where possible and clear of the bars.
+// Loading completion keeps the same position.
 import AppKit
 import SwiftUI
 import Core
@@ -35,26 +32,23 @@ public final class ToastPanelController {
         }
         return panel.isVisible
     }
-    /// The toast panel's current frame (screen coords). Internal for tests.
+    /// The toast panel's current frame (screen coords).
     var panelFrame: NSRect { panel.frame }
-    /// The popup avoidance frame, independent of the cursor position. Internal for tests.
+    /// The popup avoidance frame, independent of the cursor position.
     var lastAnchorFrame: NSRect? { _lastAnchorFrame }
-    /// The toast panel's mouse event pass-through state. Internal for tests.
+    /// The panel's mouse event pass-through state.
     var panelIgnoresMouseEvents: Bool { panel.ignoresMouseEvents }
-    /// The feedback currently configured in the root hosting view. Internal for tests.
+    /// The feedback configured in the root hosting view.
     var rootFeedback: StatusFeedback { hostingView.rootView.feedback }
 
     private var panel: ToastPanel
     private var visibilityCheckTask: Task<Void, Never>?
     private var didAttemptSpaceRecovery = false
     private let autoDismissNanoseconds: UInt64
-    /// Internal for tests: whether an auto-dismiss is currently pending (nil once it fires, is
-    /// cancelled by hover, or is cleared by `hide`).
+    /// Whether an auto-dismiss is pending (nil once it fires, is cancelled by hover, or cleared by `hide`).
     var hasPendingDismissal: Bool { dismissTask != nil }
     private var dismissTask: Task<Void, Never>?
-    /// When a dismissible toast should disappear. Hovering pauses the countdown by cancelling the
-    /// task but leaving this in place, so leaving resumes whatever time was left (and hides at once
-    /// if the toast's time already ran out while the cursor rested on it).
+    /// When a dismissible toast should disappear. Hover cancels the task but keeps this, so leaving resumes the time left.
     private var dismissalDeadline: Date?
     private let hostingView: ToastHostingView
     /// Optional popup avoidance frame, retained while a loading toast settles.
@@ -67,21 +61,15 @@ public final class ToastPanelController {
         self.autoDismissNanoseconds = autoDismissNanoseconds
         self.cursorLocation = cursorLocation
         let view = ToastHostingView(rootView: ToastView(feedback: StatusFeedback(message: "", style: .info)))
-        // Frame-based sizing: no `.preferredContentSize` (that option reports `fittingSize` as 0
-        // and lets the window auto-size to a constrained measurement that truncates the message to
-        // just the icon). We size the panel explicitly from `fittingSize` in `show`.
+        // Frame-based sizing: `.preferredContentSize` reports fittingSize as 0 and truncates the message.
         self.hostingView = view
-        // Wrap the hosting view in a plain container so the window's constraint engine never tracks
-        // the SwiftUI content directly — an NSHostingView as a direct contentView that re-measures
-        // during the display cycle triggers "marked as needing another Update Constraints in Window
-        // pass" crashes.
+        // Plain container: the window's constraint engine must not track SwiftUI content directly.
         let container = ToastContainerView(frame: .zero)
         container.addSubview(view)
         self.panel.contentView = container
     }
 
-    /// Shows feedback near the current cursor. A settled loading result keeps its original
-    /// position; fresh feedback captures a new position. The popup frame is an avoidance rect.
+    /// Shows feedback near the cursor; a settled loading result keeps its original position.
     public func show(_ feedback: StatusFeedback, anchorFrame: NSRect? = nil,
                      placement: ToastPlacement? = nil, avoidanceRects: [CGRect] = [],
                      onCancel: (() -> Void)? = nil) {
@@ -104,8 +92,7 @@ public final class ToastPanelController {
         }
 
         let isInteractive = feedback.isLoading && onCancel != nil
-        // A toast that owns a timer (not loading, not keepVisible) must accept pointer events so
-        // the cursor can hold it. Interactive loading toasts already accept events to cancel.
+        // Timed toasts accept pointer events so the cursor can hold them; interactive loading toasts accept them to cancel.
         let isDismissible = !feedback.isLoading && !feedback.keepVisible
         let hoverRelay: (Bool) -> Void = { [weak self] hovering in self?.handleHover(hovering) }
         let fit: CGSize
@@ -133,8 +120,7 @@ public final class ToastPanelController {
             fit = hostingView.fittingSize
         }
 
-        // Every toast needs transparent space inside the window for its SwiftUI shadow,
-        // including cancellable loading pills. Interactivity must not shrink that space.
+        // Every toast keeps transparent inset space for its SwiftUI shadow, even when interactive.
         let inset = PopupMetrics.toastShadowInset
         hostingView.frame = NSRect(x: inset, y: inset, width: fit.width, height: fit.height)
         panel.contentView?.frame = NSRect(origin: .zero,
@@ -152,16 +138,12 @@ public final class ToastPanelController {
         }
     }
 
-    /// Shows a loading (spinner) toast. Loading toasts have no timer and are cleared via
-    /// `swapTo`/`hide`. When `onCancel` is provided, the toast becomes interactive and clicking
-    /// invokes the callback.
+    /// Shows a spinner toast with no timer, cleared by `swapTo`/`hide`. A non-nil `onCancel` makes it clickable.
     public func showLoading(message: String, anchorFrame: NSRect? = nil, onCancel: (() -> Void)? = nil) {
         show(StatusFeedback(message: message, style: .info, isLoading: true), anchorFrame: anchorFrame, onCancel: onCancel)
     }
 
-    /// Replaces a loading toast with a settled status. Info/error statuses auto-dismiss unless
-    /// `keepVisible`; loading and keep-visible statuses have no timer and are cleared via a later
-    /// `swapTo`/`hide`.
+    /// Replaces a loading toast with a settled status; info/error auto-dismiss unless `keepVisible`.
     public func swapTo(_ feedback: StatusFeedback) {
         show(feedback, anchorFrame: _lastAnchorFrame, placement: isShowing ? currentPlacement : nil,
              avoidanceRects: avoidanceRects)
@@ -193,8 +175,7 @@ public final class ToastPanelController {
         }
     }
 
-    /// A reused window can retain stale Space membership. Give WindowServer a fresh identity
-    /// once, preserving the content, frame, cursor anchor, and existing dismissal deadline.
+    /// A reused window can keep stale Space membership; swap in a fresh panel once, keeping content and frame.
     @discardableResult
     func recoverToastSpaceIfNeeded(for id: UUID, makePanel: () -> ToastPanel = { ToastPanel() }) -> Bool {
         guard presentationID == id, _isShowing, !didAttemptSpaceRecovery,
@@ -221,8 +202,7 @@ public final class ToastPanelController {
         scheduleDismissal()
     }
 
-    /// Schedules the hide for whatever remains until `dismissalDeadline`, or hides immediately when
-    /// that deadline has already passed (e.g. the cursor held the toast past its window).
+    /// Hides at the deadline, or immediately if it already passed while hovered.
     private func scheduleDismissal() {
         dismissTask?.cancel()
         dismissTask = nil
@@ -239,10 +219,7 @@ public final class ToastPanelController {
         }
     }
 
-    /// Feeds the toast bubble's pointer hover state into dismissal scheduling: entering pauses the
-    /// countdown so the toast stays under the cursor, and leaving resumes the remaining time —
-    /// hiding at once if the toast's window already elapsed while hovered. A no-op for loading and
-    /// keep-visible toasts, which have no timer. Internal for tests.
+    /// Hover pauses the countdown; leaving resumes the remaining time. No-op for loading and keep-visible toasts.
     func handleHover(_ hovering: Bool) {
         guard _isShowing, !isLoading, currentFeedback?.keepVisible != true else { return }
         if hovering {
@@ -336,8 +313,7 @@ public final class ToastPanelController {
         }
         alternatives = alternatives.map(clamp)
         alternatives.sort { distance($0) < distance($1) }
-        // Clear the bar above before falling back below the pointer. Keep feedback nearby
-        // rather than jumping to the far edge of a tall result card.
+        // Prefer clearing the bar above over falling back below the pointer; stay near the pointer.
         if let above = alternatives.first(where: {
             $0.y >= cursor.y + gap && distance($0) <= PopupMetrics.toastPreferredAboveDistance && isClear($0)
         }) { return above }
@@ -376,8 +352,7 @@ public final class ToastPanelController {
 final class ToastContainerView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         let view = super.hitTest(point)
-        // If the hit point is this container itself (outside any subviews in the shadow inset ring),
-        // return nil so the ring does not activate the toast.
+        // A hit on the container itself (the shadow ring) must not activate the toast.
         if view === self {
             return nil
         }

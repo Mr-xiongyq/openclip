@@ -1,36 +1,12 @@
 // PreferencesToolbar.swift
 // OpenClip
 //
-// The settings window's toolbar, owned by AppKit rather than by SwiftUI.
+// The settings window's toolbar, owned by AppKit rather than SwiftUI. SwiftUI
+// rebuilds `.toolbar` per pane, which makes the title bar re-measure and moves
+// the traffic lights; this toolbar is created once and only its contents change.
 //
-// SwiftUI builds the window's NSToolbar from whatever `.toolbar` publishes and
-// tears it down again when a pane publishes nothing, and every rebuild makes
-// the title bar re-measure — which is what kept knocking the traffic lights out
-// of the full-height sidebar on the way between tabs. Here the toolbar is
-// created once with a fixed set of items and only their contents change, so the
-// title bar's geometry is the same on every pane. It also gets the store a real
-// AppKit search field, which is what a SwiftUI toolbar item could not give it.
-//
-// The Store's All/Popular/New filter used to sit here as a segmented control,
-// and with it, the expanding search field, the ellipsis and the pane name all
-// competing for one row, expanding the search pushed the other two into the
-// overflow menu. It is a sort now — a single menu button, which costs the width
-// of an icon rather than three labels.
-//
-// Leading everything is the back/forward pair System Settings has: an
-// `NSToolbarItemGroup` wired to the router's history, so leaving any page —
-// an action's editor, the icon chooser, an extension — is the same gesture.
-// Trailing everything, on that same line, is what the page on screen is *about*:
-// an ellipsis menu of what can be done to it as a whole (view its README, show
-// its folder, uninstall it) and its on/off switch. Both belong to the subject
-// rather than to a row, which is why System Settings puts them here too.
-//
-// The switch is a *title bar accessory*, not a toolbar item: macOS 26 draws a
-// glass background behind toolbar items and merges adjacent ones into one
-// capsule, so a switch next to the ellipsis came out sharing a pill with it,
-// with a border drawn tight around the switch. An accessory sits outside that
-// treatment, so the switch reads as a bare control at the trailing edge and the
-// ellipsis keeps the ordinary toolbar-button background to its left.
+// The trailing switch is a title bar accessory, not a toolbar item: macOS 26
+// merges adjacent toolbar items into one glass capsule.
 import AppKit
 import Combine
 import Core
@@ -41,29 +17,24 @@ public enum PreferencesToolbarAction: Sendable, Equatable {
     case addApplication
     case addAIAction
     case installExtensionFile
-    /// Leaves the Actions list for the Custom Actions page.
     case openCustomActions
     case refreshStore
-    /// The Store's list order was picked from the sort menu.
     case setStoreSort(StoreSort)
-    /// The trailing switch was moved. The window decides what it means for the page on screen.
+    /// The window decides what the switch means for the page on screen.
     case setPageToggle(Bool)
     /// A pick from the trailing ellipsis menu, by `SettingsToolbarMenuItem.id`.
     case pageMenuItem(String)
 }
 
-/// One row of the toolbar's **+** menu. A plain value so the menu's contents can be decided and
-/// asserted away from AppKit — see `PreferencesPlusMenu.items(for:)`.
+/// One row of the toolbar's **+** menu. A plain value so its contents are testable away from AppKit.
 struct PreferencesPlusMenuItem: Equatable {
     let title: String
     let symbol: String
     let action: PreferencesToolbarAction
-    /// A divider is drawn above this row.
     var startsGroup: Bool = false
 }
 
-/// What the toolbar's **+** offers, per page. Only the pages listed here put a menu on the button;
-/// any other page hides it.
+/// What the toolbar's **+** offers per page. Pages not listed here get no menu.
 enum PreferencesPlusMenu {
     static func items(for page: SettingsPage) -> [PreferencesPlusMenuItem] {
         switch page {
@@ -107,19 +78,17 @@ enum PreferencesPlusMenu {
 /// The bridge between the SwiftUI panes and the AppKit toolbar.
 @MainActor
 public final class PreferencesToolbarModel: ObservableObject {
-    /// The page on screen. Decides which controls the toolbar shows.
     @Published public var page: SettingsPage = .general
-    /// The page's title, resolved by the window (an action's page is titled after the action).
+    /// Resolved by the window; an action's page is titled after the action.
     @Published public var title: String = SettingsPage.general.staticTitle ?? ""
-    /// The subject's on/off switch, trailing in the toolbar. `nil` hides it.
+    /// `nil` hides the switch.
     @Published public var pageToggle: SettingsToolbarToggle?
-    /// What the trailing ellipsis menu offers. Empty hides it.
+    /// Empty hides the ellipsis menu.
     @Published public var pageMenuItems: [SettingsToolbarMenuItem] = []
     @Published public var searchQuery: String = ""
     @Published public var storeSort: StoreSort = .featured
     @Published public var isRefreshing: Bool = false
 
-    /// Toolbar button presses, forwarded to whichever pane acts on them.
     public let actions = PassthroughSubject<PreferencesToolbarAction, Never>()
 
     public init() {}
@@ -128,19 +97,12 @@ public final class PreferencesToolbarModel: ObservableObject {
 @MainActor
 public final class PreferencesToolbarController: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSToolbarItemValidation {
     private enum ItemID {
-        /// Back and forward through the router's history, as one grouped control.
         static let navigation = NSToolbarItem.Identifier("openclip.preferences.navigation")
-        /// The pane's name as a toolbar item rather than the window's own title:
-        /// a unified toolbar reserves a title area of its own choosing, which
-        /// left a wide gap between "Store" and the first control.
+        /// A toolbar item, not the window title: a unified toolbar's own title area leaves a wide gap.
         static let title = NSToolbarItem.Identifier("openclip.preferences.title")
-        /// The Store's list order.
         static let sort = NSToolbarItem.Identifier("openclip.preferences.sort")
-        /// Install extension from file.
         static let storeInstall = NSToolbarItem.Identifier("openclip.preferences.storeInstall")
-        /// Refresh extension catalog.
         static let refresh = NSToolbarItem.Identifier("openclip.preferences.refresh")
-        /// The page subject's ellipsis menu, trailing. Its switch is a title bar accessory.
         static let pageMenu = NSToolbarItem.Identifier("openclip.preferences.pageMenu")
         static let search = NSToolbarItem.Identifier("openclip.preferences.search")
         static let action = NSToolbarItem.Identifier("openclip.preferences.action")
@@ -149,14 +111,10 @@ public final class PreferencesToolbarController: NSObject, NSToolbarDelegate, NS
     private let model: PreferencesToolbarModel
     private let router: SettingsRouter
     private var cancellables: Set<AnyCancellable> = []
-    /// Set by whoever opens the window. The pane name is drawn by the title item
-    /// below, not by the window: `titleVisibility = .hidden` is ignored by a
-    /// unified toolbar on macOS 26, so a window with a title ended up showing the
-    /// pane's name twice.
+    /// The pane name is drawn by the title item: on macOS 26 a unified toolbar ignores
+    /// `titleVisibility = .hidden`, so the name would show twice.
     public weak var window: NSWindow? {
         didSet {
-            // Once the content view has a split view the toolbar can be told
-            // where the sidebar ends.
             installSidebarTrackingSeparator(retriesLeft: 20)
             installPageToggleAccessory()
             window?.setAccessibilityTitle(model.title)
@@ -230,8 +188,7 @@ public final class PreferencesToolbarController: NSObject, NSToolbarDelegate, NS
             }
             .store(in: &cancellables)
 
-        // `objectWillChange` fires before the router's state changes; the next turn of the run
-        // loop sees the new history.
+        // `objectWillChange` fires before the router's state changes; read on the next run loop turn.
         router.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.syncNavigation() }
@@ -266,13 +223,11 @@ public final class PreferencesToolbarController: NSObject, NSToolbarDelegate, NS
             setHidden(actionItem, true)
         }
 
-        // A page with more than one thing to add — the Actions list — turns the button into a menu;
-        // everywhere else a single press does the one thing the tooltip names.
+        // Pages with several things to add (the Actions list) get a menu; others act on press.
         actionMenuItems = PreferencesPlusMenu.items(for: page)
     }
 
-    /// Pages whose toolbar carries the shared search field: the Store's catalog and the Actions
-    /// list (whose aliases the field also matches).
+    /// Pages with the shared search field; the Actions list's field also matches aliases.
     private static func showsSearch(for page: SettingsPage) -> Bool {
         switch page {
         case .store, .customize, .shortcuts: return true
@@ -280,7 +235,6 @@ public final class PreferencesToolbarController: NSObject, NSToolbarDelegate, NS
         }
     }
 
-    /// Puts the switch in the title bar, to the right of the toolbar's own items.
     private func installPageToggleAccessory() {
         guard let window, pageToggleAccessory == nil else { return }
         let host = TitlebarSwitchHost()
@@ -297,9 +251,7 @@ public final class PreferencesToolbarController: NSObject, NSToolbarDelegate, NS
         sync(pageToggle: model.pageToggle)
     }
 
-    /// Mirrors the page's switch onto the control, and gives back the space it occupies on a page
-    /// that has no switch. A switch that is off *and* unmovable is a package the trust gate holds
-    /// back, which the page explains in words underneath.
+    /// Mirrors the page's switch. An off, unmovable switch is a package the trust gate holds back.
     private func sync(pageToggle toggle: SettingsToolbarToggle?) {
         guard let host = pageToggleHost else { return }
         guard let toggle else {
@@ -322,9 +274,7 @@ public final class PreferencesToolbarController: NSObject, NSToolbarDelegate, NS
         }
     }
 
-    /// Hides the whole item, not just its control: an item left in place still
-    /// gets its own glass backing drawn, which showed up as an empty pane of
-    /// material on the tabs with no toolbar controls.
+    /// Hides the whole item: a hidden-control item still gets its glass backing drawn.
     private func setHidden(_ item: NSToolbarItem?, _ hidden: Bool) {
         guard let item else { return }
         if #available(macOS 15.0, *) {
@@ -368,8 +318,7 @@ public final class PreferencesToolbarController: NSObject, NSToolbarDelegate, NS
 
     @objc private func pageMenuPressed(_ sender: NSButton) {
         let menu = NSMenu()
-        // Items say for themselves whether they can run; menu validation would otherwise enable
-        // anything with a target and undo `isEnabled`.
+        // Menu validation would enable anything with a target and undo `isEnabled`.
         menu.autoenablesItems = false
         for entry in model.pageMenuItems {
             guard !entry.isSeparator else {
@@ -430,8 +379,6 @@ public final class PreferencesToolbarController: NSObject, NSToolbarDelegate, NS
     }
 
     @objc private func actionButtonPressed(_ sender: NSButton) {
-        // A page that offers several things shows them as a menu anchored to the button; a page
-        // that offers one sends it straight through, so the button behaves as it always has.
         guard actionMenuItems.count > 1 else {
             if let only = actionMenuItems.first {
                 model.actions.send(only.action)
@@ -483,10 +430,7 @@ public final class PreferencesToolbarController: NSObject, NSToolbarDelegate, NS
     // MARK: - NSToolbarDelegate
 
     public func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        // Back/forward first, then the pane name, the store's filter beside it, and everything
-        // else pinned right: the pane's button, with the search field last against the window
-        // edge. Centring the filter with a leading flexible space spent the width twice and
-        // pushed the search field into the overflow menu at the window's minimum size.
+        // A leading flexible space pushes the search field into the overflow menu at minimum width.
         [
             ItemID.navigation, ItemID.title, .flexibleSpace,
             ItemID.action, ItemID.search, ItemID.sort, ItemID.storeInstall, ItemID.refresh, ItemID.pageMenu
@@ -497,18 +441,11 @@ public final class PreferencesToolbarController: NSObject, NSToolbarDelegate, NS
         [.sidebarTrackingSeparator] + toolbarDefaultItemIdentifiers(toolbar)
     }
 
-    /// Without this the toolbar has no idea where the sidebar ends, so it lines
-    /// its items up against the right edge instead of the content area's left
-    /// one. The separator tracks the split view's first divider, which is what
-    /// gives the leading items something to start from.
+    /// Gives the leading items an anchor; without it they pack against the right edge.
     private func installSidebarTrackingSeparator(retriesLeft: Int) {
         guard let toolbar = window?.toolbar,
               !toolbar.items.contains(where: { $0.itemIdentifier == .sidebarTrackingSeparator }) else { return }
-        // SwiftUI builds NavigationSplitView's NSSplitView on its first layout
-        // pass, which is later than the window gaining a toolbar. One shot at
-        // this found nothing and left the toolbar with no leading anchor, so
-        // every item ended up packed against the right edge; keep looking for a
-        // few run loop turns instead.
+        // SwiftUI creates the NSSplitView on a later layout pass than the toolbar, so retry.
         guard let contentView = window?.contentView,
               let splitView = Self.firstSplitView(in: contentView),
               splitView.arrangedSubviews.count > 1 else {
@@ -569,8 +506,6 @@ public final class PreferencesToolbarController: NSObject, NSToolbarDelegate, NS
             group.controlRepresentation = .expanded
             group.label = String(localized: "Back/Forward")
             group.paletteLabel = group.label
-            // Navigational, like a back button: it is what pins the group to the
-            // leading edge of the content area.
             group.isNavigational = true
             group.visibilityPriority = .high
             if group.subitems.count == 2 {
@@ -593,19 +528,12 @@ public final class PreferencesToolbarController: NSObject, NSToolbarDelegate, NS
             item.view = label
             item.label = ""
             item.visibilityPriority = .high
-            // Navigational, like a back button: it is what pins the item to the
-            // leading edge of the content area. Without it the toolbar re-lays
-            // itself out on the first pane change and packs every item against
-            // the window's right edge, flexible space and all.
             item.isNavigational = true
             titleLabel = label
             return item
 
         case ItemID.search:
-            // `NSSearchToolbarItem`: a magnifier that expands into a field, the way Mail and
-            // Notes search. It used to be a plain always-wide field because expanding it pushed
-            // the Store's filter into the overflow menu — the trailing side carried a button and
-            // a 160pt field then. It carries the magnifier and the ellipsis now, so there is room.
+            // Expanding search field; the trailing side has room only because the sort is a single button.
             let item = NSSearchToolbarItem(itemIdentifier: itemIdentifier)
             item.searchField.delegate = self
             item.searchField.placeholderString = String(localized: "Search")
@@ -620,9 +548,7 @@ public final class PreferencesToolbarController: NSObject, NSToolbarDelegate, NS
             return item
 
         case ItemID.sort:
-            // `NSMenuToolbarItem` rather than a button that pops a menu: it is the system's
-            // menu-in-a-toolbar control, so it gets the press-and-hold behaviour and the keyboard
-            // handling for free.
+            // `NSMenuToolbarItem` gets press-and-hold and keyboard handling for free.
             let item = NSMenuToolbarItem(itemIdentifier: itemIdentifier)
             item.image = NSImage(
                 systemSymbolName: "arrow.up.arrow.down",
@@ -715,17 +641,11 @@ public final class PreferencesToolbarController: NSObject, NSToolbarDelegate, NS
     }
 }
 
-/// The title bar's trailing accessory: an `NSSwitch` parked at its own size.
-///
-/// It is not a toolbar item on purpose — see the note at the top of this file — and it is not
-/// handed over bare either: an accessory's view is stretched to the title bar's height, and
-/// `NSSwitch` draws itself into whatever bounds it is given, so the control is positioned by hand
-/// and the host reports only the width the switch and its margins need. A page with no switch
-/// reports no width at all, so the toolbar gets the room back.
+/// The title bar's trailing accessory. An accessory's view is stretched to the title bar's
+/// height, so the switch is positioned by hand and the host reports only its own width.
 private final class TitlebarSwitchHost: NSView {
     let control = NSSwitch()
 
-    /// Clear of the window's trailing edge, and not crowding the ellipsis on the other side.
     private static let trailingInset: CGFloat = 14
     private static let leadingGap: CGFloat = 6
 
@@ -735,8 +655,7 @@ private final class TitlebarSwitchHost: NSView {
         control.controlSize = .regular
         control.sizeToFit()
         let fitted = control.fittingSize
-        // `NSSwitch` answers 38x22 at the regular control size; the constants are only a floor for
-        // a control that has not laid out yet.
+        // Floor for a control that has not laid out yet (`NSSwitch` is 38x22 at regular size).
         controlSize = NSSize(width: max(fitted.width, 38), height: max(fitted.height, 22))
         super.init(frame: NSRect(origin: .zero, size: controlSize))
         control.setFrameSize(controlSize)
@@ -767,7 +686,6 @@ private final class TitlebarSwitchHost: NSView {
         )
     }
 
-    /// Centred by hand: the accessory fills the height it is given, and the switch must not.
     override func layout() {
         super.layout()
         control.setFrameOrigin(NSPoint(
@@ -776,7 +694,7 @@ private final class TitlebarSwitchHost: NSView {
         ))
     }
 
-    /// The host is only a frame around the control; clicks belong to the control itself.
+    /// Clicks belong to the control, not the host frame.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
         return hit === self ? nil : hit

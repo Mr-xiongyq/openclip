@@ -49,8 +49,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         DiagnosticsHub.shared.install(OpenClipDiagnosticsSink())
         DiagnosticsHub.shared.setReportMode(.onFailureOrSlow)
 
-        // Remove temporary calendar .ics files a previous session left behind before its
-        // deferred cleanup could run (crash or quit during the delay window).
+        // Remove temp calendar .ics files left by a previous session (crash or quit before its deferred cleanup).
         DefaultActionResultHandler.purgeStaleCalendarTempFiles()
 
         switch DebugLogCommand.parse(CommandLine.arguments) {
@@ -73,24 +72,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             break
         }
 
-        // Register SVG coder
         let svgCoder = SDImageSVGCoder.shared
         SDImageCodersManager.shared.addCoder(svgCoder)
 
-        // Force accessory (agent) mode immediately.
-        // LSUIElement=true sets this at launch, but SwiftUI's Settings{} scene can
-        // temporarily switch us to .regular. Calling this here ensures we stay
-        // invisible in the Dock and App Switcher at all times.
+        // Force accessory mode: SwiftUI's Settings{} scene can switch us to .regular, so re-assert it.
         NSApp.setActivationPolicy(.accessory)
         
-        // Initialize the status bar controller
         statusBarController = StatusBarController()
 
-        // Set up the application main menu (Edit commands for ⌘V, ⌘C, ⌘X, ⌘A, ⌘Z)
         setupMainMenu()
 
-        // Deep links can open Preferences (the `open-settings` command); the router is otherwise
-        // self-contained. Configured before any `application(_:open:)` call can arrive.
+        // Deep links can open Preferences; configured before any open(_:) call can arrive.
         DeepLinkRouter.shared.configure { [weak self] in
             self?.statusBarController?.showPreferences()
         }
@@ -99,20 +91,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             self?.statusBarController?.showPreferences()
         }
         
-        // Setup popup controller
         let controller = PopupWindowController()
         popupController = controller
         
-        // Setup selection monitor
         let macMonitor = MacSelectionMonitor()
         controller.selectionIsCurrent = { [weak macMonitor] context in
             guard let generation = context.selectionGeneration else { return true }
             return macMonitor?.selectionGeneration == generation
         }
-        // Presentation gate only: "Appear Automatically" is evaluated by the monitor on its
-        // passive (mouse-release/keyboard) path, not here — the explicit hold gesture and the
-        // ⌥⌘C hotkey must still summon the popup with it off. Global Pause is rechecked at
-        // delivery time here because the hold/retrieval sleeps can outlast the pause toggle.
+        // Presentation gate only: Appear Automatically is checked on the passive path, not here, so the hold
+        // gesture and ⌥⌘C still summon the popup. Pause is rechecked here since the hold sleeps can outlast it.
         macMonitor.onSelection = { [weak self] context, canPaste in
             let isPaused = DefaultSettingsStore.shared.get(.pauseUntilTimestamp) > Date().timeIntervalSince1970
             if isPaused || self?.popupController == nil {
@@ -133,8 +121,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         macMonitor.preparePasteProbe = { [weak self] app, policy in
             self?.popupController?.preparePasteProbe(for: app, policy: policy)
         }
-        // When a user has dragged a result card aside, selecting text in that same source app
-        // should not re-open the action bar over the card being viewed. Other apps remain unsuppressed.
+        // Don't re-open the action bar over a dragged-aside result card from the same source app.
         macMonitor.isSuppressedForApp = { [weak self] bundleID in
             guard let self, let popup = self.popupController, popup.cardIsModal,
                   let source = popup.sourceAppBundleID, let bundleID else { return false }
@@ -142,7 +129,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
         selectionMonitor = macMonitor
 
-        // Setup global shortcut hotkey manager
         HotkeyManager.shared.setup(popupController: controller, selectionMonitor: macMonitor, captureTextController: captureController)
 
         let optionStore = SecretActionOptionStore()
@@ -165,10 +151,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             // Register each AI preset as an individual action (palette + Preferences → Actions).
             aiActionSync = AIActionSync.shared
 
-            // Watch ~/.openclip/extensions and reload on changes so extensions installed or
-            // edited outside the app (store installs, install_extension.sh, manifest edits)
-            // appear without relaunching. Started after loadInitialState so the
-            // onRegister/onUnregister registry wiring is already in place.
+            // Watch ~/.openclip/extensions so outside edits hot-reload; started after loadInitialState so
+            // the registry callbacks are already wired.
             startExtensionWatcher()
             if NSClassFromString("XCTestCase") == nil {
                 ExtensionUpdateManager.shared.startAutomaticUpdates()
@@ -239,9 +223,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             object: nil,
             queue: .main
         ) { _ in
-            // "Appear Automatically" is evaluated by the selection monitor on its passive
-            // (mouse-release/keyboard) path. The selection monitor remains running so the
-            // explicit hold gesture and hotkeys (⌥⌘C) have immediate access to the selection.
+            // Appear Automatically is evaluated by the selection monitor, which keeps running for the hold gesture and ⌥⌘C.
         }
 
         NotificationCenter.default.addObserver(
@@ -262,9 +244,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     private func showOnboarding() {
         guard NSClassFromString("XCTestCase") == nil else { return }
-        // Deliberately no post-finish window dump: completing (or skipping) onboarding hands
-        // control straight back with a one-time "try it" coach-mark — the user's next step is to
-        // select text, not read Preferences.
+        // No post-finish dump: onboarding hands back with a one-time coach mark, so the next step is selecting text.
         popupController?.isOnboardingVisible = true
         onboardingWindowController = OnboardingWindowController { [weak self] in
             self?.popupController?.isOnboardingVisible = false
@@ -291,8 +271,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 self?.showPostOnboardingCoachMark()
             },
             onDismiss: { [weak self] in
-                // Persist version/build even on "Later" so the same prompt isn't re-shown
-                // on every launch when the build is already current (idempotent).
+                // Persist version/build even on Later so the prompt is not re-shown on every launch.
                 let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
                 let currentBuild = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
                 let lastRunVersion = DefaultSettingsStore.shared.get(.lastRunVersion)
@@ -307,10 +286,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         permissionRecoveryWindowController?.showWindow(nil)
     }
 
-    /// One-time post-onboarding nudge: teaches the primary gesture ("select any text") when
-    /// Accessibility is in place, or offers a Preferences shortcut when the user skipped it.
-    /// `CoachMarkController` self-guards on its persisted seen-flag, so this is safe to call from
-    /// both the onboarding-completion path and subsequent launches until it's been dismissed once.
+    /// One-time nudge after onboarding. `CoachMarkController` guards on its seen-flag, so calling it each launch is safe.
     private func showPostOnboardingCoachMark() {
         guard NSClassFromString("XCTestCase") == nil else { return }
         let controller = CoachMarkController(
@@ -326,14 +302,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         statusBarController?.showPreferences()
     }
 
-    /// Sets up the standard macOS application main menu.
-    /// Essential for LSUIElement / agent apps because AppKit routes editing keyboard
-    /// shortcuts (⌘V for paste, ⌘C for copy, ⌘X for cut, ⌘A for select all, ⌘Z for undo,
-    /// ⌘W for close window) through the key equivalents in NSApp.mainMenu to the first responder.
+    /// Standard main menu. Agent apps need it so AppKit routes ⌘V/⌘C/⌘X/⌘A/⌘Z/⌘W to the first responder.
     private func setupMainMenu() {
         let mainMenu = NSMenu()
 
-        // 1. Application Menu
         let appMenuItem = NSMenuItem()
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
@@ -353,7 +325,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: String(localized: "Quit OpenClip"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
-        // 2. Edit Menu (Standard macOS editing shortcuts)
         let editMenuItem = NSMenuItem()
         mainMenu.addItem(editMenuItem)
         let editMenu = NSMenu(title: String(localized: "Edit"))
@@ -379,7 +350,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let selectAllItem = NSMenuItem(title: String(localized: "Select All"), action: Selector(("selectAll:")), keyEquivalent: "a")
         editMenu.addItem(selectAllItem)
 
-        // 3. Window Menu
         let windowMenuItem = NSMenuItem()
         mainMenu.addItem(windowMenuItem)
         let windowMenu = NSMenu(title: String(localized: "Window"))
@@ -406,9 +376,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         extensionsWatcher = watcher
     }
 
-    /// Runs the app in `--dump-logs` mode: runs the normal startup action load
-    /// (this is where extension load/rejection lines are logged), fetches matching entries
-    /// from the in-memory buffer with 0ms indexing lag, prints them, and exits.
+    /// `--dump-logs` mode: runs startup loads (so extension load lines get logged), prints matching buffer entries, exits.
     private func runDumpLogsCommand(_ options: DebugLogCommand.DumpOptions) {
         Task {
             let optionStore = SecretActionOptionStore()
@@ -437,9 +405,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
     }
 
-    /// Runs the app in `--dump-settings` mode: loads the normal startup state (so extension and
-    /// per-action hotkeys are known), captures a JSON snapshot of every known setting, prints it,
-    /// and exits.
+    /// `--dump-settings` mode: loads startup state, prints a JSON snapshot of every setting, and exits.
     private func runDumpSettingsCommand() {
         Task {
             let optionStore = SecretActionOptionStore()
@@ -468,8 +434,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
     }
 
-    /// Install-only parameter extraction, kept for the existing store deep-link tests. New code
-    /// parses through `OpenClipDeepLink`; `DeepLinkRouter` owns the actual handling.
+    /// Install-only parameter extraction for the store deep-link tests; new code uses `OpenClipDeepLink`.
     public nonisolated static func parseDeepLinkURL(_ url: URL) -> [String: String]? {
         guard case .install(let id, let name, let downloadURL) = OpenClipDeepLink.parse(url) else {
             return nil

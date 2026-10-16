@@ -1,9 +1,8 @@
 // ActionCoordinator.swift
 // OpenClip
 //
-// Composition root that connects builtin actions and disk extensions to the central
-// ActionRegistry. Wires the onRegister/onUnregister callbacks that ExtensionManager
-// uses to report changes, so the manager never touches ActionRegistry directly.
+// Composition root wiring builtin actions and disk extensions into ActionRegistry. ExtensionManager
+// reports changes through onRegister/onUnregister, so it never touches the registry directly.
 import Foundation
 import Combine
 
@@ -40,8 +39,6 @@ public final class ActionCoordinator: ObservableObject, Sendable {
         rulesURL: URL = Constants.rulesFileURL,
         dictionaryLookup: @escaping @Sendable (String) -> String? = { _ in nil }
     ) async {
-        // Wire the extension manager to the registry through callbacks — it never touches
-        // ActionRegistry directly.
         extensionManager.onRegister = { [registry] action in
             registry.register(action: action)
         }
@@ -71,9 +68,7 @@ public final class ActionCoordinator: ObservableObject, Sendable {
         registry.availableActions(for: context)
     }
 
-    /// Catalog for the action-search palette, filtered to actions that can perform given `context`.
-    /// Settings-disabled actions remain visible; contextually-unable ones (no selection, regex/app
-    /// gate, clipboard fallback) are dropped.
+    /// Action-search catalog for `context`. Settings-disabled actions stay visible; contextually unusable ones are dropped.
     public func searchCatalog(for context: ActionContext) -> [any Action] {
         registry.searchCatalog(for: context)
     }
@@ -196,10 +191,7 @@ public final class ActionCoordinator: ObservableObject, Sendable {
         registry.unregister(actionID: actionID)
         self.actions = registry.actions
 
-        // Deleting an action has to take it out of any custom group, exactly like dragging it out
-        // does (`removeFromGroup`): drop the id from every group and disband a group the deletion
-        // emptied. `syncGroupMemberOrder` only re-sorts members, so without this a group kept a
-        // phantom member — and could survive as an empty row — until the next manual edit.
+        // Drop the id from every group, as removeFromGroup does, or a group keeps a phantom member until the next edit.
         if !actionGroupDefs.isEmpty {
             let hadMembers = nonEmptyGroupIDs
             for index in actionGroupDefs.indices {
@@ -213,8 +205,7 @@ public final class ActionCoordinator: ObservableObject, Sendable {
             disabled.remove(actionID)
             settingsStore.set(.disabledActionIDs, value: disabled)
         }
-        // A deleted action's palette alias must go with it, or it stays reserved and a new action
-        // can never claim it ("That alias is already used").
+        // Free the palette alias, or it stays reserved and a new action can never claim it.
         ActionBindingStore.shared.setAlias(nil, for: actionID)
         ActionCustomizationManager.shared.resetOverride(for: actionID)
         syncGroupMemberOrder()
@@ -307,9 +298,7 @@ public final class ActionCoordinator: ObservableObject, Sendable {
         return true
     }
 
-    /// Returns the new group's id. A group made with no members is kept — the user asked for an
-    /// empty folder to fill later — but one emptied by taking its last member out is still removed
-    /// (see `saveAndApplyGroupDefs(pruningEmptiedFrom:)`).
+    /// Returns the new group's id. An empty group is kept as a folder to fill later.
     @discardableResult
     public func createGroup(title: String, iconName: String, memberActionIDs: [String] = []) -> String? {
         let hadMembers = nonEmptyGroupIDs
@@ -323,7 +312,6 @@ public final class ActionCoordinator: ObservableObject, Sendable {
             }
         }
 
-        // Remove members from existing groups
         let memberSet = Set(deduped)
         var updated: [ActionGroupDef] = []
         for var def in actionGroupDefs {
@@ -377,9 +365,7 @@ public final class ActionCoordinator: ObservableObject, Sendable {
         actionGroupDefs[index].title = title
         actionGroupDefs[index].iconName = resolvedIcon
         actionGroupDefs[index].memberActionIDs = deduped
-        // An editor save keeps the group even with nothing in it: the user may have made the
-        // folder empty on purpose (or is editing a newly created empty one). Only the drag/edit
-        // paths that explicitly take a member out of a group disband an emptied group.
+        // An editor save keeps an empty group; only explicitly removing a member disbands one.
         saveAndApplyGroupDefs(pruningEmptiedFrom: hadMembers)
         syncCatalogOrder(for: groupID, memberIDs: deduped)
     }
@@ -414,7 +400,6 @@ public final class ActionCoordinator: ObservableObject, Sendable {
         guard trimmedID != groupID else { return }
 
         let hadMembers = nonEmptyGroupIDs
-        // Remove action from any other existing group
         var updated = actionGroupDefs
         for i in 0..<updated.count {
             if updated[i].id != groupID && updated[i].memberActionIDs.contains(trimmedID) {
@@ -489,25 +474,14 @@ public final class ActionCoordinator: ObservableObject, Sendable {
                 isEligible(actionID: $0, forGroup: groupID, existingMembers: existingMembers)
             }
         }
-        // A group is a container for actions, so an empty one is a row in the popup bar that opens
-        // onto nothing: taking the last action out of a group takes the group with it, however it
-        // left — dragged to the top level, dragged into another group, or deleted outright.
-        //
-        // What counts as "taking the last action out" is a group that *had* members before this
-        // mutation and has none now, which is what `previouslyNonEmpty` records. A group the user
-        // created empty, or saved from its editor with nothing in it, was already empty, so it is
-        // a folder awaiting actions and stays.
-        //
-        // Only mutations come through here. `loadGroupDefs` deliberately does not, so a group whose
-        // members have not been registered yet survives launch.
+        // Taking the last action out of a group removes the group, however it left. Groups that were
+        // already empty (created or saved empty) stay. `loadGroupDefs` skips this so a group survives launch.
         actionGroupDefs.removeAll { $0.memberActionIDs.isEmpty && previouslyNonEmpty.contains($0.id) }
         saveGroupDefs(actionGroupDefs)
         registry.setGroupDefs(actionGroupDefs)
     }
 
-    /// The ids of the groups that hold at least one member right now. Captured before a mutation so
-    /// `saveAndApplyGroupDefs(pruningEmptiedFrom:)` can tell a group that was emptied from one that
-    /// was created empty.
+    /// Groups with members right now, captured before a mutation so `saveAndApplyGroupDefs` can tell emptied from created-empty.
     private var nonEmptyGroupIDs: Set<String> {
         Set(actionGroupDefs.filter { !$0.memberActionIDs.isEmpty }.map(\.id))
     }

@@ -19,9 +19,7 @@ final class ActionCoordinatorGroupTests: XCTestCase {
         coordinator.register(action: DummyAction(id: "action.5", title: "Action 5"))
     }
 
-    /// A group made with nothing in it is a folder awaiting actions, so it is kept; only a group
-    /// that an action was *taken out of* to the point of emptiness is removed (see the removal
-    /// tests below).
+    /// An empty group is a kept folder; only a group emptied by an action being taken out is removed.
     func testAGroupWithNoMembersIsKept() {
         let id = coordinator.createGroup(title: "Empty", iconName: "folder", memberActionIDs: [])
         XCTAssertEqual(coordinator.actionGroupDefs.count, 1)
@@ -43,11 +41,7 @@ final class ActionCoordinatorGroupTests: XCTestCase {
         XCTAssertEqual(coordinator.actionGroupDefs.first?.title, "Single")
     }
 
-    /// Pins the intentional custom-group membership contract (issue #44): a group is a folder, so
-    /// the rule is "≥ 1, and only a group emptied by a mutation dissolves" — not a hard minimum of
-    /// two. An empty group and a single-member group are valid; losing a member to an uninstall
-    /// keeps the group so it heals when the action returns; only taking the last member out of a
-    /// group removes it.
+    /// Groups are folders: one member is not required, and only a group emptied by a mutation dissolves (issue #44).
     func testGroupMembershipContractIsFolderRulesNotAMinimumOfTwo() {
         let emptyID = coordinator.createGroup(title: "Empty", iconName: "folder", memberActionIDs: [])
         let singleID = coordinator.createGroup(title: "Single", iconName: "folder", memberActionIDs: ["action.1"])
@@ -78,17 +72,16 @@ final class ActionCoordinatorGroupTests: XCTestCase {
     }
 
     func testCreateGroupRemovesMembersFromExistingGroupsAndDropsOneItEmpties() {
-        // Create Group 1 with actions 1, 2, 3
         coordinator.createGroup(title: "Group 1", iconName: "folder", memberActionIDs: ["action.1", "action.2", "action.3"])
         XCTAssertEqual(coordinator.actionGroupDefs.count, 1)
         let group1ID = coordinator.actionGroupDefs[0].id
 
-        // Create Group 2 with action 1 and 4 -> action 1 moves to Group 2; Group 1 retains 2, 3
+        // action.1 moves to Group 2; Group 1 keeps 2 and 3.
         coordinator.createGroup(title: "Group 2", iconName: "folder.fill", memberActionIDs: ["action.1", "action.4"])
         XCTAssertEqual(coordinator.actionGroupDefs.count, 2)
         XCTAssertEqual(coordinator.actionGroupDefs.first(where: { $0.id == group1ID })?.memberActionIDs, ["action.2", "action.3"])
 
-        // Create Group 3 with action 2 and 3 -> Group 1 has nothing left, so it goes
+        // Group 1 is emptied and removed.
         coordinator.createGroup(title: "Group 3", iconName: "star", memberActionIDs: ["action.2", "action.3"])
         XCTAssertEqual(coordinator.actionGroupDefs.count, 2)
         XCTAssertNil(coordinator.actionGroupDefs.first(where: { $0.id == group1ID }))
@@ -122,8 +115,7 @@ final class ActionCoordinatorGroupTests: XCTestCase {
         XCTAssertTrue(coordinator.actionGroupDefs.isEmpty)
     }
 
-    /// Taking the last action out of a group takes the group with it — this is what dragging the
-    /// last row out to the top level does.
+    /// Taking the last action out of a group removes the group (e.g. dragging the last row to top level).
     func testRemovingTheLastMemberRemovesTheGroup() {
         coordinator.createGroup(title: "Valid", iconName: "folder", memberActionIDs: ["action.1", "action.2"])
         let groupID = coordinator.actionGroupDefs[0].id
@@ -156,7 +148,6 @@ final class ActionCoordinatorGroupTests: XCTestCase {
         coordinator.createGroup(title: "Valid", iconName: "folder", memberActionIDs: ["action.1", "action.2"])
         coordinator.unregister(actionID: "action.1")
 
-        // Group definitions persist intact
         XCTAssertEqual(coordinator.actionGroupDefs.count, 1)
         XCTAssertEqual(coordinator.actionGroupDefs[0].memberActionIDs, ["action.1", "action.2"])
 
@@ -208,7 +199,6 @@ final class ActionCoordinatorGroupTests: XCTestCase {
         let group1ID = coordinator.actionGroupDefs.first(where: { $0.title == "Group 1" })!.id
         let group2ID = coordinator.actionGroupDefs.first(where: { $0.title == "Group 2" })!.id
 
-        // Moving action.1 into Group 2 leaves Group 1 with only action.2
         coordinator.addToGroup(actionID: "action.1", groupID: group2ID)
         XCTAssertEqual(coordinator.actionGroupDefs.count, 2)
         XCTAssertEqual(coordinator.actionGroupDefs.first(where: { $0.id == group1ID })?.memberActionIDs, ["action.2"])

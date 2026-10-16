@@ -15,9 +15,7 @@ public final class RemoteExtensionInstaller: Sendable {
         Constants.isPathSafe(destinationURL: destinationURL, baseDirectory: baseDirectory)
     }
     
-    /// Hosts that are allowed as remote extension download sources. The extension
-    /// store is served from this project's GitHub releases; anything else is
-    /// treated as untrusted and rejected.
+    /// Allowed remote download hosts; anything else is untrusted and rejected.
     public nonisolated static let allowedDownloadHosts: Set<String> = [
         "github.com",
         "release-assets.githubusercontent.com",
@@ -37,9 +35,7 @@ public final class RemoteExtensionInstaller: Sendable {
             throw NSError(domain: "RemoteExtensionInstaller", code: 400, userInfo: [NSLocalizedDescriptionKey: "Download host is not in the allowed list"])
         }
         
-        // Use a session with a redirect delegate so the HTTPS + host allowlist is applied to every
-        // hop, not just the initial URL. URLSession silently follows redirects by default, which
-        // would let an allowlisted source bounce the download to an attacker-controlled host.
+        // Redirect delegate enforces the allowlist on every hop; URLSession follows redirects silently.
         let session = URLSession(
             configuration: .ephemeral,
             delegate: AllowlistRedirectDelegate(allowedHosts: Self.allowedDownloadHosts),
@@ -47,7 +43,6 @@ public final class RemoteExtensionInstaller: Sendable {
         )
         defer { session.invalidateAndCancel() }
         
-        // Download directly with allowlist-enforcing session (no redundant HEAD roundtrip)
         Log.extensions.notice("Downloading verified package from \(downloadURL, privacy: .public)")
         
         let (tempLocalURL, response) = try await session.download(from: downloadURL)
@@ -64,9 +59,7 @@ public final class RemoteExtensionInstaller: Sendable {
             throw NSError(domain: "RemoteExtensionInstaller", code: 403, userInfo: [NSLocalizedDescriptionKey: "Download redirected to an untrusted host"])
         }
         
-        // URLSession downloads with a .tmp extension and may land inside ~/.openclip/extensions.
-        // Rename to a proper .zip path in the system temp directory so installExtension
-        // correctly recognises it as a zip archive.
+        // Move the .tmp download to a .zip path so installExtension recognizes the archive.
         let zipTempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("openclip_ext_\(extensionID)_\(UUID().uuidString).zip")
         try? FileManager.default.removeItem(at: zipTempURL)
@@ -110,8 +103,7 @@ public final class RemoteExtensionInstaller: Sendable {
     }
 }
 
-/// Refuses URLSession redirects that leave the HTTPS allowlist, so a download can't
-/// be bounced to an attacker-controlled host after the initial URL passes validation.
+/// Refuses redirects that leave the HTTPS allowlist.
 private final class AllowlistRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     private let allowedHosts: Set<String>
 

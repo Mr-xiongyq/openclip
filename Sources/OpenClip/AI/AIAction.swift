@@ -1,17 +1,12 @@
 // AIAction.swift
 // OpenClip
 //
-// Bridges an `AIActionPreset` into the Action registry so each AI preset surfaces as an
-// individual action in the action-search palette and Preferences → Actions. Presets live under
-// AI Tools by default and can be moved into the main popup bar.
-// `AIActionSync` keeps these
-// in step with AIServiceManager's preset list: the title is snapshotted at registration time,
-// while the runnable state and prompt are read live from AIServiceManager at invoke time.
+// Bridges an `AIActionPreset` into the Action registry. The title is snapshotted at registration
+// (AIActionSync); enabled state and prompt are read live from AIServiceManager.
 import Foundation
 import Core
 
-/// Registry action for one AI preset. Bar and palette selections route through the popup's AI
-/// flow rather than `perform`, sharing the same result card as the AI Tools sub-bar.
+/// Registry action for one AI preset. Bar and palette selections route through the popup's AI flow, not `perform`.
 public struct AIAction: ConfigurableAction {
     public let presetID: String
 
@@ -46,18 +41,14 @@ public struct AIAction: ConfigurableAction {
         self.title = title
     }
 
-    /// Off when AI is switched off wholesale, or when this preset's own toggle in AI settings is
-    /// off — the palette and every other surface gate on this, so a disabled preset is offered
-    /// nowhere.
+    /// Off when AI is disabled globally or this preset is toggled off; every surface gates on this.
     @MainActor
     public func isEnabled(for context: ActionContext) -> Bool {
         guard AIServiceManager.shared.isAIEnabled else { return false }
         return preset()?.isEnabled ?? false
     }
 
-    /// Defensive fallback for any non-palette caller (the palette routes `.ai` through the AI
-    /// result-card flow). The popup's AI flow delivers the response via onAIResult, so this simply
-    /// succeeds.
+    /// Fallback for non-palette callers; the popup's AI flow delivers the result via onAIResult.
     @MainActor
     public func perform(_ context: ActionContext) async throws -> ActionResult {
         .success

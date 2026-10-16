@@ -16,7 +16,6 @@ enum PopupDismissalGrace {
 
 public struct PopupPositioner: Sendable {
 
-    // How far the popup sits from the release point (points)
     private static let gap: CGFloat = 6
 
     /// Main entry point — positions relative to mouse release point, drag direction, alignment, and vertical placement mode.
@@ -56,7 +55,6 @@ public struct PopupPositioner: Sendable {
     ) -> CGFloat {
         let padding: CGFloat = PopupMetrics.popupPadding
 
-        // --- Clamp popup width so a too-wide popup never overflows the right edge ---
         let maxPopupWidth = max(0, screenBounds.width - 2 * padding)
         let popupWidth = max(0, min(width, maxPopupWidth))
 
@@ -79,17 +77,15 @@ public struct PopupPositioner: Sendable {
         }
     }
 
-    /// Horizontal origin that centers a popup of the given width on the release X, clamped to the
-    /// screen's padding-inset edges. Used for both initial placement and re-centering on resize so a
-    /// width change (search palette, pagination) never drifts the bar off the cursor.
+    /// Horizontal origin centering a popup on the release X. Used for initial placement and for re-centering on resize,
+    /// so a width change never drifts the bar off the cursor.
     public static func centeredX(releaseX: CGFloat, width: CGFloat, screenBounds: CGRect) -> CGFloat {
         alignedX(releaseX: releaseX, width: width, screenBounds: screenBounds, alignment: .center)
     }
 
 
-    /// Horizontal midX for a search palette of `searchWidth` initiated from a button click at `buttonScreenMidX`
-    /// within a bar whose right edge is `barMaxX`. The palette aligns with the button's center point
-    /// when possible, but is capped so its right edge does not exceed `barMaxX`, and clamped to `screenBounds`.
+    /// Horizontal midX for a search palette: aligns with the button center, capped so its right edge stays
+    /// within `barMaxX`, and clamped to the screen.
     public static func searchPaletteMidX(
         buttonScreenMidX: CGFloat,
         searchWidth: CGFloat = PopupMetrics.searchPanelWidth,
@@ -104,15 +100,8 @@ public struct PopupPositioner: Sendable {
         return max(minMidX, min(targetMidX, maxMidX))
     }
 
-    /// Place the popup near the mouse-release point.
-    ///
-    /// Vertical rule:
-    ///  - Auto:
-    ///     * Top-to-Bottom drag (mouse released below start point): place BELOW cursor so it doesn't cover selected text.
-    ///     * Bottom-to-Top or Horizontal drag: place ABOVE cursor.
-    ///     * Flips if near screen edge.
-    ///  - Above: place ABOVE cursor by default; flips to below if near screen top edge.
-    ///  - Below: place BELOW cursor by default; flips to above if near screen bottom edge.
+    /// Places the popup near the release point. Auto puts it below when the drag went top-to-bottom (so it does not
+    /// cover the selection), otherwise above. Each side flips at a screen edge; `.above`/`.below` force the side.
     public static func placeNearReleasePoint(
         releasePoint: CGPoint,
         mouseDownPoint: CGPoint? = nil,
@@ -123,14 +112,11 @@ public struct PopupPositioner: Sendable {
     ) -> CGRect {
         let padding: CGFloat = PopupMetrics.popupPadding
 
-        // --- Clamp popup width so a too-wide popup never overflows the right edge ---
         let maxPopupWidth = max(0, screenBounds.width - 2 * padding)
         let popupWidth = max(0, min(popupSize.width, maxPopupWidth))
 
-        // --- Horizontal: align relative to release X, clamp to edges ---
         let x = alignedX(releaseX: releasePoint.x, width: popupWidth, screenBounds: screenBounds, alignment: alignment)
 
-        // --- Vertical Direction Check ---
         // macOS screen coords: Y increases upwards (0 is bottom of screen).
         // Top-to-Bottom drag -> releasePoint.y < mouseDownPoint.y.
         let isDraggingDown: Bool = {
@@ -153,7 +139,6 @@ public struct PopupPositioner: Sendable {
 
         var y: CGFloat
         if shouldPlaceBelow {
-            // Dragged down or forced below -> place BELOW cursor by default
             if yBelow >= screenBounds.minY + padding {
                 y = yBelow
             } else if yAbove + popupSize.height <= screenBounds.maxY - padding {
@@ -162,7 +147,6 @@ public struct PopupPositioner: Sendable {
                 y = screenBounds.minY + padding
             }
         } else {
-            // Dragged up/horizontal or forced above -> place ABOVE cursor by default
             if yAbove + popupSize.height <= screenBounds.maxY - padding {
                 y = yAbove
             } else if yBelow >= screenBounds.minY + padding {
@@ -175,8 +159,7 @@ public struct PopupPositioner: Sendable {
         return CGRect(x: x, y: y, width: popupWidth, height: popupSize.height)
     }
 
-    /// Selects the screen containing `point`, with a 2pt inclusive margin so cursor coordinates
-    /// resting exactly on the maxX/maxY boundaries of secondary displays do not fail resolution.
+    /// Screen containing `point`, with a 2pt boundary tolerance so points on secondary-display edges still resolve.
     public static func screen(containing point: CGPoint, in screens: [NSScreen] = NSScreen.screens) -> NSScreen? {
         screens.first { $0.frame.insetBy(dx: -2, dy: -2).contains(point) } ?? screens.first
     }

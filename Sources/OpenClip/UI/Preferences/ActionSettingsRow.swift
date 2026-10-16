@@ -1,13 +1,8 @@
 // ActionSettingsRow.swift
 // OpenClip
 //
-// One action as a row of a settings table: whether it is on, its name — which opens its page —
-// its palette alias, its hotkey, and the chevron that says the name is a way in.
-//
-// Every list of actions in the window is this row: the Shortcuts table, the commands on an
-// extension's page, and the user's Custom Actions. They were three hand-written tables that drifted
-// apart — the same action showed a switch in one, an alias in another, and the columns never lined
-// up — so they are one component now and line up by construction.
+// One action as a settings-table row: enable switch, name, alias, hotkey, chevron. Shared by every
+// action list so their columns line up.
 
 import SwiftUI
 import Core
@@ -18,11 +13,9 @@ struct ActionSettingsRow: View {
     let action: any Action
     @Binding var disabledActionIDs: Set<String>
     @Binding var disabledPackages: Set<String>
-    /// A second line under the name, where a list has something worth saying about each row (the
-    /// kind of a custom action). Nil everywhere else, which is what keeps the rows one height.
+    /// Second line under the name. Nil keeps rows one height.
     var subtitle: String?
-    /// Called with why an alias was rejected, and with nil once one is accepted. Each page puts
-    /// the message where it has room for it.
+    /// Receives the alias rejection message, or nil once accepted.
     var onAliasMessage: (String?) -> Void
 
     init(
@@ -42,10 +35,10 @@ struct ActionSettingsRow: View {
     @ObservedObject private var customizationManager = ActionCustomizationManager.shared
     @ObservedObject private var bindingStore = ActionBindingStore.shared
 
-    /// The half-typed alias, so it is not rejected on the keystroke that would have completed it.
+    /// Half-typed alias; avoids rejecting it mid-typing.
     @State private var aliasDraft: String?
 
-    /// Width of the alias field: room for the two or three letters an alias is meant to be.
+    /// Fits two or three letters.
     private static let aliasWidth: CGFloat = 88
 
     var body: some View {
@@ -63,8 +56,6 @@ struct ActionSettingsRow: View {
                 .controlSize(.small)
                 .accessibilityLabel(String(localized: "Enable \(presentation.title)"))
 
-            // The name is the way into the action's page: a table of actions should let you open
-            // what it points at.
             Button {
                 SettingsDestination.open(action)
             } label: {
@@ -96,8 +87,7 @@ struct ActionSettingsRow: View {
             if ActionIdentity.isBindable(action) {
                 TextField("alias", text: aliasBinding, prompt: Text("alias"))
                     .textFieldStyle(.roundedBorder)
-                    // A Form lays a cell out as label + control, which turned each field's
-                    // placeholder into a column of its own.
+                    // Inside a Form the placeholder would become a column of its own.
                     .labelsHidden()
                     .frame(width: Self.aliasWidth)
                     .accessibilityLabel(String(localized: "Alias for \(presentation.title)"))
@@ -120,8 +110,7 @@ struct ActionSettingsRow: View {
         .padding(.vertical, 3)
     }
 
-    /// Writes through to `ActionBindingStore`, reporting the same refusal the action's own editor
-    /// gives rather than silently dropping what was typed.
+    /// Writes through to `ActionBindingStore`, reporting refusals instead of dropping input.
     private var aliasBinding: Binding<String> {
         Binding(
             get: { aliasDraft ?? bindingStore.alias(for: action.id) ?? "" },

@@ -1,21 +1,14 @@
 // ExtensionActionRules.swift
 // OpenClip
 //
-// Holds the declarative visibility rules the factory attaches to every extension action it creates:
-// requirements (input/destination, regex, app allow/deny, requiredOptions) and the legacy manifest
-// `regex`. Consumed by ActionVisibility during enablement evaluation and by perform-time match
-// plumbing.
-//
-// Codable + Equatable (additive over the plan's Sendable) so rules can ride on CustomAction, which
-// synthesizes both conformances for the manifest shellInline path.
+// Declarative visibility rules the factory attaches to each extension action; consumed by
+// ActionVisibility. Codable and Equatable so rules can ride on CustomAction for the shellInline path.
 import Foundation
 
 public struct ExtensionActionRules: Codable, Sendable, Equatable {
     public let requirements: ActionRequirements?
     public let legacyRegex: String?
-    /// Derived data: the requirements.expression source compiled once by DefaultActionFactory.
-    /// Skipped by Codable (decoded instances recompile via the factory); nil means no expression
-    /// gate, matching pre-DSL behavior.
+    /// Compiled from `requirements.expression` by the factory; skipped by Codable. nil means no expression gate.
     public let compiledExpression: ValidateExpression?
 
     public init(
@@ -28,8 +21,7 @@ public struct ExtensionActionRules: Codable, Sendable, Equatable {
         self.compiledExpression = compiledExpression
     }
 
-    /// The shared enablement entry point for extension actions. All extension action structs
-    /// call this instead of reaching into ActionVisibility themselves.
+    /// Shared enablement entry point for extension actions.
     @MainActor
     public func resolveVisibility(for context: ActionContext) -> (enabled: Bool, match: ActionMatchInfo) {
         ActionVisibility.isEnabled(
@@ -44,8 +36,7 @@ public struct ExtensionActionRules: Codable, Sendable, Equatable {
         case requirements, legacyRegex
     }
 
-    // compiledExpression is derived data; the source string survives inside requirements.expression
-    // and the factory recompiles it. Encode/decode the two declarative fields only.
+    // Encode only the declarative fields; the factory recompiles `compiledExpression` from its source.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.requirements = try container.decodeIfPresent(ActionRequirements.self, forKey: .requirements)

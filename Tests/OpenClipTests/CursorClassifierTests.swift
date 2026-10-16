@@ -20,7 +20,7 @@ final class CursorClassifierTests: XCTestCase {
     }
 
     func testWideSerifBeamShapeClassifiesBeam() {
-        // Real macOS Retina/scaled I-beam: horizontal caps span ~60% of height (e.g. 22px cap on 37px height).
+        // Retina-scaled I-beam: caps span ~60% of height.
         let beam = makeCursorImage(width: 24, height: 38) { x, y in
             if y < 4 || y >= 34 {
                 return x >= 1 && x <= 22  // cap width 22 (22/38 = 0.579)
@@ -50,16 +50,13 @@ final class CursorClassifierTests: XCTestCase {
     }
 
     func testRealSystemPointingHandClassifiesPointingHand() {
-        // The system pointing-hand cursor ships a real bitmap, but whether that bitmap is exposed
-        // is host-dependent: recognize the real shape when available, and degrade to `.unknown`
-        // otherwise rather than guessing.
+        // Bitmap exposure is host-dependent: the real shape when available, otherwise `.unknown`.
         let result = CursorClassifier.classify(NSCursor.pointingHand.image)
         XCTAssertTrue(result == .pointingHand || result == .unknown, "unexpected pointingHand classification \(result)")
     }
 
     func testARGBPixelLayoutClassifiesSameShapes() {
-        // Premultiplied-first (ARGB) layout puts alpha at byte 0 of each pixel; the classifier
-        // must derive the offset from alphaInfo/byteOrder rather than assuming the last byte.
+        // ARGB puts alpha at byte 0; the classifier must derive the offset from alphaInfo/byteOrder.
         let beam = makeCursorImageARGB(width: 16, height: 32) { x, y in
             if y < 3 || y >= 29 {
                 return x >= 5 && x <= 10
@@ -78,9 +75,7 @@ final class CursorClassifierTests: XCTestCase {
     }
 
     func testSystemArrowAndIBeamCursorsDegradeSafely() {
-        // Whether these system cursors expose a bitmap is host-dependent: when one is available
-        // the classifier must recognize the real shape, and when not it must return `.unknown`
-        // rather than guess or crash.
+        // Bitmap exposure is host-dependent; the classifier must never crash or guess.
         let arrow = CursorClassifier.classify(NSCursor.arrow.image)
         XCTAssertTrue(arrow == .arrow || arrow == .unknown, "unexpected arrow classification \(arrow)")
         let beam = CursorClassifier.classify(NSCursor.iBeam.image)
@@ -89,8 +84,7 @@ final class CursorClassifierTests: XCTestCase {
 
     // MARK: - Fixture builder
 
-    /// Builds a small cursor-shaped `NSImage` from an opaque-pixel predicate so the
-    /// classifier's alpha-mask analysis is fully deterministic.
+    /// Builds a cursor-shaped `NSImage` from an opaque-pixel predicate, so alpha analysis is deterministic.
     private func makeCursorImage(width: Int, height: Int, opaque: (Int, Int) -> Bool) -> NSImage {
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let bytesPerRow = width * 4

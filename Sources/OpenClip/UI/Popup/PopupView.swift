@@ -1,9 +1,8 @@
 // PopupView.swift
 // OpenClip
 //
-// Renders the main floating action bar popup view presenting available actions, transform menus,
-// inline completion buttons, the action-search palette, and the native AI result card (which
-// replaces the bar with ResultCardView in content mode).
+// Main floating action bar popup: actions, transform menus, inline completions, the action-search
+// palette, and the AI result card (ResultCardView replaces the bar in content mode).
 import SwiftUI
 import AppKit
 import CoreGraphics
@@ -22,10 +21,9 @@ public struct PopupView: View {
     private let onSearchContextChanged: (@MainActor (SelectionContext) -> Void)?
     public let onResult: @MainActor (ActionResult) -> Void
     public let onContentSizeChange: (@MainActor (CGSize) -> Void)?
-    /// active=true when AI is running or showing result; cardAboveBar=true when the card should render above the bar
+    /// active=true while AI runs or shows a result; cardAboveBar=true when the card renders above the bar.
     public let onAIStateChange: (@MainActor (Bool, Bool) -> Void)?
-    /// Called with (resultText, isError, title, isStreaming) when the AI result is updated to show in the AI result
-    /// card; `title` is the producing preset's title (falls back to "AI Tools" in the card).
+    /// Called with (resultText, isError, title, isStreaming) as the AI result card updates.
     public let onAIResult: (@MainActor (String, Bool, String, Bool) -> Void)?
     /// Called when the sub-bar's active state changes, allowing the controller to suppress recentering.
     public let onSubBarActiveChanged: (@MainActor (Bool) -> Void)?
@@ -37,64 +35,45 @@ public struct PopupView: View {
     public let onCancelSubBarDwell: (@MainActor () -> Void)?
     /// Called when the AI result card should collapse back to the bar (back chevron).
     public let onExitContent: @MainActor () -> Void
-    /// Called when the result card should close outright (Esc) — the popup goes away rather than
-    /// falling back to the bar.
+    /// Called when the result card should close outright (Esc).
     public let onDismissContent: @MainActor () -> Void
     /// Called as the result card or search header is dragged, so the controller can move the panel.
     public let onCardDrag: (@MainActor (ResultCardDragPhase) -> Void)?
-    /// Called as a resize handle of the result card or the search palette is dragged, so the
-    /// controller can resize the surface (and the panel around it) and remember the size.
+    /// Called as a result-card or palette resize handle is dragged; the controller remembers the size.
     public let onResize: (@MainActor (PopupResizeEdge, ResultCardDragPhase) -> Void)?
-    /// Called when the user taps the pin button on the result card. The controller reacts by
-    /// setting `hasUserMovedCard = true` (making the card modal) and toggling `modeStore.isCardPinned`.
+    /// Called when the result card's pin button is tapped; the controller makes the card modal.
     public let onPinCard: (@MainActor () -> Void)?
-    /// The AI result card's Paste/Copy buttons — explicit user requests routed through the
-    /// controller's keep-open card-effect door (bypasses the paste-vs-copy re-decision).
+    /// Paste/Copy on the AI result card: explicit requests that bypass the paste-vs-copy re-decision.
     public let onCardEffect: @MainActor (ActionResult) -> Void
-    /// Called when the hovered action changes (nil when nothing hovered). Drives the hovered-row
-    /// tracking used by the right-click path.
+    /// Called when the hovered action changes (nil when none); drives right-click tracking.
     public let onHoveredActionChanged: (@MainActor ((any Action)?) -> Void)?
-    /// Opens a scoped palette for a bar row's sub-actions (group rows via `.openSubActions` and the
-    /// AI Tools launcher): the controller resolves + owns the SearchScope and enters search mode.
+    /// Opens a scoped palette for a bar row's sub-actions; the controller owns the SearchScope.
     public let onEnteredScopedSearch: (@MainActor (any Action, CGRect?) -> Void)?
     /// Sets the horizontal anchor mode on the popup panel before pagination or mode transitions.
     public let onPaginationAnchor: (@MainActor (PopupPanel.HorizontalAnchor) -> Void)?
     /// Called when an action is actually run (bar / palette / AI), so the controller can record usage.
     public let onActionPerformed: (@MainActor (String) -> Void)?
-    /// Called right before an action performs (before `onResult` can fire), so the controller can
-    /// snapshot the action's declared delivery for the paste-vs-copy decision. The intent is
-    /// carried explicitly so the delivery snapshot matches the perform context.
+    /// Called before an action performs, so the controller can snapshot its delivery for paste-vs-copy.
     public let onWillPerformAction: (@MainActor (any Action, ActionResultDelivery.ClickIntent) -> Bool)?
-    /// Called when a `showsLoading` bar action is clicked: the controller early-closes the popup
-    /// and runs the action via the loading toast flow instead of the inline perform path. Carries
-    /// the same explicit intent as `onWillPerformAction`.
+    /// Called when a `showsLoading` bar action is clicked; the controller closes the popup and runs it via the loading toast.
     public let onRunLoadingAction: (@MainActor (any Action, ActionResultDelivery.ClickIntent) -> Void)?
-    /// Called when an AI preset action is run: the controller closes the popup and runs via the loading toast flow.
+    /// Called when an AI preset action runs; the controller closes the popup and shows the loading toast.
     public let onRunAI: (@MainActor (String) -> Void)?
-    /// Runs a palette instruction (the "Ask AI" row or a recent prompt) on the selection:
-    /// `(instruction, replace)` — paste the answer over the selection, or show the result card.
-    /// nil falls back to the view's own card flow (preview/static hosts).
+    /// Runs a palette instruction on the selection as `(instruction, replace)`. nil falls back to the card flow.
     public let onRunAIPrompt: (@MainActor (String, Bool, Bool) -> Void)?
-    /// Saves the palette's typed query as a reusable AI tool and runs it (the "Save as AI tool"
-    /// row), same flag. nil falls back to the view's own flow.
+    /// Saves the palette's typed query as an AI tool and runs it. nil falls back to the view's own flow.
     public let onSaveAIPrompt: (@MainActor (String, Bool) -> Void)?
-    /// Runs an instruction typed into the result card's follow-up field on the card's current
-    /// text (the controller re-streams the card in place). nil hides the field.
+    /// Runs a follow-up instruction on the card's current text. nil hides the field.
     public let onFollowUp: (@MainActor (String) -> Void)?
     /// Cancels a follow-up in flight (Esc while the card refines), keeping the previous answer.
     public let onCancelFollowUp: (@MainActor () -> Void)?
-    /// Returns the click intent captured at mouse-down for the current click, so the left-click
-    /// perform path can thread a force-copy click (⇧-click) into the action context.
+    /// Click intent captured at mouse-down, so ⇧-click can force copy.
     public let onClickIntent: @MainActor () -> ActionResultDelivery.ClickIntent
-    /// Shows the hover tooltip for a bar button in the controller's screen-space tooltip window:
-    /// (text, button frame in popupHoverSpace, effective theme token, isDark). The controller
-    /// converts the frame to screen coordinates and places the tooltip via TooltipPlacer so it
-    /// escapes the panel's clipping and avoids the expanded sub-bar.
+    /// Shows the hover tooltip in the controller's screen-space window, placed via TooltipPlacer so it escapes panel clipping.
     public let onShowTooltip: (@MainActor (String, CGRect, String, Bool) -> Void)?
     /// Hides the screen-space hover tooltip.
     public let onHideTooltip: (@MainActor () -> Void)?
-    /// True when this is a static preview — hover tracking is disabled entirely so the
-    /// preview never reacts to (or leaks into) the real popup's shared hover state.
+    /// True for a static preview: hover tracking is disabled so it never leaks into the real popup.
     public let screenWidth: CGFloat
     private let isStatic: Bool
 
@@ -114,9 +93,7 @@ public struct PopupView: View {
         PopupThemeModel.category(fromStored: selectedTheme)
     }
 
-    /// The color scheme the popup content should render as — matching the effective theme
-    /// (classic or glass) so `.primary`/`.secondary` and the glass material agree with the
-    /// chosen appearance even when the system is the opposite.
+    /// Color scheme matching the effective theme, so `.primary` and glass agree with the chosen appearance.
     private var effectiveColorScheme: ColorScheme {
         PopupThemeModel.effectiveScheme(appearance: themeColor, systemIsDark: colorScheme == .dark)
     }
@@ -129,26 +106,19 @@ public struct PopupView: View {
     @Setting(SettingKey.completionCopyToClipboard) private var completionCopyToClipboard
     
     @State private var currentPage = 0
-    /// The hover state this bar reads. Deliberately *not* `@ObservedObject`: `location` publishes at
-    /// event-monitor rate on every mouse move, and observing the whole object re-evaluates the entire
-    /// body tree per move. Instead the view holds it unobserved and subscribes only to
-    /// `hoverState.$location` via `.onReceive`, so `@State hoveredTarget` changes only when the
-    /// hit-test result actually changes.
+    /// Deliberately not `@ObservedObject`: `location` publishes on every mouse move. Subscribing only to
+    /// `hoverState.$location` keeps `hoveredTarget` changing only when the hit-test result changes.
     private let hoverState: PopupHoverState
-    /// Resolves user-customized action titles/icons (composition-injected, defaults to the shared
-    /// customization manager — never a hidden singleton reference inside the Action extension).
+    /// Resolves customized action titles and icons; composition-injected.
     private let presenter: any ActionPresenting
-    /// The mode this bar observes: the real popup uses the store injected by
-    /// PopupWindowController; the static preview passes a throwaway store.
+    /// Mode this bar observes; the static preview passes a throwaway store.
     @ObservedObject private var modeStore: PopupModeStore
     /// Requests entering/leaving search mode; the controller owns the key-window changes.
     private let onEnterSearch: @MainActor (CGRect?) -> Void
     private let onExitSearch: @MainActor () -> Void
-    /// The popup session this view belongs to. Stamped into every streaming delivery so the
-    /// controller can drop chunks from an abandoned stream (dismissed mid-stream, superseded).
+    /// Popup session this view belongs to; stamped on streaming deliveries so stale chunks are dropped.
     private let sessionID: UUID
-    /// Hands the streaming task to the controller so hide() can cancel it immediately —
-    /// session-scoped cancellation that never waits for SwiftUI view teardown.
+    /// Hands the streaming task to the controller so hide() cancels it immediately.
     private let registerStreamingTask: @MainActor (Task<Void, Never>?) -> Void
     @ObservedObject private var aiManager = AIServiceManager.shared
     @State private var hoveredTarget: PopupHoverTarget?
@@ -156,11 +126,10 @@ public struct PopupView: View {
     @State private var isShowingCompletions: Bool = true
     @State private var isProcessingAI: Bool = false
     @State private var aiTask: Task<Void, Never>? = nil
-    /// Captured once when the popup appears — never re-read from mouse location to avoid jitter.
+    /// Captured once per show, never re-read from the mouse, to avoid jitter.
     @State private var aiCardAboveBar: Bool = false
     @State private var glowOffset: CGFloat = -1.0
-    /// Completions are computed exactly once per show — the selection text is fixed for this view's
-    /// lifetime — and cached, so NSSpellChecker dictionary work never runs inside `body`.
+    /// Computed once per show and cached, so NSSpellChecker never runs inside `body`.
     @State private var cachedCompletions: [String]
     @State private var tooltipPresenter = TooltipPresenter()
 
@@ -277,9 +246,6 @@ public struct PopupView: View {
         self._cachedCompletions = State(initialValue: Self.resolveCompletions(actions: actions, context: context))
     }
 
-    /// Resolves the inline completion words once per show (the selection text never changes for the
-    /// view's lifetime), so the bar can derive `hasCompletions`/`inCompletionMode` from a single
-    /// cached value instead of re-running NSSpellChecker work on every body evaluation.
     @MainActor
     private static func resolveCompletions(actions: [any Action], context: ActionContext) -> [String] {
         guard let provider = actions.first(where: { $0 is any WordCompletionProviding }) as? any WordCompletionProviding,
@@ -295,12 +261,8 @@ public struct PopupView: View {
         return hasCompletions && isShowingCompletions
     }
 
-    /// Bar rows: everything except the inline completion pseudo-action and any action that some
-    /// `SubActionProviding` row resolves as a child (group sub-actions, AI presets). Membership is
-    /// resolver/protocol-driven — the view never re-derives id-prefix conventions. A group row
-    /// itself only appears when at least one of its sub-actions is applicable to the current
-    /// context — with every sub-action disabled the parent would be an inert row. Paste-requiring
-    /// actions (Paste/Cut) are dropped when the probe confirmed the target can't paste.
+    /// Bar rows: everything except the completion pseudo-action and `SubActionProviding` children.
+    /// A group row appears only when a sub-action is applicable; Paste/Cut drop when the target can't paste.
     var displayActions: [any Action] {
         let resolver = SubActionResolver()
         let subActionIDs = Set(
@@ -318,8 +280,7 @@ public struct PopupView: View {
         }
     }
 
-    /// Paste/Cut can only perform when the target app supports paste; a confirmed cannot-paste
-    /// probe hides them from the bar and the search palette (nil/unknown keeps them visible).
+    /// Paste/Cut are hidden on a confirmed cannot-paste probe; nil keeps them visible.
     private func hiddenForPasteAvailability(_ action: any Action) -> Bool {
         modeStore.canPaste == false && action is any PasteRequiringAction
     }
@@ -349,8 +310,7 @@ public struct PopupView: View {
     private var pages: [[any Action]] {
         let leadingWidth = hasCompletions ? (chevronWidth) : 0
         let trailingWidth = showSearchAllActions ? buttonWidth : 0
-        // Reads `inlineResults` so a preview arriving re-packs the page at the button's real width
-        // instead of overflowing the budget (the published dictionary already drives a re-render).
+        // Reads `inlineResults` so a preview landing re-packs the page at the button's real width.
         return PopupPageLayout.computePages(
             actions: standardActions,
             inlineResults: modeStore.inlineResults,
@@ -391,9 +351,8 @@ public struct PopupView: View {
 
     public var body: some View {
         barContent
-            // Transparent ring that hosts the SwiftUI drop shadow inside the panel frame. Must
-            // equal PopupMetrics.popupShadowInset — PopupPanel.ContentView excludes exactly this
-            // region from mouse hit-testing so shadow clicks fall through to the app below.
+            // Transparent ring hosting the drop shadow. Must equal PopupMetrics.popupShadowInset, which
+            // PopupPanel excludes from hit-testing so shadow clicks fall through.
             .padding(PopupMetrics.popupShadowInset)
             .coordinateSpace(name: "popupHoverSpace")
             .background(
@@ -430,9 +389,7 @@ public struct PopupView: View {
                 onSubBarActiveChanged?(isActive)
             }
             .onChange(of: totalPages) { _, count in
-                // Re-packing (e.g. a preview landing and widening a button) can shrink the page
-                // count; without this a stale `currentPage` would sit past the last page with a
-                // dead chevron and an empty-looking page.
+                // Re-packing can shrink the page count; clamp `currentPage` so it never sits past the last page.
                 if currentPage > count - 1 { currentPage = max(0, count - 1) }
             }
             .onChange(of: isProcessingAI) { _, active in
@@ -458,11 +415,7 @@ public struct PopupView: View {
         }
     }
 
-    /// The result card: renders the native ResultCardView inline on the popup panel in place
-    /// of the bar (content mode). Paste/Copy are explicit user requests routed through
-    /// onCardEffect (bypassing the paste-vs-copy re-decision) that both dismiss the popup; the
-    /// Paste button is hidden when the target app can't paste; the back chevron collapses back to
-    /// the bar and Esc closes the card outright.
+    /// Result card: ResultCardView in place of the bar. Paste/Copy dismiss the popup; the back chevron returns to the bar.
     @ViewBuilder
     private var resultCard: some View {
         if let payload = modeStore.resultCard {
@@ -564,8 +517,7 @@ public struct PopupView: View {
         }
     }
 
-    /// The action-search palette: renders PopupSearchView with dedicated card chrome matching
-    /// ResultCardView in content mode.
+    /// Search palette with card chrome matching ResultCardView in content mode.
     @ViewBuilder
     private var searchCard: some View {
         PopupSearchView(
@@ -590,8 +542,7 @@ public struct PopupView: View {
             },
             onRunAIPrompt: { instruction, replace, includeContext in
                 if let onRunAIPrompt {
-                    // Same contract as onRunAI: the controller's flow snapshots the selection and
-                    // dismisses the popup itself, so the palette must not exit first.
+                    // Same contract as onRunAI: the controller snapshots the selection and dismisses the popup.
                     onRunAIPrompt(instruction, replace, includeContext)
                 } else {
                     // Preview/static fallback: no in-place delivery here, always the card.
@@ -628,8 +579,7 @@ public struct PopupView: View {
         .environment(\.popupEffectiveTheme, effectiveTheme)
     }
 
-    /// The search palette's catalog: the coordinator's search catalog minus Paste-requiring
-    /// actions hidden by a confirmed cannot-paste probe.
+    /// Palette catalog minus Paste-requiring actions when the target can't paste.
     private var searchCatalog: [any Action] {
         ActionCoordinator.shared.searchCatalog(for: context)
             .filter { !hiddenForPasteAvailability($0) }
@@ -637,8 +587,7 @@ public struct PopupView: View {
 
     // MARK: - AI Helpers
 
-    /// Shared by standalone bar buttons and palette rows. The controller must snapshot the
-    /// selection before dismissing the popup, including when search was opened by a hotkey.
+    /// Shared by bar buttons and palette rows. The selection is snapshotted before the popup dismisses.
     func runAIAction(_ actionID: String) {
         onActionPerformed?(actionID)
         if let onRunAI {
@@ -658,11 +607,7 @@ public struct PopupView: View {
             isProcessingAI = true
             modeStore.isProcessingAI = true
             defer {
-                // Clear the controller's registration only on natural completion. When this
-                // task ends because hide()/show(for:) cancelled it, they already nil'd the
-                // registration — an unconditional clear here lets this stale task unwinding
-                // late wipe a newer session's live registration, so its hide() would never
-                // cancel the still-running stream.
+                // Clear the registration only on natural completion; a cancelled task's late unwind must not wipe a newer session's.
                 if !Task.isCancelled {
                     registerStreamingTask(nil)
                     isProcessingAI = false
@@ -718,8 +663,7 @@ public struct PopupView: View {
             }
         }
         aiTask = task
-        // Register with the controller so hide() cancels the stream immediately instead of
-        // waiting for SwiftUI teardown — chunks must never outlive their session.
+        // Register so hide() cancels the stream immediately; chunks must never outlive their session.
         registerStreamingTask(task)
     }
 
@@ -773,8 +717,7 @@ public struct PopupView: View {
 
     private var standardIsland: some View {
         HStack(spacing: 0) {
-            // Completion toggle lives on the far left; both pagination chevrons sit together on the
-            // right (just before the command affordance) so next/previous are easy to reach.
+            // Completion toggle on the far left; pagination chevrons together on the right.
             if hasCompletions {
                 chevronButton(systemImage: "chevron.down", label: "Show completions") {
                     onPaginationAnchor?(.left)
@@ -789,8 +732,7 @@ public struct PopupView: View {
                 actionButton(action: action, index: index, isHovered: isDirectlyHovered, isActiveParent: isActiveParent, leadingEdge: offset == 0 && !hasCompletions, trailingEdge: offset == pagedStandardActions.count - 1 && !hasLeftChevron && !hasRightChevron && !showSearchAllActions)
             }
 
-            // Sparkles AI launcher is a normal action row (chrome.launchesAI); it paginates with
-            // the other actions and its click opens AI mode via the branch in actionButton.
+            // The AI launcher is a normal action row; its click opens AI mode via actionButton.
 
             if hasLeftChevron {
                 chevronButton(systemImage: "chevron.left", label: "Previous page") {
@@ -805,8 +747,7 @@ public struct PopupView: View {
                 }
             }
 
-            // Action-search affordance: command glyph. Kept outside
-            // the paged actions so it always sits at the far-right edge on every page.
+            // Command glyph sits outside the paged actions, so it stays at the far right on every page.
             if showSearchAllActions {
                 let isHovered = hoveredTarget == .search
                 let affordanceForeground: Color = isHovered ? .white : PopupThemeModel.restForeground(for: effectiveTheme)
@@ -908,8 +849,7 @@ public struct PopupView: View {
                     .frame(minWidth: buttonWidth, minHeight: barButtonHeight)
                     .popupBarHighlight(backgroundColor, scale: scale, isText: { if case .text = action.displayIcon(using: presenter) { return true }; return false }(), leadingEdge: leadingEdge, trailingEdge: trailingEdge, isHovered: isHovered, namespace: hoverHighlightNamespace)
                     .overlay(alignment: subBarAbove ? .top : .bottom) {
-                        // The triangle marks a group button only while its sub-bar is closed and
-                        // the button itself isn't hovered; hover and the open bar already show it.
+                        // Triangle shows only while the sub-bar is closed and the button isn't hovered.
                         if isGroup && !isHovered && modeStore.activeSubGroupID != action.id {
                             GroupIndicatorTriangle(pointingUp: subBarAbove)
                                 .fill(foregroundColor.opacity(0.65))
@@ -970,8 +910,7 @@ public struct PopupView: View {
                             runAIAction(action.id)
                             return
                         }
-                        // Capture the click intent once, synchronously, so the perform context and
-                        // the delivery snapshot agree and neither reads live state after an await.
+                        // Capture the click intent synchronously so the perform context and delivery snapshot agree.
                         let clickIntent = onClickIntent()
                         if action.chrome.showsLoading {
                             onRunLoadingAction?(action, clickIntent)
@@ -1046,9 +985,7 @@ public struct PopupView: View {
 
     @ViewBuilder
     private func chevronButton(systemImage: String, label: LocalizedStringKey, action: @escaping () -> Void) -> some View {
-        // Each chevron gets its own hover target keyed by its glyph, so hovering the
-        // pagination right/left chevrons never highlights the completion-mode up chevron
-        // (or the completion toggle) and vice-versa.
+        // Each chevron has its own hover target, so none highlights another.
         let target: PopupHoverTarget = .chevron(systemImage)
         let isHovered = hoveredTarget == target
         Button(action: action) {
@@ -1075,8 +1012,7 @@ public struct PopupView: View {
         setHoveredTarget(target)
     }
 
-    /// Both cursor tracking and the local fallback use target transitions to own dwell timing.
-    /// Repeated entries and stale exits must not restart or cancel another target's timer.
+    /// Target transitions own dwell timing; repeated or stale exits must not restart or cancel another target's timer.
     private func setHoveredTarget(_ target: PopupHoverTarget?) {
         guard target != hoveredTarget else { return }
         let oldTarget = hoveredTarget
@@ -1097,8 +1033,7 @@ public struct PopupView: View {
         }
     }
 
-    /// Maps the current hoveredTarget to its action (if any) and reports it upward so the
-    /// controller can track the hovered row (right-click path).
+    /// Reports the hovered target's action upward for the right-click path.
     private func reportHoveredAction() {
         let action: (any Action)? = {
             if inCompletionMode, case .completion(let index) = hoveredTarget, index < cachedCompletions.count {
@@ -1111,8 +1046,7 @@ public struct PopupView: View {
     }
 
     func useLocalHoverFallback(for target: PopupHoverTarget, isHovering: Bool) {
-        // The location-driven path owns highlights AND dwell when tracking is available.
-        // SwiftUI can emit an exit during highlight relayout while the cursor is still here.
+        // The location-driven path owns highlights and dwell; SwiftUI can emit a spurious exit during relayout.
         guard !isStatic, !hoverState.usesGlobalMouseMonitoring else { return }
         if isHovering {
             setHoveredTarget(target)
@@ -1172,8 +1106,7 @@ public struct PopupView: View {
     }
 }
 
-/// A lightweight synthetic action representing an inline word completion candidate so the
-/// right-click force-copy path can execute and deliver it identically to other bar items.
+/// Synthetic action for an inline word completion, so right-click force-copy delivers it like other bar items.
 private struct WordCompletionCandidateAction: Action {
     let word: String
     var id: String { "builtin.completion.\(word)" }

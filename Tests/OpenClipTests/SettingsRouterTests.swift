@@ -1,10 +1,8 @@
 // SettingsRouterTests.swift
 // OpenClipTests
 //
-// Pins the settings window's navigation model: the router's path and history (what the toolbar's
-// back/forward arrows walk), the sidebar's search matching, how installed extensions are derived
-// from the action catalog for the sidebar's second group, where every kind of action's settings
-// live, and what the toolbar's trailing switch and ellipsis menu offer per page.
+// Settings window navigation: router path and history, sidebar search, installed-extension groups,
+// action settings locations, and per-page toolbar contents.
 
 import XCTest
 import Combine
@@ -419,8 +417,7 @@ final class SettingsRouterTests: XCTestCase {
     }
 
     func testAOneCommandPackageIsStillAnExtensionWithItsOneCommand() throws {
-        // Not every package groups its commands behind one icon; a package can contribute a
-        // single top-level action, and it gets the same page with one row in it.
+        // A package with one top-level action still gets an extension page with one row.
         let package = "com.openclip.shortenlink"
         let action = StubAction(
             id: "\(package).action.0",
@@ -635,7 +632,6 @@ final class SettingsRouterTests: XCTestCase {
         }
         XCTAssertGreaterThan(seen.count, 100, "the palette must still spread, not pile up on a few hues")
 
-        // The real identifiers this Mac has installed, and the empty case.
         for id in ["io.appwrite.openclip", "com.openclip.jwt", "com.openclip.harper", "com.openclip.urlquery", ""] {
             XCTAssertFalse(SettingsTint.reservedBlueHues.contains(SettingsTint.hue(for: id)), id)
         }
@@ -649,8 +645,7 @@ final class SettingsRouterTests: XCTestCase {
     }
 
     func testTheSidebarsThreeKindsOfRowAreThreeColours() {
-        // Extensions hash to their own stable colour, which the settings rows never borrow — the
-        // settings group is chrome and reads as its own palette (blue/black/grey).
+        // Settings chrome uses blue/black/grey; extension colours must never borrow those.
         let generated = SettingsPage.extensionPackage(id: "com.openclip.jwt").tint
         for page in SettingsPage.systemPages {
             XCTAssertNotEqual(page.tint, generated,

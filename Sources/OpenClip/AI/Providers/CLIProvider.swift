@@ -89,10 +89,7 @@ public enum CLIPreset: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// Environment variables that ask the CLI to skip its thinking pass, where the tool exposes a
-    /// documented switch. Claude Code turns thinking off with `MAX_THINKING_TOKENS=0`; Codex uses
-    /// its config override instead (see `thinkingDisabledArguments`). Copilot exposes no "off"
-    /// level and custom commands are opaque, so both are left untouched.
+    /// Env vars that skip the CLI's thinking pass where a documented switch exists. Copilot and custom commands have none.
     public var thinkingDisabledEnvironment: [String: String] {
         switch self {
         case .claude: return ["MAX_THINKING_TOKENS": "0"]
@@ -100,8 +97,7 @@ public enum CLIPreset: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// Config-override flags that ask the CLI to skip its thinking pass. Codex accepts
-    /// `-c model_reasoning_effort=none`; the other tools are configured via environment instead.
+    /// Config-override flags that skip the thinking pass (Codex only).
     public var thinkingDisabledArguments: [String] {
         switch self {
         case .codex: return ["-c", "model_reasoning_effort=none"]
@@ -159,8 +155,7 @@ public final class CLIProvider: AIProvider {
 
     // MARK: - Binary Resolution
 
-    /// Waits for short-lived CLI probes without allowing a stuck login shell or auth command to
-    /// block the caller indefinitely. A timed-out probe is always treated as a failed check.
+    /// Timeout-bounded: a stuck login shell or auth command counts as a failed check.
     nonisolated private static func waitForExit(_ process: Process, timeout: TimeInterval = 10) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while process.isRunning {
@@ -178,12 +173,10 @@ public final class CLIProvider: AIProvider {
         let trimmed = binary.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        // 1. Direct path check if path is absolute
         if trimmed.hasPrefix("/") {
             return FileManager.default.isExecutableFile(atPath: trimmed) ? trimmed : nil
         }
 
-        // 2. Common macOS installation paths
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let standardCandidates = [
             "\(home)/.local/bin/\(trimmed)",
@@ -200,7 +193,7 @@ public final class CLIProvider: AIProvider {
             }
         }
 
-        // 3. Login shell fallback via 'which'
+        // Login shell picks up the user's PATH, which GUI launches lack.
         let pipe = Pipe()
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")

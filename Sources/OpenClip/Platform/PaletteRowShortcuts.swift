@@ -1,20 +1,9 @@
 // PaletteRowShortcuts.swift
 // OpenClip
 //
-// ⌘1…⌘9 for the search palette's first nine rows, registered as *global* hot keys for exactly as
-// long as the palette is on screen.
-//
-// They have to be global. macOS routes a command-modified key to the **active application**, and
-// the popup is a non-activating panel of an app that is deliberately never active: plain keys
-// reach the key panel (typing in the palette works), but a ⌘-digit is delivered to whatever app
-// the user is working in — it never enters OpenClip's event stream at all, so neither an event
-// monitor nor `performKeyEquivalent` on the panel can see it, and the source app rings the bell
-// for a shortcut it does not recognize. Raycast and Chrome get these keys because they *are* the
-// active app; OpenClip's whole point is not to steal that.
-//
-// So the same Carbon hot-key mechanism the ⌥⌘C trigger already uses (via KeyboardShortcuts) takes
-// ⌘1…⌘9 system-wide while the palette is open, and hands them back the moment it closes. That
-// also consumes them, so the source app never sees the keystroke.
+// ⌘1…⌘9 are global hot keys only while the palette is on screen. OpenClip never activates, so
+// macOS would route a ⌘-digit to the frontmost app and the panel would never see it; the Carbon
+// hot-key path (shared with ⌥⌘C) consumes them system-wide until the palette closes.
 import AppKit
 import Core
 import KeyboardShortcuts
@@ -33,20 +22,18 @@ extension KeyboardShortcuts.Name {
 
 @MainActor
 enum PaletteRowShortcuts {
-    /// Row number (1-based) → its shortcut name, in row order.
+    /// Index 0 is row 1.
     static let names: [KeyboardShortcuts.Name] = [
         .paletteRow1, .paletteRow2, .paletteRow3, .paletteRow4, .paletteRow5,
         .paletteRow6, .paletteRow7, .paletteRow8, .paletteRow9
     ]
 
-    /// Runs the 1-based row, returning false when there is no such row. Set by the composition
-    /// root; nil until then.
+    /// Set by the composition root.
     private static var runRow: ((Int) -> Bool)?
     private static var isInstalled = false
     private(set) static var isActive = false
 
-    /// Registers the handlers once and immediately parks the keys: ⌘1…⌘9 belong to the rest of
-    /// the system until a palette actually opens.
+    /// Registers handlers once; the keys stay with the system until a palette opens.
     static func install(runRow: @escaping (Int) -> Bool) {
         self.runRow = runRow
         guard !isInstalled else { return }
@@ -63,8 +50,7 @@ enum PaletteRowShortcuts {
         setActive(false)
     }
 
-    /// Takes the keys while the palette is up, hands them back when it goes away. Idempotent, so
-    /// every popup transition can simply state what it wants.
+    /// Idempotent.
     static func setActive(_ active: Bool) {
         guard active != isActive || !active else { return }
         isActive = active

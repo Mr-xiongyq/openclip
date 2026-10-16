@@ -88,8 +88,7 @@ struct DynamicOptionRowView: View {
         }
     }
 
-    /// The built-in Search action's `url` option gets the search-engine preset picker (Google /
-    /// DuckDuckGo / Kagi / Brave / Bing / Ecosia / Custom) instead of a bare template text field.
+    /// Search action's `url` option gets a search-engine preset picker instead of a bare template field.
     private var isSearchURLOption: Bool {
         actionID == SearchAction().id && option.identifier == "url"
     }
@@ -243,12 +242,8 @@ struct DynamicOptionRowView: View {
     }
 }
 
-/// Renders the built-in Search action's URL option as a search-engine preset picker. Provides
-/// one-click selection among curated presets (Google / DuckDuckGo / Kagi / Brave / Bing / Ecosia)
-/// while keeping a raw `{query}` template field reachable through the trailing "Custom..." choice.
-/// Every write still routes through the injected option store (SettingsStore-backed), so the stored
-/// `action.builtin.search.option.url` value remains the single source of truth; a stored template
-/// that matches no preset simply shows the picker on "Custom..." with the template in the field.
+/// Search-engine preset picker for the built-in Search action's URL option; a `{query}` template stays reachable via "Custom...".
+/// Writes go through the injected option store, which stays the single source of truth.
 @MainActor
 private struct SearchEngineURLOptionView: View {
     let actionID: String
@@ -279,8 +274,7 @@ private struct SearchEngineURLOptionView: View {
         _customTemplate = State(initialValue: stored)
     }
 
-    /// Preset when the stored template matches exactly; otherwise Custom (covers self-hosted or
-    /// hand-edited endpoints, which are never silently snapped back to a preset).
+    /// Preset only on exact match; hand-edited or self-hosted endpoints fall back to Custom and are never snapped back.
     private static func initialSelection(for stored: String) -> SearchEngineSelection {
         SearchEnginePreset.preset(matching: stored).map { .preset($0.id) } ?? .custom
     }

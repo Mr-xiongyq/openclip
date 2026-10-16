@@ -1,26 +1,15 @@
 // ShellProcessRunner.swift
 // OpenClip
 //
-// Shared Core subprocess executor for one-shot shell runtimes (ScriptAction script files and
-// CustomAction.shellScript inline commands). Converges the two former watchdog implementations onto
-// ONE mechanism (Gotcha 8): a GCD timer marks a `TimeoutFlag`, terminates the process (hard-killing
-// it a moment later if it ignores the signal), and a timeout always surfaces as an error. Pipe
-// output is read through GCD readability handlers — never a blocking readToEnd() — so a stuck
-// child can't wedge a Swift cooperative thread, and stdin is seeded and closed synchronously so a
-// script reading stdin always sees EOF. Non-zero exits throw with the stderr text, unifying the
-// error policy across both shell runtimes (Gotcha 5).
-//
-// Also hosts the relocated `TimeoutFlag` (was `internal` in CustomAction.swift) and `OnceGate`
-// (was `private`; now `internal` and retained for future async JS host callbacks — plan §8), the
-// expanded `ScriptJSONOutput` DTO, and the shared JSON→ActionResult mapper. Pure Foundation — no
-// AppKit/SwiftUI.
+// Shared subprocess executor for the shell and script runtimes. Pipes are read via GCD readability
+// handlers so a stuck child cannot wedge the cooperative pool; stdin is closed up front so scripts
+// always see EOF. Non-zero exits throw with stderr as the message.
 import Foundation
 import UniformTypeIdentifiers
 #if canImport(Darwin)
 import Darwin
 #endif
 
-/// Thread-safe boolean flag guarded by an NSLock.
 public final class AtomicFlag: @unchecked Sendable {
     private let lock = NSLock()
     private var flag = false
@@ -50,8 +39,7 @@ public final class AtomicFlag: @unchecked Sendable {
 public typealias TimeoutFlag = AtomicFlag
 public typealias CancellationFlag = AtomicFlag
 
-/// Thread-safe container to hold a running Process so that Task cancellation handlers
-/// can immediately terminate the process and its subprocess group.
+/// Lets Task cancellation terminate the process group immediately.
 final class ProcessBox: @unchecked Sendable {
     private let lock = NSLock()
     private weak var process: Process?
@@ -88,10 +76,7 @@ final class ProcessBox: @unchecked Sendable {
     }
 }
 
-/// Accumulates a subprocess pipe's output through a GCD readability handler so no thread ever
-/// blocks on a pipe that a misbehaving child (or a grandchild that inherited the fd) refuses to
-/// close. `readabilityHandler` is dispatch-source backed, so it runs regardless of how loaded the
-/// Swift concurrency executor is, and the caller is never left holding a wedged reader.
+/// Reads a pipe via GCD so a child (or grandchild) holding the fd open cannot block the caller.
 private final class PipeAccumulator: @unchecked Sendable {
     private let handle: FileHandle
     private let lock = NSLock()
@@ -121,8 +106,7 @@ private final class PipeAccumulator: @unchecked Sendable {
         }
     }
 
-    /// Drains pending output and closes the handle. Bounded: waits at most `grace` seconds for EOF
-    /// so a grandchild still holding the pipe can't block the caller indefinitely.
+    /// Waits at most `grace` seconds for EOF, then drains and closes.
     func finish(grace: TimeInterval = 2.0) {
         _ = eofGroup.wait(timeout: .now() + grace)
         lock.lock()
@@ -167,8 +151,7 @@ private final class PipeAccumulator: @unchecked Sendable {
     }
 }
 
-/// Reference box so the value-type `ScriptJSONOutput` can recursively contain itself via `effect`
-/// (a Swift struct cannot have a stored property that recursively contains it).
+/// Reference box so `ScriptJSONOutput` can contain itself via `effect`.
 final class ScriptJSONEffect: Decodable {
     let value: ScriptJSONOutput
     init(from decoder: Decoder) throws {
@@ -176,7 +159,7 @@ final class ScriptJSONEffect: Decodable {
     }
 }
 
-/// Expanded shell stdout JSON protocol (plan Phase 6 Types). All fields except `type` are optional.
+/// Shell stdout JSON protocol; all fields except `type` are optional.
 struct ScriptJSONOutput: Decodable {
     let type: String
     let value: String?
@@ -205,11 +188,8 @@ struct ScriptJSONOutput: Decodable {
     let action: String?
 }
 
-/// Maps shell stdout JSON into an `ActionResult` (plan §6 protocol). Returns nil when the output
-/// does not decode as a `ScriptJSONOutput`, so callers fall through to plain-text handling; a
-/// decoded but unknown `type` maps to `.success` (the current default path).
+/// Returns nil when stdout is not JSON; an unknown `type` maps to `.success`.
 public enum ShellResultMapper {
-    /// Decodes structured script output, returning `nil` when stdout is not recognized JSON.
     public static func actionResult(from stdout: String, actionID: String) -> ActionResult? {
         guard let data = stdout.data(using: .utf8),
               let decoded = try? JSONDecoder().decode(ScriptJSONOutput.self, from: data) else {
@@ -218,7 +198,6 @@ public enum ShellResultMapper {
         return map(decoded, actionID: actionID)
     }
 
-    /// Auto-detects whether plain-text stdout is a path to an existing regular file on disk.
     public static func detectFileResult(from stdout: String) -> ActionResult? {
         let trimmed = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !trimmed.contains("\n"), !trimmed.contains("\r") else {
@@ -233,7 +212,6 @@ public enum ShellResultMapper {
         return .file(FileOutputPayload(url: url, filename: url.lastPathComponent, isTemporary: false))
     }
 
-    /// Converts an absolute, tilde-prefixed, or file-URL path into a local file URL.
     public static func parseFileURL(from rawPath: String) -> URL? {
         let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -249,7 +227,6 @@ public enum ShellResultMapper {
         return URL(fileURLWithPath: expanded)
     }
 
-    /// Checks that the raw path exists as a regular file on disk.
     public static func parseExistingFileURL(from rawPath: String) -> URL? {
         guard let url = parseFileURL(from: rawPath) else { return nil }
         var isDir: ObjCBool = false
@@ -259,7 +236,6 @@ public enum ShellResultMapper {
         return url
     }
 
-    /// Writes decoded action data to the output cache using a safe generated or supplied filename.
     public static func writeTemporaryOutput(data: Data, filename: String?, mimeType: String?) -> URL? {
         let dir = Constants.outputsDirectory
         do {
@@ -292,7 +268,6 @@ public enum ShellResultMapper {
         }
     }
 
-    /// Returns the preferred filename extension for a supported MIME type.
     private static func extensionForMimeType(_ mime: String?) -> String? {
         guard let mime = mime?.lowercased() else { return nil }
         switch mime {
@@ -324,7 +299,6 @@ public enum ShellResultMapper {
         }
     }
 
-    /// Resolves either embedded base64 data or a referenced file from structured output.
     private static func resolveFileURL(from output: ScriptJSONOutput) -> URL? {
         if let base64String = output.data, let data = Data(base64Encoded: base64String) {
             return writeTemporaryOutput(data: data, filename: output.filename, mimeType: output.mimeType)
@@ -336,7 +310,6 @@ public enum ShellResultMapper {
         return parseExistingFileURL(from: rawPath)
     }
 
-    /// Maps structured file output to preview, copy, or save semantics.
     private static func mapFileOutput(_ output: ScriptJSONOutput) -> ActionResult {
         guard let targetURL = resolveFileURL(from: output) else {
             return .toast(StatusFeedback(message: String(localized: "File not found"), style: .error))
@@ -374,7 +347,6 @@ public enum ShellResultMapper {
         }
     }
 
-    /// Converts a decoded script result into the corresponding domain action result.
     private static func map(_ output: ScriptJSONOutput, actionID: String) -> ActionResult {
         switch output.type {
         case Constants.actionTypePaste:
@@ -458,9 +430,7 @@ public enum ShellResultMapper {
     }
 }
 
-/// Runs a subprocess to completion (or to the watchdog timeout) and returns its captured output.
-/// Throws on non-zero exit (stderr text as the message) and on timeout — the unified stricter
-/// error policy both shell runtimes adopt.
+/// Runs a subprocess to completion or the watchdog timeout. Throws on non-zero exit and on timeout.
 public enum ShellProcessRunner {
     public struct Invocation: Sendable {
         public var executableURL: URL
@@ -468,9 +438,7 @@ public enum ShellProcessRunner {
         public var environment: [String: String]
         /// Text written to the subprocess's stdin (then the pipe is closed). nil leaves stdin unseeded.
         public var stdinText: String?
-        /// Runtime budget before the watchdog kills the subprocess. `nil` runs with no watchdog —
-        /// the subprocess lives until it finishes or the user cancels it; callers that want a
-        /// bound pass one explicitly (e.g. the inline-result evaluator's short budget).
+        /// nil runs with no watchdog; the subprocess lives until it exits or is cancelled.
         public var timeout: TimeInterval?
 
         public init(
@@ -498,8 +466,7 @@ public enum ShellProcessRunner {
         let pid = process.processIdentifier
         guard pid > 0 else { return }
 
-        // Snapshot the tree while the parent still runs. After terminate(), grandchildren that
-        // left the group reparent to launchd and a later ppid walk cannot find them.
+        // Snapshot descendants before terminate(): orphans reparent to launchd and are lost.
         let descendants = descendantSnapshots(of: pid)
 
         process.terminate()
@@ -565,10 +532,7 @@ public enum ShellProcessRunner {
         return ids
     }
 
-    /// Direct children of one pid, so the walk stays inside our own subtree instead of building a
-    /// parent map over every process on the system. A nil-buffer call reports a pid count, which can
-    /// grow before the second call, so the buffer keeps slack; a probe of 0 is also read once,
-    /// because missing a descendant here means a hung grandchild survives the watchdog.
+    /// Direct children only, keeping the walk inside our subtree. Buffer keeps slack since the count can grow.
     private static func childProcessIDs(of parent: pid_t) -> [pid_t] {
         var capacity = Int(proc_listchildpids(parent, nil, 0))
         if capacity <= 0 {
@@ -623,8 +587,7 @@ public enum ShellProcessRunner {
                 let stdInPipe = Pipe()
                 process.standardInput = stdInPipe
 
-                // GCD-backed pipe readers: they never block a Swift cooperative thread, so a slow or
-                // stuck child can't wedge the concurrency pool the way blocking readToEnd() calls could.
+                // GCD pipe readers never block a cooperative thread, even if the child is stuck.
                 let outReader = PipeAccumulator(fileHandle: stdOutPipe.fileHandleForReading)
                 let errReader = PipeAccumulator(fileHandle: stdErrPipe.fileHandleForReading)
                 outReader.start()
@@ -645,13 +608,8 @@ public enum ShellProcessRunner {
                     throw CancellationError()
                 }
 
-                // Watchdog on a GCD timer — independent of the Swift concurrency executor, so it always
-                // fires even if the cooperative pool is starved. Past the budget it terminates the
-                // process and hard-kills it shortly after if the signal was ignored, then releases the
-                // pipes. A watchdog kill surfaces as a timeout error. Armed before the stdin write below
-                // so an oversized write that blocks the child not reading still gets killed on budget.
-                // With no explicit budget there is no watchdog: the subprocess runs until it exits or
-                // the caller cancels (loading tasks are cancelled by clicking the loading toast).
+                // GCD-timer watchdog, armed before the stdin write so a child that never reads
+                // stdin is still killed on budget. No explicit timeout means no watchdog.
                 let timeoutFlag = TimeoutFlag()
                 if let budget = invocation.timeout {
                     let timer = DispatchSource.makeTimerSource(queue: .global())
@@ -665,8 +623,7 @@ public enum ShellProcessRunner {
                     watchdog = timer
                 }
 
-                // Seed stdin synchronously and close the write end, so a child script that reads stdin
-                // always sees EOF — it can never block forever waiting for input.
+                // Seed and close stdin so a script reading it always sees EOF.
                 if let textData = invocation.stdinText?.data(using: .utf8) {
                     try? stdInPipe.fileHandleForWriting.write(contentsOf: textData)
                 }
@@ -684,10 +641,8 @@ public enum ShellProcessRunner {
                                   userInfo: [NSLocalizedDescriptionKey: "Script timed out after \(Int(budget)) seconds"])
                 }
 
-                // Drain both pipes before the buffers are read. `waitUntilExit()` returns when the
-                // direct child exits, and the readability handlers can still hold unread output — or
-                // not have run at all. The `defer` above only fires after the return value is built,
-                // so reading the buffers first can truncate or lose the script's output entirely.
+                // Drain before reading buffers: waitUntilExit() can return before the handlers
+                // have consumed all output. The defer runs too late for this.
                 outReader.finish()
                 errReader.finish()
 

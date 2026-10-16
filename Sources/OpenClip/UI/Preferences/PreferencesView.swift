@@ -1,21 +1,14 @@
 // PreferencesView.swift
 // OpenClip
 //
-// The Settings window: a modern Liquid Glass window layout:
-// - Near-black window background with native traffic lights top-left over the sidebar.
-// - Fixed-width sidebar sitting directly on the window background (no card/border/shadow).
-// - Capsule search field below traffic lights.
-// - Colored rounded-square icon tiles for all pages.
-// - Subtle translucent row selection highlight (not accent color).
-// - Inset rounded detail card with back/forward glass capsule, page title, and trailing pill actions.
+// The Settings window: Liquid Glass layout with a fixed-width sidebar on the window background and an inset rounded detail card.
 
 import SwiftUI
 import Combine
 import Core
 import KeyboardShortcuts
 
-/// The public vocabulary for opening the window on a page (the status item, the notification
-/// other parts of the app post). Maps onto the router's sidebar pages.
+/// Opens the window on a page; maps onto the router's sidebar pages.
 public enum PreferenceTab: String, CaseIterable, Hashable, Sendable {
     case general = "General"
     case customize = "Customize"
@@ -31,12 +24,10 @@ public enum PreferenceTab: String, CaseIterable, Hashable, Sendable {
         LocalizedStringKey(rawValue)
     }
 
-    /// The window's title for this pane.
     public var windowTitle: String {
         page.staticTitle ?? String(localized: String.LocalizationValue(rawValue))
     }
 
-    /// The sidebar page this tab names.
     public var page: SettingsPage {
         switch self {
         case .general: return .general
@@ -52,20 +43,15 @@ public enum PreferenceTab: String, CaseIterable, Hashable, Sendable {
 
 @MainActor
 public struct PreferencesView: View {
-    /// The Actions list measure.
     private static let customizeListMaxWidth: CGFloat = SettingsLayout.contentMaxWidth
 
     @Setting(SettingKey.disabledActionIDs) private var disabledActionIDs
     @Setting(SettingKey.disabledPackages) private var disabledPackages
-    /// The Customize list's selection, kept here so the toolbar's New Group can seed a group with it.
+    /// Lets the toolbar's New Group seed a group with the selection.
     @State private var selectedRowIDs: Set<String> = []
-    /// The Customize list's search text.
     @State private var customizeQuery = ""
-    /// The folder, manifest and README of the extension whose page is on screen.
     @State private var packageDetails: ExtensionPackageDetails?
-    /// Bumped when extensions change.
     @State private var packageReloadToken = 0
-    /// Bumped when system settings change.
     @State private var systemColorsToken = 0
     @State private var isSearchExpanded = false
     @FocusState private var isSearchFocused: Bool
@@ -179,8 +165,7 @@ public struct PreferencesView: View {
         }
         .onChange(of: customizeQuery) { _, query in
             guard toolbarModel.page == .customize || toolbarModel.page == .shortcuts else { return }
-            // Filtered rows can hide previously selected actions. Clear selection so those
-            // hidden actions cannot be included in a new group.
+            // Filtered-out rows must not stay in a new group's selection.
             selectedRowIDs.removeAll()
             toolbarModel.searchQuery = query
         }
@@ -617,7 +602,6 @@ public struct PreferencesView: View {
 
     private var detailTopBar: some View {
         HStack(spacing: 12) {
-            // Glass capsule with < | >
             HStack(spacing: 0) {
                 Button {
                     router.goBack()
@@ -651,7 +635,6 @@ public struct PreferencesView: View {
             }
             .settingsGlassCapsule()
 
-            // Current sub-page title next to chevrons when drilled in
             if router.path.count > 1 {
                 Text(title(for: router.currentPage))
                     .font(.system(size: 15, weight: .semibold))
@@ -896,8 +879,7 @@ public struct PreferencesView: View {
             }
             .frame(width: 180, height: 28)
             .settingsGlassCapsule(interactive: false)
-            // The TextField only exists once this branch renders, so the expand button cannot
-            // focus it in the same transaction — take focus here instead.
+            // TextField only exists once this branch renders, so focus it here, not in the expand button.
             .onAppear {
                 if isSearchExpanded {
                     isSearchFocused = true

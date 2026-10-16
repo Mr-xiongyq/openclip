@@ -1,12 +1,8 @@
 // AIConversation.swift
 // OpenClip
 //
-// What the result card has done so far in one session: the original selection and each
-// instruction with the result it produced. A follow-up hands this to the provider as *context* —
-// clearly labelled as history, separated from the current task, and marked as already applied —
-// so the model can keep tone, language and intent consistent ("keep the greeting you added",
-// "same style as before") instead of seeing only the latest text. Capped so it stays within the
-// smaller on-device context windows.
+// Result-card session history, sent to the provider as labelled, already-applied context. Capped
+// to fit small on-device context windows.
 import Foundation
 
 struct AIConversation: Equatable, Sendable {
@@ -15,16 +11,13 @@ struct AIConversation: Equatable, Sendable {
         let result: String
     }
 
-    /// The text the session started from (the selection).
     var original: String
-    /// Every instruction run in this session with its result, oldest first.
+    /// Oldest first.
     var steps: [Step]
 
-    /// How many of the most recent steps are sent; older ones are summarised as a count.
+    /// Only the most recent steps are sent; older ones are summarised as a count.
     static let maxSteps = 5
-    /// Longest result (or original) sent verbatim; longer ones are cut with an ellipsis.
     static let maxTextLength = 1500
-    /// Longest instruction sent verbatim (preset prompts can be long).
     static let maxInstructionLength = 300
 
     func appending(instruction: String, result: String) -> AIConversation {
@@ -33,9 +26,7 @@ struct AIConversation: Equatable, Sendable {
         return copy
     }
 
-    /// The task section for a follow-up: the current instruction first, then the history block.
-    /// The history is explicitly context — already applied, not to be redone — and the last
-    /// step's result is identified as the `<text>` block the model is asked to transform.
+    /// Current instruction first, then history labelled as already applied so it is not redone.
     func followUpTask(current instruction: String) -> String {
         var lines: [String] = []
         lines.append("CURRENT TASK (apply this to the text in the <text> block):")

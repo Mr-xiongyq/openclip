@@ -11,27 +11,21 @@ import Core
 /// Reusable appearance configuration form fields: Hero Icon on the left, Title + Display Mode on the right.
 struct ActionAppearanceFields: View {
     @Binding var title: String
-    /// Native action title used when the name field is empty in Show-Text mode (matches what
-    /// saving persists as the display text).
+    /// Native title shown in Show-Text mode when the name field is empty.
     let displayTextFallback: String
     @Binding var iconSymbol: String
-    /// Symbol the field was seeded with ("" when the action's real icon is not symbol-representable);
-    /// used to tell a user-picked symbol apart from the untouched baseline.
+    /// Seed symbol ("" when not symbol-representable); tells a user-picked symbol from the baseline.
     let initialIconSymbol: String
-    /// The action's effective current icon (.local/.url/.text/.symbol) shown until the user picks a
-    /// replacement; nil when the baseline is already fully described by `iconSymbol`.
+    /// Effective current icon until the user picks a replacement; nil when `iconSymbol` fully describes it.
     let baseIcon: ActionIcon?
     @Binding var displayMode: Int // 0 = Show Icon, 1 = Show Text
-    /// Symbol Show Icon mode resolves to for text-glyph builtins (Copy/Cut/Paste) while no
-    /// replacement has been picked; nil for actions whose icon is already symbol-representable.
+    /// Show-Icon fallback for text-glyph builtins (Copy/Cut/Paste) until a replacement is picked.
     var textGlyphFallbackSymbol: String? = nil
-    /// Optional callback when the icon chooser opens.
     var onPickIcon: (() -> Void)? = nil
 
     @State private var isIconPickerPresented = false
     @State private var isIconHovered = false
 
-    /// What the icon preview should render right now (same resolution the popup bar applies).
     private var previewIcon: ActionIcon {
         Self.resolvedPreviewIcon(
             displayMode: 0,
@@ -44,10 +38,7 @@ struct ActionAppearanceFields: View {
         )
     }
 
-    /// Preview resolution, mirroring `ActionCustomizationManager.popupIcon`: Show-Text mode swaps the
-    /// icon slot for the effective display text (custom title, else the native one); Show-Icon mode
-    /// keeps the real icon until a genuinely user-picked replacement symbol exists, falling back to
-    /// `textGlyphFallbackSymbol` for text-glyph builtins.
+    /// Mirrors `ActionCustomizationManager.popupIcon`; keep the two in sync.
     static func resolvedPreviewIcon(
         displayMode: Int,
         title: String,
@@ -73,7 +64,6 @@ struct ActionAppearanceFields: View {
         return ActionIcon.resolve(from: iconSymbol)
     }
 
-    /// Hero icon content sized appropriately for the 48x48 hero button.
     @ViewBuilder
     private var heroIconView: some View {
         if case .text(let text) = previewIcon, text.count > 2 {
@@ -107,7 +97,6 @@ struct ActionAppearanceFields: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
-            // Hero Icon Button
             Button {
                 isIconPickerPresented = true
                 onPickIcon?()
@@ -142,7 +131,6 @@ struct ActionAppearanceFields: View {
                 }
             }
 
-            // Title & Display Mode Controls
             VStack(alignment: .leading, spacing: 8) {
                 TextField("Action Name", text: $title)
                     .font(.system(size: 13, weight: .medium))
@@ -206,9 +194,7 @@ struct InsetGroupCard<Content: View>: View {
 
 // MARK: - Icon Picker Page
 
-/// The icon chooser as a page of the settings window. It writes to whatever binding the router was
-/// handed when the page was pushed — the editor underneath stays mounted with its draft — and
-/// picking an icon is what leaves the page.
+/// Icon chooser page. Writes to the binding the router was handed; picking an icon leaves the page.
 @MainActor
 struct IconPickerPage: View {
     @ObservedObject private var router = SettingsRouter.shared

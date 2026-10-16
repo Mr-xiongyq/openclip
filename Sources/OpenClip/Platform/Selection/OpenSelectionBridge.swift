@@ -8,7 +8,7 @@ import Foundation
 import Core
 @_exported import OpenSelection
 
-// Disambiguate types shared with Core in favor of Core domain types within OpenClip.
+// Prefer Core domain types over OpenSelection's same-named types.
 public typealias AppIdentity = Core.AppIdentity
 public typealias SelectionGatePolicy = Core.SelectionGatePolicy
 public typealias CursorClass = Core.CursorClass
@@ -17,7 +17,7 @@ public typealias SelectionReadStatus = Core.SelectionReadStatus
 public typealias LogLevel = Core.LogLevel
 
 extension SelectionRetrievalCoordinator {
-    /// Convenience initializer preserving compatibility with OpenClip's TextResult-based copy captures.
+    /// Compatibility init for TextResult-based copy captures.
     public init(
         inspect: @escaping TargetProvider = { trace in AXElementInspector.inspect(trace: trace) },
         copyCapture: (@Sendable (CopyTrigger) async -> Core.TextResult?)?,
@@ -48,7 +48,6 @@ extension SelectionRetrievalCoordinator {
         )
     }
 
-    /// Convenience initializer accepting parameterless SimpleTargetProvider.
     public init(
         inspect: @escaping SimpleTargetProvider,
         copyCapture: (@Sendable (CopyTrigger) async -> Core.TextResult?)?,
@@ -63,7 +62,6 @@ extension SelectionRetrievalCoordinator {
         )
     }
 
-    /// Reads selection details using OpenClip's Core.AppIdentity and Core.AppPolicyContext.
     public func retrieveResponse(
         for app: Core.AppIdentity,
         policy: Core.AppPolicyContext,
@@ -131,7 +129,6 @@ extension SelectionRetrievalCoordinator {
         return (response.result, response.isEditable)
     }
 
-    /// Reads selection using OpenClip's Core.AppIdentity and Core.AppPolicyContext.
     public func retrieve(
         for app: Core.AppIdentity,
         policy: Core.AppPolicyContext,
@@ -196,7 +193,6 @@ extension OpenSelection.SelectionResult {
 }
 
 extension OpenSelection {
-    /// Non-destructive or clipboard-copy paste replacement for OpenClip effects.
     @MainActor
     public static func replace(
         with text: String,
@@ -237,7 +233,7 @@ extension OpenSelection {
     }
 }
 
-/// Diagnostics sink bridging OpenSelection structured events and cascade reports to OpenClip's logging pipeline.
+/// Routes OpenSelection diagnostics into OpenClip's logging.
 public struct OpenClipDiagnosticsSink: OpenSelectionDiagnosticsSink {
     public let minimumLevel: OpenSelection.LogLevel
 
@@ -269,8 +265,7 @@ public struct OpenClipDiagnosticsSink: OpenSelectionDiagnosticsSink {
     }
 
     public func finish(_ report: CascadeReport) {
-        // The correlated completion event is the sole normal-level summary.
-        // Reports remain available to other sinks and the diagnostics inspector.
+        // Only the correlated completion event logs at normal level.
     }
 
     private static func format(_ value: OpenSelection.FieldValue) -> String {

@@ -1,29 +1,14 @@
 // ActionResultDelivery.swift
 // OpenClip
 //
-// The single, pure decision that standardizes how a text-producing result is delivered (paste vs
-// copy) and which companion toast (if any) surfaces. The pipeline is Select → Probe → Toast:
-//   * Select which result wins — a declared `delivery.secondary` for a secondary click, else the
-//     primary `raw` (with the legacy default: a secondary click on a paste primary copies; the
-//     rich analogue derives `.copyContent` from `.pasteContent`). The declarative secondary is the
-//     declared *outcome* for static kinds/builtins; the JS imperative branch
-//     (openclip.input.isSecondaryClick) is chosen in-script and simply arrives as `raw`.
-//   * Apply probe — a `.paste`/`.pasteContent` is never pasted into a target that cannot paste
-//     (the unified `PasteAvailability` answer — per-app rules first, AX probe fallback — says no):
-//     it becomes `.copy`/`.copyContent`.
-//   * Toast — the click's declared toast (`primaryToast`/`secondaryToast`) wins; otherwise the
-//     default "Copied" toast fires for any copy outcome (`.copy`, `.copyContent`, `.copyDefinition`).
-// Only paste outcomes are ever downgraded (`.paste`→`.copy`, `.pasteContent`→`.copyContent`); an
-// explicit copy stays a copy, and non-text results (openURL, notify, keyPress, ...) pass through
-// untouched. A top-level `.sequence` is resolved item by item; a declared secondary replaces the
-// whole sequence once. Pure Core — no AppKit, no UserDefaults; `canPaste` is the injected,
-// already-unified answer so this is unit-testable.
+// Pure decision for how a text or file result is delivered (paste vs copy) and which toast shows.
+// Pipeline: Select (declared secondary, else user preference / recommendation / output-kind default,
+// then the clipboard invariant on secondary clicks) -> Probe (paste downgraded to copy when the
+// target can't paste) -> Toast. Only paste outcomes are downgraded; non-text results pass through.
+// Core stays free of AppKit and UserDefaults; `canPaste` is injected so this is unit-testable.
 import Foundation
 
-/// The user's chosen behavior when an action implicitly returns text (the General-tab setting,
-/// "When an action returns text"). `.preview` renders the text in the AI result card;
-/// `.paste`/`.copy` deliver it directly. Core never reads the setting itself — the controller
-/// injects the per-click value into `resolve`.
+/// Behavior for an action that implicitly returns text. The controller injects the per-click value into `resolve`.
 public enum ResultDeliveryPreference: String, CaseIterable, Sendable, Equatable, Codable {
     case preview
     case paste
@@ -31,40 +16,18 @@ public enum ResultDeliveryPreference: String, CaseIterable, Sendable, Equatable,
 }
 
 public enum ActionResultDelivery {
-    /// How the user triggered the action — used to decide delivery. The popup populates this from
-    /// the click that ran the action (right-click or a ⇧-modifier click maps to `.secondary`).
     public enum ClickIntent: Sendable, Equatable {
         case primary
-        /// Right-click or a ⇧-modifier click maps to `.secondary`: the outcome requested by the
-        /// click is always deliver as a copy.
+        /// Right-click or ⇧-click. Secondary clicks copy (clipboard invariant).
         case secondary
     }
 
-    /// The default companion toast when a result is delivered as a copy (or a
-    /// `.copyDefinition` is delivered) and no toast is declared for the click.
+    /// Default toast for copy outcomes when the click declares none.
     private static let copiedToast = StatusFeedback(message: String(localized: "Copied"), style: .success, symbolName: "checkmark")
     private static let copiedFileToast = StatusFeedback(message: String(localized: "Copied File"), style: .success, symbolName: "doc.on.doc")
     private static let savedFileToast = StatusFeedback(message: String(localized: "File Saved"), style: .success, symbolName: "arrow.down.circle")
 
-    /// Decides the final ActionResult for a raw runtime outcome and the companion toast.
-    ///
-    /// The pipeline (Select → Probe → Toast):
-    /// 1. **Select**: resolves the target delivery mode via User Override -> Author Recommendation ->
-    ///    Output Kind default (`paste-or-copy` for text, `preview` for file). Applies author's
-    ///    declared `delivery.secondary` if present; otherwise applies the Clipboard Invariant for
-    ///    secondary clicks.
-    /// 2. **Apply probe**: a chosen `.paste` is downgraded to `.copy` when `canPaste` is false.
-    /// 3. **Toast**: `delivery.primaryToast` / `delivery.secondaryToast` per click, else the default
-    ///    "Copied" / "Copied File" / "File Saved" toast for copy/save outcomes.
-    ///
-    /// - Parameters:
-    ///   - raw: the result a runtime/effect produced (the action's primary outcome).
-    ///   - clickIntent: how the user triggered the action.
-    ///   - canPaste: the unified paste availability (rules + probe) for the target app.
-    ///   - delivery: the action's declared secondary outcome and per-click toasts.
-    ///   - preference: optional user per-action override.
-    ///   - recommendedResult: optional author-declared delivery recommendation.
-    ///   - outputKind: optional author-declared or inferred output kind.
+    /// Final result and companion toast for a raw outcome. Pipeline details are in the file header.
     public static func resolve(
         raw: ActionResult,
         clickIntent: ClickIntent,
@@ -89,10 +52,7 @@ public enum ActionResultDelivery {
 
     // MARK: - Decision pipeline
 
-    /// Step 1 — Select: which result the delivery starts from.
-    ///
-    /// A declared secondary replaces the whole result once (including a top-level `.sequence`).
-    /// Per-item rules then recurse into sequences via `selectItem`.
+    /// Step 1: a declared secondary replaces the whole result once; per-item rules then recurse into sequences.
     public static func select(
         raw: ActionResult,
         clickIntent: ClickIntent,
@@ -128,9 +88,7 @@ public enum ActionResultDelivery {
         return selectItem(raw, clickIntent: clickIntent, explicitMode: explicitMode)
     }
 
-    /// Per-item Select rules: recurses into `.sequence`, infers the delivery mode from the item
-    /// when no override applies, and applies the Clipboard Invariant for secondary clicks. Has no
-    /// declared-secondary check — that replaces the whole result once, before this walk.
+    /// Per-item select rules; recurses into `.sequence`. The declared secondary is handled before this walk.
     private static func selectItem(_ raw: ActionResult, clickIntent: ClickIntent, explicitMode: ActionResultDeliveryMode?) -> ActionResult {
         if case .sequence(let items) = raw {
             return .sequence(items.map { selectItem($0, clickIntent: clickIntent, explicitMode: explicitMode) })
@@ -160,7 +118,6 @@ public enum ActionResultDelivery {
                     return .paste(text)
                 }
             } else {
-                // Secondary click on text: Clipboard Invariant
                 switch effectiveMode {
                 case .paste, .pasteOrCopy, .preview, .open, .save:
                     return .copy(text)
@@ -186,7 +143,6 @@ public enum ActionResultDelivery {
                     return raw
                 }
             } else {
-                // Secondary click on file: Clipboard Invariant
                 switch effectiveMode {
                 case .preview, .save, .open, .paste, .pasteOrCopy:
                     return .copyFile(payload.url)
@@ -211,9 +167,7 @@ public enum ActionResultDelivery {
         return raw
     }
 
-    /// Step 2 — Apply probe: a chosen `.paste`/`.pasteContent` is never delivered to a target that
-    /// cannot paste. Single choke point for the paste→copy downgrade (plain and rich alike).
-    /// Recurses into `.sequence` so wrapped pastes are probed too.
+    /// Step 2: downgrades `.paste`/`.pasteContent` to copy when the target can't paste. The single choke point.
     private static func applyProbe(to selected: ActionResult, canPaste: Bool) -> ActionResult {
         switch selected {
         case .paste(let text):
@@ -223,13 +177,11 @@ public enum ActionResultDelivery {
         case .sequence(let items):
             return .sequence(items.map { applyProbe(to: $0, canPaste: canPaste) })
         default:
-            // `.copy`, `.copyContent`, `.cut`, and all non-text results are never downgraded.
             return selected
         }
     }
 
-    /// Step 3 — Toast: the click's declared toast wins; the default "Copied" toast fires for any
-    /// copy outcome (`.copy`, `.copyContent`, `.copyDefinition`) when no toast is declared.
+    /// Step 3: the click's declared toast wins; otherwise a default toast for copy and save outcomes.
     private static func toast(
         for delivered: ActionResult,
         clickIntent: ClickIntent,

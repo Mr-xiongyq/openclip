@@ -1,11 +1,9 @@
 // ExtensionManager.swift
 // OpenClip
 //
-// Discovers, loads, and manages installed OpenClip extensions from disk.
-// Applies the uniform action-ID rule (explicit id with bare-slug expansion, else index-based)
-// and keeps `group` actions schema-only (not registered as runnable).
-// Reports registration changes to the ActionRegistry via the onRegister/onUnregister
-// callbacks that ActionCoordinator.loadInitialState() wires. Does not touch ActionRegistry directly.
+// Discovers, loads, and manages installed extensions from disk. `group` actions stay schema-only.
+// Registration goes through the onRegister/onUnregister callbacks wired by ActionCoordinator;
+// this file never touches ActionRegistry directly.
 import Foundation
 
 
@@ -15,7 +13,7 @@ import Foundation
 public final class ExtensionManager: Sendable {
     public static let shared = ExtensionManager()
     
-    /// Wired by `ActionCoordinator.loadInitialState()`; the manager never touches the registry directly.
+    /// Wired by `ActionCoordinator.loadInitialState()`.
     public var onRegister: ((any Action) -> Void)?
     public var onUnregister: ((String) -> Void)?
     
@@ -24,11 +22,10 @@ public final class ExtensionManager: Sendable {
     public var optionWriter: (any ActionOptionWriting)?
     public var optionReader: (any ActionOptionReading)?
     
-    /// Persistence for the trust gate. When nil the manager skips gating entirely (pre-existing
-    /// behavior); production sets it in AppDelegate, tests set a MemorySettingsStore.
+    /// Trust-gate persistence. When nil, gating is skipped; production sets it in AppDelegate.
     public var settingsStore: (any SettingsStore)?
     
-    /// Supplies the running app version for `minOpenClipVersion` checks. Overridable for tests.
+    /// App version for `minOpenClipVersion` checks; overridable for tests.
     public var appVersionProvider: @Sendable () -> String = {
         (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.0.0"
     }
@@ -38,9 +35,7 @@ public final class ExtensionManager: Sendable {
     
     private init() {}
 
-    /// Clears loaded actions and wiring (callbacks, factory), returning the manager to its
-    /// pristine state. Test-isolation hook so the shared singleton does not leak loaded actions,
-    /// registration callbacks, or a stale factory across test cases.
+    /// Returns the manager to its pristine state; test-isolation hook for the shared singleton.
     public func reset() {
         loadedActions = []
         onRegister = nil
@@ -55,8 +50,7 @@ public final class ExtensionManager: Sendable {
     public func loadExtensions(from url: URL = Constants.extensionsDirectory) async {
         let factory = self.actionFactory
         let scanned = await Task.detached {
-            // Reference the type by name (not `Self`) — `Self.X` inside a Task.detached closure
-            // trips a Swift 6 region-based-isolation checker bug.
+            // Use the type name, not `Self`: `Self.X` in a Task.detached closure trips a Swift 6 isolation bug.
             return await ExtensionManager.scanDirectory(url, factory: factory)
         }.value
         
@@ -95,7 +89,7 @@ public final class ExtensionManager: Sendable {
         self.loadedActions = finalActions
     }
     
-    /// Installs a new extension package (.openclipext folder, .zip archive, or script file) into ~/.openclip/extensions
+    /// Installs a package (.openclipext folder, .zip, or script file) into ~/.openclip/extensions.
     public func installExtension(from sourceURL: URL, targetDir: URL = Constants.extensionsDirectory, source: String? = nil) async throws -> [any Action] {
         let fm = FileManager.default
         if !fm.fileExists(atPath: targetDir.path) {
@@ -109,7 +103,6 @@ public final class ExtensionManager: Sendable {
         
         let destinationURL: URL
         if isDir.boolValue {
-            // Folder installation (.openclipext)
             let folderName = sourceURL.lastPathComponent
             destinationURL = targetDir.appendingPathComponent(folderName)
             if fm.fileExists(atPath: destinationURL.path) {
@@ -117,19 +110,15 @@ public final class ExtensionManager: Sendable {
             }
             try fm.copyItem(at: sourceURL, to: destinationURL)
         } else if sourceURL.pathExtension.lowercased() == "zip" {
-            // Zip archive installation
             let stagingDir = targetDir.appendingPathComponent(".install_staging_\(UUID().uuidString)")
             
             // 1. Validate entries for containment BEFORE extraction to prevent Zip-Slip
             try await ExtensionManager.validateZipEntries(at: sourceURL, stagingDir: stagingDir)
 
-            // 2. Unzip to a temp staging dir, then find the .openclipext folder inside and move it.
             try fm.createDirectory(at: stagingDir, withIntermediateDirectories: true)
             defer { try? fm.removeItem(at: stagingDir) }
 
-            // Unzip via the shared async subprocess runner — never `waitUntilExit` on the main
-            // actor. Non-zero exit throws here (unzip failure surfaces instead of a silent empty
-            // staging dir).
+            // Shared async runner, never waitUntilExit on the main actor; a non-zero exit throws here.
             _ = try await ShellProcessRunner.run(ShellProcessRunner.Invocation(
                 executableURL: URL(fileURLWithPath: "/usr/bin/unzip"),
                 arguments: ["-q", sourceURL.path, "-d", stagingDir.path],
@@ -157,7 +146,6 @@ public final class ExtensionManager: Sendable {
             }
             try fm.moveItem(at: packageURL, to: destinationURL)
         } else {
-            // Standalone script installation (.sh, .py, .js)
             let fileName = sourceURL.lastPathComponent
             destinationURL = targetDir.appendingPathComponent(fileName)
             if fm.fileExists(atPath: destinationURL.path) {
@@ -166,7 +154,7 @@ public final class ExtensionManager: Sendable {
             try fm.copyItem(at: sourceURL, to: destinationURL)
         }
         
-        // Resolve installed package identifier so we return only actions belonging to this package.
+        // Return only this package's actions.
         let installedPackageID: String?
         var isDestDir: ObjCBool = false
         if fm.fileExists(atPath: destinationURL.path, isDirectory: &isDestDir), isDestDir.boolValue {
@@ -184,7 +172,7 @@ public final class ExtensionManager: Sendable {
             }
         }
 
-        // Record package source if not already explicitly recorded (e.g. file packages default to "package")
+        // File packages default to source "package" unless one was recorded.
         if let installedPackageID {
             if let source {
                 prepareInstall(source: source, packageID: installedPackageID)
@@ -193,7 +181,6 @@ public final class ExtensionManager: Sendable {
             }
         }
 
-        // Reload extensions to activate installed action(s)
         await loadExtensions(from: targetDir)
 
         if let installedPackageID {
@@ -207,8 +194,7 @@ public final class ExtensionManager: Sendable {
         return loadedActions
     }
     
-    /// Seeds `extensionSources[packageID] = source` ahead of a load so store installs auto-trust
-    /// during the subsequent gating pass. Call before `loadExtensions`/`installExtension`.
+    /// Seeds the source for `packageID` before a load, so store installs auto-trust during gating.
     public func prepareInstall(source: String, packageID: String) {
         guard let settings = self.settingsStore else { return }
         var sources = settings.get(.extensionSources)
@@ -216,7 +202,6 @@ public final class ExtensionManager: Sendable {
         settings.set(.extensionSources, value: sources)
     }
 
-    /// Sets or updates the extension source ("store", "package", "developer").
     public func setSource(_ source: String, for packageID: String) {
         guard let settings = self.settingsStore else { return }
         var sources = settings.get(.extensionSources)
@@ -224,9 +209,8 @@ public final class ExtensionManager: Sendable {
         settings.set(.extensionSources, value: sources)
     }
     
-    /// Trust-model Enable: record the package's current content hash and mark it trusted, then
-    /// reload so its real actions register. The only way to restore a gated/revoked package.
-    /// Fail-closed: nothing is persisted unless the content fingerprint resolves.
+    /// Records the current content hash, marks the package trusted, and reloads. Fail-closed: persists
+    /// nothing unless the fingerprint resolves.
     public func enablePackage(packageID: String, in directory: URL = Constants.extensionsDirectory) async {
         guard let settings = self.settingsStore else { return }
         guard let hash = ExtensionPackageHashResolver.packageHash(forPackageID: packageID, in: directory) else { return }
@@ -239,8 +223,7 @@ public final class ExtensionManager: Sendable {
         await loadExtensions(from: directory)
     }
     
-    /// Trust-model Disable: mark the package revoked (an explicit user "no"), then reload so its
-    /// real actions are replaced by the gated placeholder.
+    /// Marks the package revoked (explicit user "no"); reload swaps its actions for the gated placeholder.
     public func disablePackage(packageID: String, in directory: URL = Constants.extensionsDirectory) async {
         guard let settings = self.settingsStore else { return }
         var trust = settings.get(.extensionTrust)
@@ -249,11 +232,8 @@ public final class ExtensionManager: Sendable {
         await loadExtensions(from: directory)
     }
 
-    /// Re-records the trust fingerprint after an authorized in-app edit (ActionEditorPage save) so
-    /// tamper detection does not falsely flag the changed files. Only an already-`trusted` package
-    /// is re-trusted: a `revoked` (explicit user "no") or never-enabled (`seen`) package keeps its
-    /// trust state — a config-sheet save must never double as a consent flow. The next explicit
-    /// Enable records the new hash either way.
+    /// Re-records the fingerprint after an authorized in-app edit. Only `trusted` packages are re-trusted;
+    /// `revoked` and never-enabled (`seen`) packages keep their state, since a save is not consent.
     public func retrustAfterAuthorizedEdit(packageID: String, in directory: URL = Constants.extensionsDirectory) async {
         guard let settings = self.settingsStore else { return }
         guard settings.get(.extensionTrust)[packageID] == ExtensionTrustState.trusted.rawValue else {
@@ -263,14 +243,11 @@ public final class ExtensionManager: Sendable {
         await enablePackage(packageID: packageID, in: directory)
     }
     
-    /// Uninstalls an extension by removing its directory or file from ~/.openclip/extensions.
-    /// Matches the extension folder by reading the manifest identifier, which is the prefix of generated action IDs.
+    /// Removes the extension's directory or file, matched by manifest identifier (the prefix of action IDs).
     public func uninstallExtension(actionID: String, targetDir: URL = Constants.extensionsDirectory) async throws {
         let fm = FileManager.default
         let items = try fm.contentsOfDirectory(at: targetDir, includingPropertiesForKeys: [.isDirectoryKey])
-        // A duplicated package identifier extends its original identifier (for example,
-        // `com.example.hello.copy.ab12`). Prefer an exact manifest identifier before the
-        // prefix fallback below, or uninstalling the copy can remove the original first.
+        // Prefer an exact manifest match over the prefix fallback, so uninstalling a copy can't remove the original.
         let exactPackageURL = items.first { itemURL in
             guard !itemURL.lastPathComponent.hasPrefix(".") else { return false }
             var isDirectory: ObjCBool = false
@@ -301,14 +278,10 @@ public final class ExtensionManager: Sendable {
                 for fname in ExtensionManifestStore.candidateFileNames {
                     let manifestURL = itemURL.appendingPathComponent(fname)
                     if let meta = ExtensionManifestStore.readManifest(at: manifestURL) {
-                        // actionID starts with manifest identifier at a component boundary
-                        // (e.g. "com.openclip.applemusic.action.0" vs "com.openclip.applemusic"),
-                        // so com.foo never matches com.foobar.
+                        // Match on a component boundary: com.foo must not match com.foobar.
                         let actionIDPrefix = meta.identifier + "."
                         let matchesIdentifier = actionID == meta.identifier || actionID.hasPrefix(actionIDPrefix)
-                        // Also match a declared action id directly: a package duplicated before the
-                        // ids were namespaced carries an id with no package prefix, and would
-                        // otherwise be stranded on disk with no way to uninstall it.
+                        // Also match a declared action id, so legacy un-namespaced packages stay removable.
                         let matchesAction = !matchesIdentifier && meta.actions.indices.contains { index in
                             ExtensionManager.uniformActionID(metadata: meta.actions[index], manifest: meta, index: index) == actionID
                         }
@@ -336,12 +309,7 @@ public final class ExtensionManager: Sendable {
                     }
                 }
             } else {
-                // Standalone script: resolve by the loader's exact id rules (mirroring
-                // ExtensionPackageHashResolver.packageHash(forPackageID:)) — the synthesized
-                // "com.custom.<filename>" id or a declared `// Identifier:` header. Never a
-                // filename substring: "a" is contained in "com.custom.alpha.sh", so a raw
-                // contains() check deletes the wrong script, and header-identified scripts
-                // would never match their filename at all.
+                // Match by the loader's exact id rules, never a filename substring: "a" is contained in "com.custom.alpha.sh".
                 let synthesized = "\(Constants.customIdentifierPrefix)\(itemURL.lastPathComponent)"
                 if actionID == synthesized || ExtensionPackageHashResolver.declaredIdentifier(of: itemURL) == actionID {
                     matched = true
@@ -389,9 +357,7 @@ public final class ExtensionManager: Sendable {
         await loadExtensions(from: targetDir)
     }
 
-    /// Duplicates an installed extension package (.openclipext folder or standalone script) on disk.
-    /// Creates a cloned directory or file with a unique copy identifier, copies configured options,
-    /// marks the package trusted, reloads extensions, and returns the new action ID.
+    /// Clones an installed package under a unique copy id, copies its options, marks it trusted, and returns the new action ID.
     @discardableResult
     public func duplicateExtension(actionID: String, targetDir: URL = Constants.extensionsDirectory) async throws -> String {
         let fm = FileManager.default
@@ -441,11 +407,8 @@ public final class ExtensionManager: Sendable {
                                     let tail = oldID.split(separator: ".").last.map(String.init) ?? oldID
                                     updatedID = "\(newPackageID).\(tail)"
                                 } else {
-                                    // Namespace the bare id under the new package identifier.
-                                    // `uniformActionID` keeps any id that already contains a dot
-                                    // as-is, so appending ".copy.<suffix>" made the id dotted and
-                                    // it escaped its package: the copy loaded, but its id had no
-                                    // package prefix, so `uninstallExtension` could never match it.
+                                    // Namespace the bare id under the new package. A dotted id would escape the package,
+                                    // so uninstallExtension could never match it.
                                     updatedID = "\(newPackageID).\(oldID)"
                                 }
                             } else {
@@ -591,8 +554,7 @@ public final class ExtensionManager: Sendable {
         throw NSError(domain: "ExtensionManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "No extension found for action \(actionID)."])
     }
     
-    /// Test-only seam exposing the private scan over a directory. The real path funnels through
-    /// `loadExtensions` (which applies trust gating); tests use this to obtain raw scanned actions.
+    /// Test-only: raw scan results, bypassing trust gating.
     nonisolated public static func scanActionsForTest(in url: URL, factory: (any ActionFactory)? = nil) async -> [any Action] {
         await scanDirectory(url, factory: factory)
     }
@@ -611,14 +573,13 @@ public final class ExtensionManager: Sendable {
                 let isDirectory = resourceValues.isDirectory ?? false
                 
                 if isDirectory {
-                    // Check for native openclip.json, manifest.json, or Config.json inside .openclipext package
+                    // A manifest file marks a package; otherwise scan for standalone scripts.
                     let manifestFile = ExtensionManifestStore.manifestFileURL(in: itemURL)
 
                     if let manifestFile {
                         let actions = await loadManifestExtension(manifestURL: manifestFile, directoryURL: itemURL, factory: factory)
                         newActions.append(contentsOf: actions)
                     } else {
-                        // Scan directory for standalone executable scripts
                         if let dirItems = try? fileManager.contentsOfDirectory(at: itemURL, includingPropertiesForKeys: [.isDirectoryKey]) {
                             for childURL in dirItems {
                                 let childResource = try? childURL.resourceValues(forKeys: [.isDirectoryKey])
@@ -631,7 +592,6 @@ public final class ExtensionManager: Sendable {
                         }
                     }
                 } else {
-                    // Try to parse standalone script
                     if let action = await loadStandaloneScriptExtension(scriptURL: itemURL) {
                         newActions.append(action)
                     }
@@ -661,9 +621,7 @@ public final class ExtensionManager: Sendable {
             return []
         }
 
-        // Validation pass: unknown action kinds, missing required fields, and any declared
-        // capability outside the (empty) known set reject the whole package instead of silently
-        // mis-routing or skipping.
+        // Unknown kinds, missing required fields, or unknown capabilities reject the whole package.
         let validator = ManifestValidator.shared
         let record = validator.validate(manifest, data: data)
         guard record.isValid else {
@@ -679,17 +637,14 @@ public final class ExtensionManager: Sendable {
         var actions: [any Action] = []
         for (index, actionMeta) in manifest.actions.enumerated() {
             if let factory {
-                // createActions flattens `.group` entries into a GroupAction row + sub-actions
-                // (Phase 8); non-group kinds return a single entry.
+                // `.group` entries flatten into a GroupAction row plus sub-actions.
                 actions.append(contentsOf: await factory.createActions(metadata: actionMeta, manifest: manifest, directoryURL: directoryURL, index: index))
             } else if actionMeta.kind != .group {
                 let actionId = uniformActionID(metadata: actionMeta, manifest: manifest, index: index)
                 let title = actionMeta.title ?? manifest.name
                 let icon = parseIcon(actionMeta.icon, directoryURL: directoryURL)
                 let regex = actionMeta.regex
-                // Stamp the manifest-identifier chrome here just like the factory path, so the
-                // trust gate (which groups packages by `chrome.source`) sees the package id
-                // (`com.t.first`), not the uniform action id (`com.t.first.action.0`).
+                // Stamp the package id as chrome.source (not the action id) so the trust gate groups by package.
                 let extensionChrome = ActionChrome(
                     badge: .extensionPkg(manifest.name),
                     rowStyle: .standard,
@@ -789,9 +744,7 @@ public final class ExtensionManager: Sendable {
         ActionIcon.resolve(from: iconStr, relativeTo: directoryURL)
     }
 
-    /// Uniform action ID rule: an explicit `metadata.id` wins (a bare slug without a dot is prefixed with
-    /// the manifest identifier); otherwise the ID is stable by action index (`\(identifier).action.\(index)`).
-    /// Title-based IDs are gone.
+    /// Explicit `metadata.id` wins (bare slugs get the package prefix); else `<identifier>.action.<index>`.
     nonisolated public static func uniformActionID(metadata: ExtensionActionMetadata, manifest: ExtensionMetadata, index: Int) -> String {
         if let id = metadata.id {
             return id.contains(".") ? id : "\(manifest.identifier).\(id)"
@@ -799,7 +752,7 @@ public final class ExtensionManager: Sendable {
         return "\(manifest.identifier).action.\(index)"
     }
 
-    /// Validates all entry paths in a zip archive using `unzip -Z1` before extraction to prevent Zip-Slip vulnerabilities.
+    /// Validates zip entry paths (`unzip -Z1`) before extraction, against Zip-Slip.
     public static func validateZipEntries(at zipURL: URL, stagingDir: URL) async throws {
         let listOutput = try await ShellProcessRunner.run(ShellProcessRunner.Invocation(
             executableURL: URL(fileURLWithPath: "/usr/bin/unzip"),
@@ -819,8 +772,7 @@ public final class ExtensionManager: Sendable {
             }
         }
 
-        // Reject symbolic-link entries before extraction. A symlink created by the archive could
-        // be followed by a later entry (or by the install's own move) to write outside stagingDir.
+        // Reject symlink entries: a later entry could follow one to write outside stagingDir.
         let verboseOutput = try await ShellProcessRunner.run(ShellProcessRunner.Invocation(
             executableURL: URL(fileURLWithPath: "/usr/bin/unzip"),
             arguments: ["-Z", "-v", zipURL.path],
@@ -831,9 +783,7 @@ public final class ExtensionManager: Sendable {
         }
     }
 
-    /// Scans `unzip -Z -v` output for the first entry whose Unix type bits mark a symbolic link
-    /// (`0o120000`, S_IFLNK). Each `Central directory entry #N:` block names its entry on the
-    /// following content line; the `Unix file attributes (<octal> octal)` line carries its mode.
+    /// First symlink entry (S_IFLNK in the Unix mode bits) in `unzip -Z -v` output.
     private static func firstSymlinkEntry(in verboseOutput: String) -> String? {
         var currentName: String?
         for line in verboseOutput.split(separator: "\n", omittingEmptySubsequences: true) {

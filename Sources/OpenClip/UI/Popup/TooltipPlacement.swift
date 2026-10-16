@@ -24,20 +24,9 @@ public struct TooltipPlacement: Equatable, Sendable {
 }
 
 public enum TooltipPlacer {
-    /// Visual gap between the hovered button and the tooltip.
     public static let gap: CGFloat = 4
 
-    /// Chooses the tooltip rect for a hovered target.
-    ///
-    /// - Parameters:
-    ///   - targetScreenFrame: the hovered button's frame in screen coordinates.
-    ///   - tooltipSize: the measured tooltip content size.
-    ///   - screenBounds: the visible frame of the screen the target lives on.
-    ///   - avoidanceRects: screen rects the tooltip must not intersect (e.g. the expanded
-    ///     sub-bar's panel frame when hovering the main bar, and vice versa).
-    ///   - cursorLocation: the current pointer location in screen coordinates; a candidate that
-    ///     would cover the cursor is demoted so the tooltip never hides the pointer.
-    ///   - padding: minimum inset from the screen's visible-frame edges.
+    /// Picks the tooltip rect for a hovered target, avoiding `avoidanceRects` and the cursor where possible.
     public static func place(
         targetScreenFrame target: CGRect,
         tooltipSize: CGSize,
@@ -77,8 +66,7 @@ public enum TooltipPlacer {
         return TooltipPlacement(edge: edge, origin: CGPoint(x: originX, y: originY), size: size)
     }
 
-    /// Higher is better. A candidate loses points for leaving the screen, intersecting an
-    /// avoidance rect (proportionally to the overlapped area), or covering the cursor.
+    /// Higher is better: penalizes leaving the screen, overlapping avoidance rects, and covering the cursor.
     private static func score(
         _ placement: TooltipPlacement,
         screenBounds: CGRect,
@@ -108,8 +96,7 @@ public enum TooltipPlacer {
         return result
     }
 
-    /// Last-resort containment: if even the chosen edge cannot fit on screen (tiny screens,
-    /// huge tooltips), slide the rect back inside the visible frame.
+    /// Last resort when neither edge fits (tiny screens, huge tooltips): slide back inside the visible frame.
     private static func clampToScreen(_ placement: TooltipPlacement, screenBounds: CGRect, padding: CGFloat) -> TooltipPlacement {
         var origin = placement.origin
         let minX = screenBounds.minX + padding

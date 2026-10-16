@@ -25,8 +25,7 @@ struct MockAction: Action {
     }
 }
 
-/// Stands in for the AI Tools launcher: a row that resolves its children out of the catalog
-/// (`chrome.source == .ai`), exactly as `AIToolsAction` does.
+/// Stands in for the AI Tools launcher, resolving children from the catalog as `AIToolsAction` does.
 struct MockLauncherAction: Action, SubActionProviding {
     let id: String
     let title = "Launcher"
@@ -206,8 +205,7 @@ final class ActionRegistryTests: XCTestCase {
         let completion = MockAction(id: "builtin.completion", shouldBeEnabled: true, chrome: ActionChrome(popupBehavior: .provideCompletions))
         // Contextually unable: `isEnabled(for:)` is false, so the palette must not offer it.
         let contextuallyUnable = MockAction(id: "mock.searchdisabled", shouldBeEnabled: false)
-        // Settings-disabled (`.disabledActionIDs`): a row toggled off in Preferences is not
-        // offered anywhere, the palette included.
+        // Toggled off in Preferences: not offered anywhere, the palette included.
         let settingsDisabled = MockAction(id: "mock.settingsdisabled", shouldBeEnabled: true)
         let normal = MockAction(id: "mock.searchnormal", shouldBeEnabled: true)
         registry.register(builtIns: [group, sub, completion, contextuallyUnable, settingsDisabled, normal])
@@ -227,8 +225,7 @@ final class ActionRegistryTests: XCTestCase {
 
     @MainActor
     func testAIPresetsRemainInAvailableCatalogForGroupResolution() {
-        // Own store: `ActionRegistry()` reads the real preferences domain (the test host shares
-        // OpenClip's bundle id), so a developer disabling Copy in the app would fail this test.
+        // Own store: the default one reads the real prefs domain, so local settings could fail this test.
         let registry = ActionRegistry(settingsStore: MemorySettingsStore())
         let aiChrome = ActionChrome(badge: .none, rowStyle: .standard, popupBehavior: .perform, source: .ai)
         let aiAction = MockAction(id: "ai.preset.proofread", shouldBeEnabled: true, chrome: aiChrome)
@@ -257,8 +254,7 @@ final class ActionRegistryTests: XCTestCase {
         let context = ActionContext(selection: selection, modifiers: [])
         let available = registry.availableActions(for: context)
 
-        // The launcher is a normal bar row (bar-visible), but the palette excludes it — the AI
-        // presets already cover AI there.
+        // The bar shows the launcher; the palette excludes it because AI presets cover it.
         XCTAssertTrue(available.contains { $0.id == "builtin.aiTools" })
         XCTAssertTrue(available.contains { $0.id == "mock.normal" })
         XCTAssertFalse(registry.searchCatalog(for: context).contains { $0.id == "builtin.aiTools" })
@@ -268,9 +264,7 @@ final class ActionRegistryTests: XCTestCase {
 
     @MainActor
     func testUnorderedBuiltinDefaultsIntoBuiltinGroupBeforeExtensions() {
-        // Regression: with a populated `.actionOrder` that omits a newly registered builtin
-        // (e.g. the AI Tools launcher on upgrade), it must slot into the builtin group — after
-        // the last ordered builtin and ahead of installed extensions — not the absolute tail.
+        // Regression: a builtin missing from a populated `.actionOrder` (e.g. AI Tools after upgrade) slots after the builtins, before extensions.
         let store = MemorySettingsStore()
         store.set(.actionOrder, value: ["builtin.search", "builtin.copy", "builtin.reveal_in_finder"])
         let registry = ActionRegistry(settingsStore: store)
@@ -310,10 +304,7 @@ final class ActionRegistryTests: XCTestCase {
         return registry.searchCatalog(for: ActionContext(selection: selection, modifiers: [])).map(\.id)
     }
 
-    /// Regression: AI presets carry chrome source `.ai` — neither user-ordered nor builtin — so
-    /// they sank to the very end of the catalog however the user had dragged "AI Tools". The
-    /// palette lists the presets in place of the launcher row, so dragging AI Tools to the top
-    /// must put the AI commands at the top of the palette.
+    /// Regression: `.ai` presets sank to the end of the catalog; dragging AI Tools to the top must lead the palette with them.
     @MainActor
     func testAIPresetsFollowTheLauncherOrderedFirst() {
         let store = MemorySettingsStore()
@@ -335,7 +326,7 @@ final class ActionRegistryTests: XCTestCase {
                        ["ai.preset.proofread", "ai.preset.rewrite", "builtin.copy", "builtin.search"])
     }
 
-    /// The same inheritance in the other direction — AI Tools dragged last keeps its presets last.
+    /// Dragged last, the presets stay last.
     @MainActor
     func testAIPresetsFollowTheLauncherOrderedLast() {
         let store = MemorySettingsStore()
@@ -353,8 +344,7 @@ final class ActionRegistryTests: XCTestCase {
                        ["builtin.copy", "builtin.search", "builtin.aiTools", "ai.preset.proofread"])
     }
 
-    /// With no user order at all, presets still sit with their launcher among the builtins rather
-    /// than behind every installed extension.
+    /// Without a user order, presets stay with their launcher, ahead of extensions.
     @MainActor
     func testAIPresetsFollowTheLauncherWithNoUserOrder() {
         let registry = ActionRegistry(settingsStore: MemorySettingsStore())
@@ -380,8 +370,7 @@ final class ActionRegistryTests: XCTestCase {
         ])
     }
 
-    /// Inheritance is a fallback, never an override: a child the user ordered explicitly keeps the
-    /// rank they gave it.
+    /// Inheritance is a fallback; an explicitly ordered child keeps its rank.
     @MainActor
     func testExplicitlyOrderedChildKeepsItsOwnRank() {
         let store = MemorySettingsStore()
@@ -397,10 +386,7 @@ final class ActionRegistryTests: XCTestCase {
                        ["ai.preset.rewrite", "builtin.copy", "builtin.aiTools", "ai.preset.proofread"])
     }
 
-    /// Regression (user-reported): dragging AI Tools to the top in Preferences changed nothing in
-    /// the palette until OpenClip was restarted. `moveActions` published the hand-moved array
-    /// directly, and a drag moves only the grabbed row — the presets kept their pre-drag position
-    /// until some later registration re-sorted the catalog. The move must re-derive the order.
+    /// Regression: a drag of AI Tools must move its presets immediately, not after a restart; the move must re-derive derived rows.
     @MainActor
     func testMovingTheLauncherImmediatelyMovesItsPresets() {
         let store = MemorySettingsStore()
@@ -418,11 +404,10 @@ final class ActionRegistryTests: XCTestCase {
         XCTAssertEqual(registry.actions.map(\.id),
                        ["builtin.cut", "builtin.copy", "builtin.aiTools", "ai.preset.proofread", "ai.preset.rewrite"])
 
-        // Drag AI Tools to the top, exactly as the Preferences outline does (indices into `actions`).
+        // Drag AI Tools to the top, as the Preferences outline does.
         let launcherIndex = registry.actions.firstIndex { $0.id == "builtin.aiTools" }!
         registry.moveActions(from: IndexSet(integer: launcherIndex), to: 0)
 
-        // No re-registration, no restart: the presets follow immediately.
         XCTAssertEqual(registry.actions.map(\.id),
                        ["builtin.aiTools", "ai.preset.proofread", "ai.preset.rewrite", "builtin.cut", "builtin.copy"])
         XCTAssertEqual(Self.palette(registry),
@@ -471,12 +456,11 @@ final class ActionRegistryTests: XCTestCase {
 
         XCTAssertEqual(registry.actions.map(\.id), ["com.pkg.group", "com.pkg.group.sub1", "com.pkg.group.sub2", "com.pkg.other"])
 
-        // Move group after other: in actions, group is index 0. Moving group to after other (index 4)
+        // Move group (index 0) past `other` (index 4).
         registry.moveActions(from: IndexSet(integer: 0), to: 4)
 
-        // Group and its subactions move together after other
         XCTAssertEqual(registry.actions.map(\.id), ["com.pkg.other", "com.pkg.group", "com.pkg.group.sub1", "com.pkg.group.sub2"])
-        // Persisted actionOrder must NOT contain sub1 or sub2!
+        // Persisted order excludes sub-actions.
         XCTAssertEqual(store.get(.actionOrder), ["com.pkg.other", "com.pkg.group"])
     }
 
@@ -501,16 +485,13 @@ final class ActionRegistryTests: XCTestCase {
 
         XCTAssertEqual(registry.actions.map(\.id), ["com.pkg.group", "com.pkg.group.sub1", "com.pkg.group.sub2", "com.pkg.group.sub3"])
 
-        // Reorder subactions: 3, 1, 2
         registry.setExtensionGroupMemberOrder(groupID: "com.pkg.group", memberIDs: ["com.pkg.group.sub3", "com.pkg.group.sub1", "com.pkg.group.sub2"])
 
         XCTAssertEqual(registry.actions.map(\.id), ["com.pkg.group", "com.pkg.group.sub3", "com.pkg.group.sub1", "com.pkg.group.sub2"])
         XCTAssertEqual(group.subActions(in: registry.actions).map(\.id), ["com.pkg.group.sub3", "com.pkg.group.sub1", "com.pkg.group.sub2"])
     }
 
-    /// The contract `AIActionSync` leans on when the user reorders presets: `register(action:)`
-    /// replaces an id *in place*, so a reorder has to unregister and re-register to move the
-    /// entries — and when it does, the catalog follows the new order immediately.
+    /// `register(action:)` replaces in place, so a reorder must unregister and re-register to move entries.
     @MainActor
     func testReRegisteringPresetsInANewOrderReordersTheCatalog() {
         let store = MemorySettingsStore()
@@ -523,7 +504,7 @@ final class ActionRegistryTests: XCTestCase {
         registry.register(action: Self.aiPreset("ai.preset.rewrite"))
         XCTAssertEqual(Self.palette(registry), ["ai.preset.proofread", "ai.preset.rewrite", "builtin.cut"])
 
-        // Re-registering in place must NOT move anything (titles/prompts changing is not a move).
+        // An in-place re-register must not move anything.
         registry.register(action: Self.aiPreset("ai.preset.rewrite"))
         XCTAssertEqual(Self.palette(registry), ["ai.preset.proofread", "ai.preset.rewrite", "builtin.cut"])
 
@@ -547,7 +528,6 @@ final class ActionRegistryTests: XCTestCase {
         registry.register(action: Self.aiPreset("ai.preset.rewrite"))
         XCTAssertEqual(Self.palette(registry), ["ai.preset.proofread", "ai.preset.rewrite", "builtin.cut"])
 
-        // Atomic replacement with reverse order
         registry.replaceRegisteredActions(
             matching: { ActionIdentity.isAIPreset($0) },
             with: [Self.aiPreset("ai.preset.rewrite"), Self.aiPreset("ai.preset.proofread")]
@@ -555,9 +535,7 @@ final class ActionRegistryTests: XCTestCase {
         XCTAssertEqual(Self.palette(registry), ["ai.preset.rewrite", "ai.preset.proofread", "builtin.cut"])
     }
 
-    /// Regression test: replaceRegisteredActions replaces a known subset of actions and must NOT
-    /// prune action.order against registeredActions, which would drop saved positions of actions
-    /// not yet registered (e.g. AIToolsAction during startup).
+    /// Regression: replacing a subset must not prune `actionOrder` (e.g. AIToolsAction not yet registered at startup).
     @MainActor
     func testReplaceRegisteredActionsPreservesSavedActionOrderAcrossInitialSync() {
         let store = MemorySettingsStore()
@@ -565,21 +543,18 @@ final class ActionRegistryTests: XCTestCase {
         store.set(.actionOrder, value: savedOrder)
         let registry = ActionRegistry(settingsStore: store)
 
-        // Presets are replaced (as in AIActionSync.sync() on launch) before builtin.aiTools is registered.
+        // Presets are replaced at launch, before builtin.aiTools registers.
         registry.replaceRegisteredActions(
             matching: { ActionIdentity.isAIPreset($0) },
             with: [Self.aiPreset("ai.preset.proofread"), Self.aiPreset("ai.preset.rewrite")]
         )
 
-        // The saved order must not have been pruned.
         XCTAssertEqual(store.get(.actionOrder), savedOrder)
 
-        // Register the launcher and surrounding actions.
         registry.register(action: MockAction(id: "builtin.copy", shouldBeEnabled: true))
         registry.register(action: MockLauncherAction(id: "builtin.aiTools"))
         registry.register(action: MockAction(id: "builtin.search", shouldBeEnabled: true))
 
-        // Saved order remains intact and dictates the action positions.
         XCTAssertEqual(store.get(.actionOrder), savedOrder)
         // In the catalog, top-level actions follow saved order while presets trail their parent launcher.
         XCTAssertEqual(
@@ -592,10 +567,7 @@ final class ActionRegistryTests: XCTestCase {
         )
     }
 
-    /// Regression test: unregistering an action (e.g. when an extension is disabled, gated,
-    /// Regression test: an extension action transitioning through gated placeholder
-    /// must NOT prune action.order in SettingsStore. When re-enabled, the action
-    /// must retain its customized order rather than shifting to the end.
+    /// Regression: a gated placeholder transition must not prune `actionOrder`; re-enabling keeps the saved position.
     @MainActor
     func testUnregisteringActionDoesNotPruneSavedActionOrder() {
         let store = MemorySettingsStore()
@@ -613,7 +585,7 @@ final class ActionRegistryTests: XCTestCase {
 
         XCTAssertEqual(registry.actions.map(\.id), ["builtin.search", "ext.local.action", "builtin.copy"])
 
-        // Action transitions to gated placeholder (e.g. when gated or reloading)
+        // Transition to a gated placeholder.
         let gated = GatedExtensionAction(
             packageID: "ext.local",
             title: "Local Ext",
@@ -627,16 +599,13 @@ final class ActionRegistryTests: XCTestCase {
         // Saved order must remain untouched because ext.local is still installed
         XCTAssertEqual(store.get(.actionOrder), savedOrder)
 
-        // Action is re-registered (turned back on)
         registry.register(action: localAction)
         registry.unregister(actionID: "ext.local")
 
-        // Must retain its exact saved position and NOT shift to the end
         XCTAssertEqual(registry.actions.map(\.id), ["builtin.search", "ext.local.action", "builtin.copy"])
     }
 
-    /// Regression test: an extension transitioning between gated placeholder and active action
-    /// must maintain its position, matching on package identifier when action ID differs.
+    /// Regression: a gated-to-active transition keeps position, matched by package identifier when IDs differ.
     @MainActor
     func testExtensionActionRetainsPositionWhenTransitioningBetweenGatedAndActive() {
         let store = MemorySettingsStore()
@@ -658,10 +627,9 @@ final class ActionRegistryTests: XCTestCase {
         registry.register(action: gated)
         registry.register(action: copy)
 
-        // Gated placeholder respects package order
         XCTAssertEqual(registry.actions.map(\.id), ["builtin.search", "ext.local", "builtin.copy"])
 
-        // User enables it -> real action is registered, old gated placeholder is unregistered
+        // Enabling swaps the placeholder for the real action.
         let realAction = MockAction(
             id: "ext.local.action.0",
             shouldBeEnabled: true,
@@ -670,20 +638,18 @@ final class ActionRegistryTests: XCTestCase {
         registry.register(action: realAction)
         registry.unregister(actionID: "ext.local")
 
-        // Real action inherits package rank from saved order and does not shift to end
+        // Inherits the package's saved rank.
         XCTAssertEqual(registry.actions.map(\.id), ["builtin.search", "ext.local.action.0", "builtin.copy"])
     }
 
-    /// A disabled AI preset is gone from the palette too — the toggle in AI → Actions is the same
-    /// promise as the one in Preferences → Actions.
+    /// A disabled AI preset is hidden from the palette, like any other disabled action.
     @MainActor
     func testDisabledAIPresetIsNotOfferedInThePalette() {
         let store = MemorySettingsStore()
         let registry = ActionRegistry(settingsStore: store)
         let enabled = MockAction(id: "ai.preset.proofread", shouldBeEnabled: true,
                                  chrome: ActionChrome(badge: .none, rowStyle: .standard, popupBehavior: .perform, source: .ai))
-        // `shouldBeEnabled: false` stands in for the preset's toggle being off: the real AIAction
-        // answers `isEnabled` from AIServiceManager's preset list.
+        // `shouldBeEnabled: false` stands in for a preset whose toggle is off.
         let disabled = MockAction(id: "ai.preset.rewrite", shouldBeEnabled: false,
                                   chrome: ActionChrome(badge: .none, rowStyle: .standard, popupBehavior: .perform, source: .ai))
         registry.register(builtIns: [enabled, disabled])
@@ -691,8 +657,7 @@ final class ActionRegistryTests: XCTestCase {
         XCTAssertEqual(Self.palette(registry), ["ai.preset.proofread"])
     }
 
-    /// A disabled group takes its sub-actions with it: the palette lists the members rather than
-    /// the group row, so the row's toggle has to reach them.
+    /// The palette lists members, not the group row, so disabling the group must hide them too.
     @MainActor
     func testDisabledGroupHidesItsSubActionsFromThePalette() {
         let store = MemorySettingsStore()

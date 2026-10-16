@@ -1,10 +1,8 @@
 // SettingsSnapshot.swift
 // OpenClip
 //
-// Portable, versioned representation of every known setting: each value as a JSON string plus its
-// change metadata. This is the unit for backup, export/import, and diagnostics, and it is what a
-// future sync would exchange. Only catalog keys are read or written, so removed/renamed settings
-// are ignored rather than blindly applied.
+// Portable, versioned snapshot of every catalog setting (JSON string values plus change metadata), the
+// unit for backup, export/import and diagnostics. Only catalog keys are read or written.
 import Foundation
 
 public struct SettingsSnapshot: Codable, Sendable {
@@ -56,9 +54,7 @@ public struct SettingsApplyResult: Sendable, Equatable {
 }
 
 public enum SettingsSnapshotter {
-    /// Reads every catalog key into a snapshot, including empty values (`null`/`""`). Retaining
-    /// empties is deliberate: a restore must be able to *clear* a value, not just set non-empty
-    /// ones, so the snapshot round-trips the full state.
+    /// Reads every catalog key, empty values included, so a restore can clear a value as well as set one.
     public static func capture(
         store: SettingsStore,
         keys: [AnySettingKey],
@@ -83,8 +79,7 @@ public enum SettingsSnapshotter {
         )
     }
 
-    /// Writes the snapshot's values into the store, skipping any name the current catalog does not
-    /// know about. Returns how many keys were applied and which were skipped.
+    /// Writes known values into the store; names the catalog does not know are reported as skipped.
     @discardableResult
     public static func apply(
         _ snapshot: SettingsSnapshot,

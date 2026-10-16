@@ -6,8 +6,7 @@
 // a JSON string, which the concrete `SettingKey` decodes back into its typed value.
 import Foundation
 
-/// Wraps a value so an optional `nil` can be encoded/decoded inside a keyed container
-/// (JSONEncoder refuses a top-level `Optional.none`).
+/// Boxes an optional so `nil` can be encoded inside a keyed container.
 private struct Box<Wrapped: Codable>: Codable {
     let value: Wrapped
 }
@@ -88,10 +87,8 @@ private struct StringOrBoolBox: Codable {
 }
 
 public extension AnySettingKey {
-    /// A key whose underlying storage is a raw String or Bool. Needed for values owned by a
-    /// third-party store that mixes both encodings under one key (a keyboard shortcut is either an
-    /// encoded String or the Bool `false` when a default is disabled). Preserving the Bool keeps a
-    /// restore from silently re-enabling a shortcut the user turned off.
+    /// Key for third-party values stored as a raw String or Bool (a shortcut is a String, or Bool `false` when disabled).
+    /// Keeping the Bool stops a restore from re-enabling a shortcut the user turned off.
     static func stringOrBoolKey(named name: String) -> AnySettingKey {
         AnySettingKey(
             name: name,

@@ -5,15 +5,12 @@
 import Foundation
 
 public enum DefaultAppRules: Sendable {
-    /// Scoped identifier prefixes for targeting an app by something other than its bundle ID:
-    /// `process:<name>` matches the target's process name and `path:<executable>` its executable
-    /// path. Plain entries keep matching bundle IDs, and `:menu-copy-apps:` stays a group alias.
+    /// `process:<name>` and `path:<executable>` target apps by process name or executable path;
+    /// plain entries match bundle IDs.
     public static let processNamePrefix = "process:"
     public static let executablePathPrefix = "path:"
 
-    /// Wildcard-aware value match: exact equality, or a trailing-`.*` / `*` prefix rule.
-    /// The single source of truth for identifier matching — raw `Set.contains` against the
-    /// group arrays silently misses every pattern entry.
+    /// Single source of truth for identifier matching; raw `Set.contains` silently misses wildcard entries.
     public static func matchesValue(pattern: String, value: String) -> Bool {
         if pattern == "*" { return true }
         if pattern == value { return true }
@@ -32,8 +29,7 @@ public enum DefaultAppRules: Sendable {
         matchesValue(pattern: pattern, value: bundleID)
     }
 
-    /// Scoped `process:`/`path:` patterns match case-insensitively; plain patterns match the
-    /// bundle ID, where a lone `*` still catches bundle-less apps.
+    /// `process:`/`path:` patterns match case-insensitively; a lone `*` also matches apps without a bundle ID.
     public static func matches(pattern: String, identity: AppIdentity) -> Bool {
         func scoped(_ prefix: String) -> String? {
             pattern.hasPrefix(prefix) ? String(pattern.dropFirst(prefix.count)).lowercased() : nil

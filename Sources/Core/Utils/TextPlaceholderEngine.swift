@@ -9,8 +9,7 @@
 import Foundation
 
 public struct TextPlaceholderEngine {
-    /// Legacy bare overload: substitutes only `{text}`/`{query}` with `text`.
-    /// Deprecated — use the context-aware overload instead.
+    /// Substitutes only `{text}`/`{query}`; prefer the context-aware overload.
     @available(*, deprecated, renamed: "replacePlaceholders(in:context:urlEncode:)")
     public static func replacePlaceholders(in template: String, with text: String, urlEncode: Bool = true) -> String {
         replace(in: template, text: text, matched: text, captures: [], bundleID: nil, urlEncode: urlEncode)

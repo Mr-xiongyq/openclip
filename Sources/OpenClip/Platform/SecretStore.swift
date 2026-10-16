@@ -16,7 +16,6 @@ public enum SecretStore {
     private nonisolated(unsafe) static var fileURL: URL = Constants.secretsFileURL
     private nonisolated(unsafe) static var _cache: [String: String]? = nil
 
-    /// Overrides the file URL for testing (in-memory or temp file).
     public static func setFileURLForTesting(_ url: URL) {
         lock.lock()
         defer { lock.unlock() }
@@ -24,7 +23,6 @@ public enum SecretStore {
         _cache = nil
     }
 
-    /// Resets the store with specific contents for test isolation.
     public static func resetForTesting(with initialData: [String: String] = [:]) {
         lock.lock()
         defer { lock.unlock() }
@@ -100,9 +98,7 @@ public enum SecretStore {
         return loaded
     }
 
-    /// Backs up a corrupted or unparseable secrets file to secrets.json.corrupt.<timestamp>
-    /// so the user is never permanently locked out of saving credentials, while preserving
-    /// the corrupted payload for forensics or recovery.
+    /// Moves an unparseable secrets file aside so the user can keep saving credentials.
     private static func handleCorruptedSecretsFileLocked() {
         let timestamp = Int(Date().timeIntervalSince1970)
         var corruptBackupURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(fileURL.lastPathComponent).corrupt.\(timestamp)")
@@ -148,8 +144,7 @@ public enum SecretStore {
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys])
 
-            // Open with POSIX open() and S_IRUSR | S_IWUSR (0600) directly to avoid the
-            // umask permissions race where world/group-readable files exist before chmod.
+            // Create with mode 0600 up front: chmod afterwards leaves a window where the file is readable.
             let fd = open(tempPath, O_WRONLY | O_CREAT | O_EXCL | O_TRUNC, S_IRUSR | S_IWUSR)
             guard fd >= 0 else {
                 let err = errno

@@ -19,8 +19,7 @@ import Core
 @MainActor
 struct ExtensionPackagePage: View {
     let packageID: String
-    /// Manifest, folder and README, read by the window (which also needs them for the toolbar's
-    /// ellipsis menu). `nil` until the read lands, or for a standalone script extension.
+    /// Manifest, folder and README; `nil` until the read lands or for a standalone script extension.
     let details: ExtensionPackageDetails?
     @Binding var disabledActionIDs: Set<String>
     @Binding var disabledPackages: Set<String>
@@ -64,9 +63,7 @@ struct ExtensionPackagePage: View {
         }
     }
 
-    /// The page's sections, in the order they appear. Only the ones with something to show are
-    /// rendered — an empty `Section` still draws its card, which is how a one-command extension
-    /// (no group, so no name-and-icon row) ended up with a blank card at the foot of the page.
+    /// Sections in display order; empty ones are skipped because an empty `Section` still draws a blank card.
     private enum PageSection {
         case gate
         case update
@@ -85,14 +82,11 @@ struct ExtensionPackagePage: View {
 
     private func page(for info: InstalledExtensionInfo) -> some View {
         let sections = sections(for: info)
-        // The identifier rides whichever section ends the page, so it is always the last thing
-        // and never needs a card of its own.
+        // The identifier footer rides the last section so it never gets a card of its own.
         let last = sections.last
 
         return Form {
-            // The hero rides a section header rather than sitting above the form: a header
-            // scrolls with the content and draws no card, where a view above the form stayed
-            // pinned under the toolbar however far the page was scrolled.
+            // A header, not a view above the form: headers scroll with content, where a pinned view stays under the toolbar.
             Section {
                 EmptyView()
             } header: {
@@ -215,7 +209,7 @@ struct ExtensionPackagePage: View {
         .scrollContentBackground(.hidden)
     }
 
-    /// The package identifier, quiet and selectable: the one thing on the page a bug report needs.
+    /// Selectable package identifier, shown for bug reports.
     @ViewBuilder
     private func identifierFooter(if shouldShow: Bool) -> some View {
         if shouldShow {
@@ -227,7 +221,6 @@ struct ExtensionPackagePage: View {
         }
     }
 
-    /// "Version 1.0.0 · OpenClip Team", whichever parts the manifest declares.
     private var byline: String? {
         var parts: [String] = []
         if let version = manifest?.version, !version.isEmpty {

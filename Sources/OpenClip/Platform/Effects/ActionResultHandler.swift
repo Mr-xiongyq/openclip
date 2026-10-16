@@ -43,17 +43,13 @@ extension ActionResultHandler {
     }
 }
 
-/// Physical-key posting seam (Task 15): `DefaultActionResultHandler` posts keystrokes through an
-/// injected `KeyboardEventPosting` (production default `SessionEventTapPoster` emits the real
-/// `CGEvent`), so tests can assert `deliverKeyboardEffect`'s resign→activate→post→restore ordering
-/// with a recording poster instead of a real key.
+/// Seam for posting keystrokes, so tests can record key order without real events.
 public protocol KeyboardEventPosting: Sendable {
     @MainActor
     func postKey(keyCode: CGKeyCode, flags: CGEventFlags)
 }
 
-/// The production poster: posts a synthetic key (down + up) to the session event tap — the same
-/// `CGEvent` sequence the effect handler always emitted.
+/// Production poster: synthetic key down and up to the session event tap.
 @MainActor
 public struct SessionEventTapPoster: KeyboardEventPosting {
     public init() {}
@@ -77,8 +73,7 @@ public struct SessionEventTapPoster: KeyboardEventPosting {
 
 @MainActor
 public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
-    /// Resolves a word to its dictionary definition (headless DictionaryServices lookup). Injectable
-    /// so tests can stub the lookup instead of hitting the real system dictionaries.
+    /// Injectable so tests can stub the dictionary lookup.
     public typealias DictionaryLookup = @Sendable (String) -> String?
 
     public typealias AppActivator = @MainActor @Sendable (NSRunningApplication) -> Void
@@ -193,8 +188,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         return true
     }
 
-    /// The single side-effect body shared by `handle` (throws) and `handleWithoutDismissal`
-    /// (swallows). Deliberately no dismissal step — hiding is decided by the presenter, never here.
+    /// Shared by `handle` and `handleWithoutDismissal`. Never dismisses; the presenter decides.
     private func execute(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication? = nil,
                          isSelectionCurrent: @escaping @MainActor (SelectionContext) -> Bool = { _ in true }) async throws {
         switch result {
@@ -305,8 +299,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
             }
 
         case .showDefinition(let word):
-            // Ask the system dictionaries to render the standard Look Up popover, anchored to the
-            // popup panel's content view. No-op when there is no view to anchor to.
+            // Standard Look Up popover, anchored to the panel content view.
             if let view {
                 view.showDefinition(
                     for: NSAttributedString(string: word),
@@ -383,13 +376,11 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
             let deliveryWindow = Task { try? await Task.sleep(nanoseconds: UInt64(self.pasteboardRestoreDelay * 1_000_000_000)) }
             _ = await deliveryWindow.value
 
-        // Presentation/flow results are presenter-owned (PopupWindowController). The handler treats
-        // them as no-ops so the switch stays exhaustive without crashing when one is routed here.
+        // Presenter-owned results: no-ops here, which keeps the switch exhaustive.
         case .toast, .openConfiguration, .sequence, .text, .file:
             break
 
-        // Keyboard execution: keyPress posts a synthetic keystroke; runShortcut launches the
-        // shortcuts CLI under the shared subprocess watchdog (thrown errors surface as a status).
+        // keyPress posts a synthetic keystroke; runShortcut runs under the subprocess watchdog.
         case .keyPress(let spec):
             try await activateTarget(targetApp)
             postKeyPress(spec)
@@ -406,11 +397,8 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
 
     // MARK: - Temporary .ics cleanup
 
-    /// Temporary `.ics` files handed to the Calendar app (via `.openURL`) are deleted after a short
-    /// deferred delay so they don't accumulate in the temp directory. Only files that match the
-    /// producer's exact convention (`Constants.icsFilenamePrefix`, `.ics` extension, inside the temp
-    /// directory, and a regular file) are touched — directories, arbitrary `.ics` files, and non-temp
-    /// paths are left alone.
+    /// Deletes temp `.ics` files handed to Calendar after a delay. Only regular files matching
+    /// `Constants.icsFilenamePrefix` inside the temp directory are touched.
     private func scheduleICSFileCleanupIfNeeded(for url: URL) {
         guard Self.isCleanableTemporaryICSFile(url) else { return }
 
@@ -429,9 +417,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         }
     }
 
-    /// Removes stale `OpenClipEvent-*.ics` files left in the temp directory by a previous session
-    /// that exited before the deferred cleanup ran (crash, quit during the delay window, etc.).
-    /// Called once at app launch.
+    /// Removes `.ics` files left by a session that quit before the deferred cleanup ran.
     public static func purgeStaleCalendarTempFiles() {
         let tempDir = FileManager.default.temporaryDirectory
         guard let items = try? FileManager.default.contentsOfDirectory(
@@ -467,9 +453,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         return filePath == tempPath || filePath.hasPrefix(tempPath + "/")
     }
 
-    /// Posts a user notification via `UNUserNotificationCenter`. Requests authorization if status is
-    /// `.notDetermined` (first `notify` effect). If authorization is denied or fails, throws an error
-    /// so the presenter surfaces the denial via status feedback.
+    /// Requests authorization on first use; throws when denied so the presenter shows the error.
     private func postNotification(title: String, body: String) async throws {
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
@@ -547,9 +531,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
 
     private func writePayload(_ payload: RichPasteboardPayload, to pasteboard: NSPasteboard) {
         if !payload.flavors.isEmpty {
-            // Write captured representations verbatim (matches clipboard managers like Maccy):
-            // app-private types must survive unchanged, and `setData` avoids `writeObjects`
-            // duplicating rich items on paste.
+            // Write flavors verbatim, as clipboard managers do; `setData` avoids duplicate rich items.
             for flavor in payload.flavors {
                 pasteboard.setData(flavor.data, forType: NSPasteboard.PasteboardType(flavor.type))
             }
@@ -568,8 +550,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         }
     }
 
-    /// Posts a synthetic key press (key + modifiers from a `KeyPressSpec`) to the frontmost app.
-    /// Unknown key names are skipped best-effort (no-op) rather than throwing.
+    /// Unknown key names are a silent no-op.
     private func postKeyPress(_ spec: KeyPressSpec) {
         guard let keyCode = Self.keyCode(for: spec.key) else { return }
         var flags: CGEventFlags = []
@@ -588,10 +569,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         keyboardPoster.postKey(keyCode: keyCode, flags: flags)
     }
 
-    /// Runs a registered Shortcuts.app shortcut via the `shortcuts` CLI. The process runs through
-    /// `ShellProcessRunner`, which supplies the 30s timeout watchdog and the throw-on-non-zero-exit
-    /// policy (surfaced by the presenter as a `.toast(.error)`). Input is passed via `-i` with a
-    /// temp file; output is intentionally discarded.
+    /// Runs via `ShellProcessRunner` (watchdog, throw on non-zero exit). Input goes through a temp file.
     private func runShortcut(name: String, input: String?) async throws {
         let binary = URL(fileURLWithPath: Constants.shortcutsBinaryPath)
         guard FileManager.default.isExecutableFile(atPath: binary.path) else {
@@ -618,9 +596,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         ))
     }
 
-    /// Maps a `KeyPressSpec` key name to a QWERTY virtual key code. Letters/digits use the ANSI
-    /// layout values; unknown names return nil and the press is skipped. Known limitation: a
-    /// non-QWERTY physical layout may remap letter/digit keys.
+    /// QWERTY ANSI virtual key codes; other layouts may remap letters and digits.
     private static func keyCode(for keyName: String) -> CGKeyCode? {
         let lower = keyName.lowercased()
         let named: [String: CGKeyCode] = [
@@ -664,7 +640,6 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
             ?? FileManager.default.homeDirectoryForCurrentUser
     }
 
-    /// Returns an available destination URL by appending a numeric suffix when needed.
     public nonisolated static func uniqueFileURL(for filename: String, in directory: URL) -> URL {
         let fileManager = FileManager.default
         var targetURL = directory.appendingPathComponent(filename)
@@ -687,12 +662,9 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
     }
 }
 
-/// The production dictionary lookup for the `.copyDefinition` effect: a headless
-/// `DCSCopyTextDefinition` call that never launches the Dictionary app. The pasteboard write happens
-/// in `DefaultActionResultHandler`; this only resolves a word to its definition text.
+/// Headless `DCSCopyTextDefinition` lookup; never launches Dictionary.app.
 public enum DictionaryLookupFactory {
-    /// Looks up `word` via `DCSCopyTextDefinition` (default system dictionary). Returns nil when the
-    /// word has no definition in the active dictionary or the lookup fails.
+    /// Returns nil when the word has no definition.
     public static let systemLookup: @Sendable (String) -> String? = { word in
         let cfWord = word as CFString
         let range = CFRange(location: 0, length: CFStringGetLength(cfWord))

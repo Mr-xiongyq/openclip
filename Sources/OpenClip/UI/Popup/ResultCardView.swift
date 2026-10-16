@@ -1,31 +1,10 @@
 // ResultCardView.swift
 // OpenClip
 //
-// The native result card rendered in content mode in place of the bar: a header (back chevron,
-// producing action's icon or sparkles + title, diff toggle), a scrollable response body
-// (error-styled when the action failed), and a footer carrying Close (⎋) plus Copy/Paste (both
-// absent on an error card, which offers only Close; Paste also hidden when the target app can't
-// paste). Any action whose resolved outcome is text renders here, not just AI presets.
-// Paste/Copy are explicit user requests routed through performCardEffect, so an explicit Paste
-// always pastes, and both dismiss the popup (Copy like Paste). The panel is key while the card
-// shows (Task 14) and the card owns the keys (SwiftUI .onKeyPress): Esc dismisses the card,
-// Return pastes, Shift+Return copies, ⌘D toggles the diff — the controller-level key monitor
-// stays observation-only in content mode.
-// The card is modal-ish by design: it stays up until Copy, Paste or Esc (see
-// PopupWindowController.handleEvent), and its header doubles as a drag handle (a SwiftUI
-// DragGesture reported to PopupWindowController.handleCardDrag) so it can be moved out of the way
-// of the text underneath. Its right edge, bottom edge and bottom-right grip are resize handles
-// A follow-up field sits above Copy/Paste: an instruction typed there (⏎) runs AI on the card's
-// current text and re-streams the card in place — a second pass over the answer.
-// The card never leaves the screen for it: while the follow-up is in flight the previous answer
-// stays visible (dimmed until the first chunk, `payload.isRefining`), the field shows a spinner
-// and "Refining…" and keeps focus, Copy/Paste are hidden until the answer settles, and Esc
-// cancels the refinement (`onCancelFollowUp`) instead of closing.
-// (`PopupResizeHandles`, reported the same way to PopupWindowController.handleResize); the size
-// they settle on is remembered and, passed back in as `maxSize`, caps the content-driven size
-// when the next card opens: a short answer still gets a small card, a long one grows up to the
-// maximum and scrolls beyond it. Once the user has dragged a handle (`isUserSized`), the card
-// keeps the dragged size verbatim until it closes.
+// The native result card shown in content mode in place of the bar. It stays up until Copy, Paste
+// or Esc (see PopupWindowController.handleEvent). Its header is a drag handle and its edges are
+// resize handles; the size the user settles on caps the content-driven size when the next card opens.
+// A follow-up field re-streams the answer in place; the previous answer stays visible while it runs.
 import SwiftUI
 import AppKit
 import PDFKit
@@ -48,15 +27,9 @@ private struct FilePreviewMetadata {
 // MARK: - Card Drag
 
 
-/// Phases of a drag on the card or search header. The views only report them; the controller owns
-/// the panel and does the moving.
-///
-/// AppKit dragging is not an option here: the panel is borderless (no title bar),
-/// `isMovableByWindowBackground` never fires because the SwiftUI hosting view consumes the press,
-/// and an `NSViewRepresentable` handle never receives `mouseDown` either — `NSHostingView` answers
-/// `hitTest` with itself for the whole card and dispatches through SwiftUI's own gesture system.
-/// So the handle is a SwiftUI `DragGesture`, and the move is computed from the absolute cursor
-/// position (never the gesture's translation, which would fight the window moving under it).
+/// Drag phases from the card or search header. The views only report them; the controller moves the
+/// panel. A SwiftUI `DragGesture` drives it because AppKit dragging never receives the press in this
+/// borderless hosting view, and the move uses the absolute cursor position, not the gesture translation.
 public enum ResultCardDragPhase: Sendable {
     case began
     case changed
@@ -77,26 +50,19 @@ public struct ResultCardView: View {
     public let onSave: (@MainActor () -> Void)?
     /// Reports a drag of the header handle so the owner can move the panel.
     public let onDrag: @MainActor (ResultCardDragPhase) -> Void
-    /// The most room the card may take — the user's remembered or in-progress resize. The card
-    /// renders at what its text needs, floored at `aiCardMinWidth` × `aiCardMinHeight` and capped
-    /// here; `nil` caps at the defaults (`aiCardIdealWidth` × `aiCardMaxHeight`).
+    /// The most room the card may take (the user's remembered resize); `nil` caps at the defaults.
     public let maxSize: CGSize?
-    /// True once the user has dragged a resize handle of this card: it then renders at `maxSize`
-    /// verbatim — the size they set, whatever the text needs — instead of the content-fitted size.
+    /// True once the user has dragged a resize handle: the card then renders at `maxSize` verbatim.
     public let isUserSized: Bool
     /// Reports a drag of one of the resize handles so the owner can resize the panel and remember
     /// the size. Phases mirror `onDrag`; `.began` is reported exactly once per drag.
     public let onResize: @MainActor (PopupResizeEdge, ResultCardDragPhase) -> Void
-    /// True when the card is explicitly pinned via the pin button — suppresses auto-dismiss so
-    /// the card stays visible until the user unpins, copies, pastes, or presses Esc.
+    /// Pinned cards skip auto-dismiss until unpinned, copied, pasted or closed with Esc.
     public let isPinned: Bool
-    /// Called when the user taps the pin button; the owner toggles the pin state.
     public let onPin: @MainActor () -> Void
-    /// Runs an instruction typed into the follow-up field on the card's current text (⏎). nil
-    /// hides the field (a host without an AI flow).
+    /// Runs a follow-up instruction on the card's current text. nil hides the field.
     public let onFollowUp: (@MainActor (String) -> Void)?
-    /// Cancels a follow-up in flight (Esc while the card is refining), restoring the previous
-    /// answer. nil means Esc always dismisses.
+    /// Cancels a follow-up in flight (Esc while refining). nil means Esc always dismisses.
     public let onCancelFollowUp: (@MainActor () -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
@@ -135,14 +101,12 @@ public struct ResultCardView: View {
     @State private var previewFileTruncated = false
     @State private var previewPDFPageSize: CGSize?
     @State private var previewPDFLoadFailed = false
-    /// The diff of `payload.original` → `payload.text`, recomputed only when the payload settles
-    /// (never per body evaluation, and never mid-stream on a half-written response).\
+    /// Diff of `payload.original` → `payload.text`, recomputed when the payload settles, not mid-stream.
     @State private var diffSegments: [TextDiffSegment] = []
     @State private var showsDiff = false
     /// Set once the user works the toggle, so a later payload update can't override their choice.
     @State private var didChooseDiffMode = false
-    /// True between the drag gesture crossing its threshold and its end, so `.began` is reported
-    /// exactly once per drag.
+    /// Makes `.began` fire once per drag.
     @State private var isDraggingCard = false
 
     public init(
@@ -195,13 +159,9 @@ public struct ResultCardView: View {
         }
     }
 
-    /// The follow-up field shows whenever a host can run one, the card is not an error,
-    /// the payload supports follow-up (AI results), and the result is not a file.
     private var showsFollowUp: Bool { onFollowUp != nil && !payload.isError && payload.canFollowUp && payload.file == nil }
 
-    /// The secondary header controls (diff, pin) rest hidden and fade in when the pointer is over
-    /// the card. They stay visible while either is in an active state — diff shown, card pinned —
-    /// so the header never hides a state the user set. Back and close are always visible.
+    /// Diff and pin rest hidden until hover, but stay visible while active so a set state is never hidden.
     private var revealsSecondaryChrome: Bool {
         isCardHovered || showsDiff || isPinned
     }
@@ -256,10 +216,7 @@ public struct ResultCardView: View {
                 (onSave ?? onPaste)()
                 return .handled
             }
-            // SwiftUI delivers the key here even while the follow-up field is the AppKit first
-            // responder (its focus is set by the controller, not through FocusState), so the
-            // field's decision applies at this level too: text typed → follow-up; empty → the
-            // card's meaning (paste if available, else copy; Shift+Return always copies).
+            // SwiftUI sees Return even while the follow-up field is first responder, so apply its rules here too.
             if showsFollowUp {
                 handleFollowUpReturn(shift: press.modifiers.contains(.shift))
             } else if canPaste == false || press.modifiers.contains(.shift) {
@@ -278,10 +235,8 @@ public struct ResultCardView: View {
 
     private var hasDiff: Bool { !diffSegments.isEmpty }
 
-    /// Recomputes the diff for the current payload and picks the default view for it: a light edit
-    /// (proofread, tone change) opens on the diff, a wholesale rewrite (translate, summarize)
-    /// opens on the plain result — the toggle is always there either way. A response still
-    /// streaming is never diffed: the comparison would be against a half-written text.
+    /// Picks the default view: light edits open on the diff, wholesale rewrites on the plain result.
+    /// A streaming response is never diffed.
     private func refreshDiff() {
         guard !payload.isError, !payload.isStreaming,
               let original = payload.original else {
@@ -316,9 +271,7 @@ public struct ResultCardView: View {
         colorScheme == .dark ? Color(red: 0.98, green: 0.47, blue: 0.47) : Color(red: 0.74, green: 0.15, blue: 0.15)
     }
 
-    /// The diff as one attributed run stream: removed characters in red with a strikethrough,
-    /// added characters in green, everything else in the body's normal colour. Both get a tinted
-    /// background so a changed space or newline is still visible.
+    /// Removed text is red with strikethrough, added text green; both are tinted so changed whitespace shows.
     private var diffAttributedText: AttributedString {
         var output = AttributedString()
         for segment in diffSegments {
@@ -372,12 +325,10 @@ public struct ResultCardView: View {
             .accessibilityLabel("Back to actions")
             .onHover { isChevronHovered = $0 }
 
-            // Everything between the buttons is the drag handle, so the card can be pulled off the
-            // text it covers. The handle sits *behind* this row, clear of the two buttons.
+            // Drag handle: everything between the two buttons.
             HStack(spacing: 7) {
                 if let icon = payload.icon {
-                    // The producing action's own icon (bar-resolution: honors user overrides),
-                    // so extension results keep their identity in the card.
+                    // The producing action's icon, so extension results keep their identity.
                     ActionIconView(icon: icon, size: 13)
                         .foregroundColor(.accentColor)
                 } else {
@@ -439,8 +390,7 @@ public struct ResultCardView: View {
         .onHover { isCloseHovered = $0 }
     }
 
-    /// A small threshold keeps a plain click on the header (which makes the panel key again after
-    /// the user worked in another app) from being read as a drag.
+    /// A small threshold keeps a plain click (which re-keys the panel) from reading as a drag.
     private var headerDragGesture: some Gesture {
         DragGesture(minimumDistance: 2)
             .onChanged { _ in
@@ -503,8 +453,7 @@ public struct ResultCardView: View {
 
     // MARK: - Dynamic Dimensions
 
-    /// What the body actually renders — the diff is longer than the result (it keeps the removed
-    /// characters), so the card must be measured against it, not against `payload.text`.
+    /// What the body renders; a diff is longer than the result, so measure what is shown.
     private var measuredText: String {
         if showsDiff, hasDiff {
             return diffSegments.map(\.text).joined()
@@ -535,7 +484,6 @@ public struct ResultCardView: View {
     }
     private var maxCardHeight: CGFloat { maxSize?.height ?? PopupMetrics.aiCardMaxHeight }
 
-    /// Sizing calculation for the card width.
     static func cardWidth(naturalTextWidth: CGFloat, showsFollowUp: Bool, isUserSized: Bool, userWidth: CGFloat?) -> CGFloat {
         let minWidth: CGFloat = showsFollowUp ? followUpCardMinWidth : PopupMetrics.aiCardMinWidth
         let maxWidth: CGFloat = userWidth ?? (showsFollowUp ? followUpCardMaxWidth : PopupMetrics.aiCardIdealWidth)
@@ -543,8 +491,7 @@ public struct ResultCardView: View {
         return bounded(naturalTextWidth, min: minWidth, max: max(minWidth, maxWidth))
     }
 
-    /// The width the body would take unwrapped — its longest line plus the text insets — so a
-    /// short answer gets a narrow card and a long one fills the maximum.
+    /// Longest line plus insets, so a short answer gets a narrow card.
     private var naturalTextWidth: CGFloat {
         let textToMeasure = measuredText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !textToMeasure.isEmpty else { return 0 }
@@ -557,8 +504,7 @@ public struct ResultCardView: View {
         return ceil(rect.width) + 2 * Self.horizontalTextInset + 1
     }
 
-    /// The width required by the header chrome (back chevron, action/sparkle icon, title, diff toggle,
-    /// pin button, close button, and horizontal paddings) so the title is never truncated.
+    /// Width the header chrome needs so the title is never truncated.
     private var naturalHeaderWidth: CGFloat {
         let titleToMeasure = payload.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !titleToMeasure.isEmpty else { return PopupMetrics.aiCardMinWidth }
@@ -568,23 +514,19 @@ public struct ResultCardView: View {
             options: [.usesLineFragmentOrigin],
             attributes: [.font: font]
         )
-        // Padding (14*2=28) + Back (22) + gap (8) + Icon (13) + gap (7) + minSpacer (8)
+        // Padding, back button, icon, gaps, and min spacer.
         let baseChrome: CGFloat = 28 + 22 + 8 + 13 + 7 + 8
-        // Right controls: diff (22) + gap (4) + pin (22) + gap (4) + close (22) = 74 with diff; 48 without diff
+        // Right controls: 74 with diff, 48 without.
         let controlsWidth: CGFloat = (hasDiff && payload.file == nil) ? 74 : 48
         return ceil(rect.width) + baseChrome + controlsWidth
     }
 
-    /// The on-screen size of a PDF page: its crop box (what `PDFView` actually displays, which can
-    /// be smaller than the media box when trim/bleed marks are present), rotated into display space
-    /// so a page stored sideways isn't measured as portrait.
+    /// On-screen PDF page size: the crop box (what `PDFView` shows), rotated into display space.
     nonisolated static func displayPageSize(cropBox: CGSize, rotation: Int) -> CGSize {
         rotation % 180 == 0 ? cropBox : CGSize(width: cropBox.height, height: cropBox.width)
     }
 
-    /// Content-driven sizing for image results: balances width and height based on the image's
-    /// aspect ratio (so tall screenshots don't become thin slivers and wide banners don't letterbox).
-    /// Once the user manually drags the resize handles, the dragged size is honored verbatim.
+    /// Sizes an image card from its aspect ratio; a user-dragged size is honored verbatim.
     public static func imageCardSize(
         imageSize: CGSize?,
         userSize: CGSize?,
@@ -607,7 +549,6 @@ public struct ResultCardView: View {
         let w = imageSize.width
         let h = imageSize.height
 
-        // Small image / icon (<= 160 pt in both dimensions): compact card
         if w <= 160 && h <= 160 {
             let smallWidth: CGFloat = userSize?.width != nil ? max(userSize!.width, 320.0) : 320.0
             return CGSize(width: smallWidth, height: 240.0)
@@ -621,20 +562,17 @@ public struct ResultCardView: View {
         let targetHeight: CGFloat
 
         if ratio < 0.85 {
-            // Portrait / tall (e.g. mobile mockups, vertical screenshots)
             targetHeight = min(380.0, maxAllowedHeight)
             let neededImageWidth = (targetHeight - 142.0) * ratio
             let idealWidth = neededImageWidth + 2 * horizontalTextInset + 32.0
             targetWidth = bounded(idealWidth, min: 320.0, max: 370.0)
         } else if ratio > 1.35 {
-            // Landscape / wide (e.g. 16:9, widescreen banners)
             let baseHeight: CGFloat = ratio > 2.0 ? 250.0 : 275.0
             targetHeight = min(baseHeight, maxAllowedHeight)
             let neededImageWidth = (targetHeight - 142.0) * ratio
             let idealWidth = neededImageWidth + 2 * horizontalTextInset + 24.0
             targetWidth = bounded(idealWidth, min: 370.0, max: maxAllowedWidth)
         } else {
-            // Square / near-square
             targetWidth = bounded(350.0, min: 340.0, max: maxAllowedWidth)
             targetHeight = bounded(330.0, min: 290.0, max: maxAllowedHeight)
         }
@@ -642,8 +580,7 @@ public struct ResultCardView: View {
         return CGSize(width: ceil(targetWidth), height: ceil(targetHeight))
     }
 
-    /// The card is as wide as its text needs, never narrower than the minimum and never wider
-    /// than the maximum; once user-sized it is exactly the dragged size.
+    /// Width the text needs, clamped to the min and max; a user-sized card is exactly the dragged width.
     private var dynamicCardWidth: CGFloat {
         if let file = payload.file {
             switch effectiveFileKind(file) {
@@ -729,8 +666,7 @@ public struct ResultCardView: View {
         return ceil(rect.height) + Self.headerTotalHeight + Self.baseBottomInset + 16.0
     }
 
-    /// The card is as tall as its text needs, never shorter than the minimum and never taller
-    /// than the maximum (beyond which the body scrolls); once user-sized it is exactly the dragged size.
+    /// Height the text needs, clamped to the min and max (the body scrolls past max); user-sized is verbatim.
     private var dynamicCardHeight: CGFloat {
         if isUserSized, let maxSize { return maxSize.height }
         if let file = payload.file {
@@ -761,8 +697,7 @@ public struct ResultCardView: View {
         return file.kind
     }
 
-    /// True for previews backed by a native view that scrolls itself (`PDFView`, `QLPreviewView`).
-    /// These must not sit inside the card's outer `ScrollView`.
+    /// Native scrolling previews (`PDFView`, `QLPreviewView`) must sit outside the card's `ScrollView`.
     private func embedsScrollablePreview(_ file: FileOutputPayload) -> Bool {
         let kind = effectiveFileKind(file)
         return kind == .pdf || kind == .other
@@ -774,10 +709,8 @@ public struct ResultCardView: View {
     private var cardContent: some View {
         Group {
             if let file = payload.file {
-                // Embedded previews (PDFKit, Quick Look) own their scrolling, so they are rendered
-                // outside the card's outer ScrollView — nesting two scrollers left wheel/trackpad
-                // gestures ambiguous between the preview and the card. Text needs the outer scroll
-                // (a long file scrolls past the height cap) and an image is scaled to fit.
+                // Native scrolling previews sit outside the outer ScrollView (nested scrollers make
+                // wheel input ambiguous). Text needs the outer scroll; an image scales to fit.
                 if embedsScrollablePreview(file) {
                     filePreviewContent(file)
                         .frame(maxWidth: .infinity)
@@ -852,8 +785,7 @@ public struct ResultCardView: View {
         .animation(PopupMetrics.springOrImmediate(response: 0.28, dampingFraction: 0.82), value: isTypingFollowUp)
         .animation(.easeInOut(duration: 0.15), value: showsResultButtons)
         .padding(.leading, 14)
-        // Keep the footer controls close to the card edge; the resize grip occupies only the
-        // bottom-right corner, so a compact inset leaves it clear without wasting footer width.
+        // Compact trailing inset; the resize grip only occupies the bottom-right corner.
         .padding(.trailing, 10)
         .padding(.bottom, 6)
         .frame(height: Self.baseBottomInset)
@@ -868,20 +800,16 @@ public struct ResultCardView: View {
         !isStreaming
     }
 
-    /// The instruction field: ⏎ with text runs a follow-up on the card's current text; ⏎ on an
-    /// empty field keeps the card's normal meaning (paste, or copy when paste is unavailable).
     private var followUpField: some View {
         let shape = RoundedRectangle(cornerRadius: Self.buttonCornerRadius, style: .continuous)
         let strokeColor = colorScheme == .dark ? Color.white.opacity(0.14) : Color.black.opacity(0.08)
         return HStack(spacing: 6) {
             if payload.isStreaming {
-                // A follow-up in flight: spinner on the left.
                 ProgressView()
                     .controlSize(.small)
                     .scaleEffect(0.6)
                     .frame(width: 14, height: 14)
             } else if !isTypingFollowUp {
-                // Up-arrow on the left in idle state.
                 Image(systemName: "arrow.up")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(PopupThemeModel.restForeground(for: effectiveTheme).opacity(0.65))
@@ -897,22 +825,17 @@ public struct ResultCardView: View {
             .font(.system(size: 12.5, weight: .regular))
             .foregroundColor(PopupThemeModel.restForeground(for: effectiveTheme))
             .focused($isFollowUpFocused)
-            // Stays enabled while a refinement streams: a disabled field drops first responder,
-            // and with it the Esc that cancels. ⏎ is a no-op meanwhile (`followUpReturn`), so
-            // anything typed simply waits for the next follow-up.
+            // Stays enabled while refining: a disabled field would drop focus and the Esc that cancels.
             .onKeyPress(.escape) {
                 handleEscape()
                 return .handled
             }
-            // ⏎ arrives as the field's submit (AppKit handles Return in an NSTextField before
-            // SwiftUI's key-press path sees it; an `.onKeyPress(.return)` here fell through to
-            // the source app). ⇧ is read from the live modifier state, like the composer rows.
+            // ⏎ arrives as onSubmit (AppKit consumes Return first); ⇧ is read from the live modifiers.
             .onSubmit {
                 handleFollowUpReturn(shift: NSEvent.modifierFlags.contains(.shift))
             }
 
             if isTypingFollowUp {
-                // Up-arrow submit button on the right when typing.
                 Button {
                     handleFollowUpReturn(shift: NSEvent.modifierFlags.contains(.shift))
                 } label: {
@@ -938,8 +861,7 @@ public struct ResultCardView: View {
         .accessibilityLabel(String(localized: "Follow-up instruction"))
     }
 
-    /// What ⏎ in the follow-up field does. Pure, so the decision table is unit-testable without
-    /// hosting the card.
+    /// Pure decision for ⏎ in the follow-up field, so it is unit-testable without hosting the card.
     enum FollowUpReturn: Equatable {
         case nothing
         case paste
@@ -947,11 +869,9 @@ public struct ResultCardView: View {
         case followUp(String)
     }
 
-    /// Nothing typed: ⏎ keeps the card's meaning (paste; copy when paste is unavailable or with
-    /// ⇧). Text typed: a follow-up, once the current answer has settled.
+    /// Nothing typed: ⏎ keeps the card's meaning (paste, or copy without paste or with ⇧). Typed: a follow-up.
     static func followUpReturn(text: String, isStreaming: Bool, canPaste: Bool?, shift: Bool) -> FollowUpReturn {
-        // While a refinement streams the card is busy: ⏎ neither pastes a half-written answer
-        // nor queues another follow-up.
+        // While streaming, ⏎ neither pastes a half-written answer nor queues another follow-up.
         if isStreaming { return .nothing }
         let instruction = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if instruction.isEmpty {
@@ -1070,9 +990,7 @@ public struct ResultCardView: View {
         }
     }
 
-    /// Renders the file result by kind: an inline image, an inline PDF, inline text, or the
-    /// Quick Look view with a caption. Falls back to the generic icon card when a preview can't
-    /// be produced, so a file result is never blank.
+    /// Renders a file result by kind; falls back to the generic icon card so a file result is never blank.
     @ViewBuilder
     private func filePreviewContent(_ file: FileOutputPayload) -> some View {
         VStack(spacing: 0) {
@@ -1103,8 +1021,7 @@ public struct ResultCardView: View {
                 framedPreviewBody {
                     PDFPreviewView(url: file.url)
                 } caption: {
-                    // Drag-out lives on the caption for embedded previews: a drag starting on the
-                    // page belongs to the preview's own gestures (e.g. PDF text selection).
+                    // Drag-out lives on the caption: a drag on the page belongs to the preview (e.g. PDF text selection).
                     fileCaption(file)
                         .fileExportDrag(file.url)
                 }
@@ -1130,9 +1047,7 @@ public struct ResultCardView: View {
         VStack(spacing: 8) {
             preview()
                 .frame(maxWidth: .infinity)
-                // Embedded previews sit outside the card's ScrollView, so the preview yields height
-                // to the card instead of overflowing it (a floor of 140 — safe inside a scroller —
-                // would clip the caption at the minimum card size).
+                // Yields height to the card; a floor of 140 would clip the caption at minimum size.
                 .frame(height: max(60, dynamicCardHeight - Self.headerTotalHeight - Self.baseBottomInset - 52))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(
@@ -1453,7 +1368,6 @@ public struct ResultCardView: View {
 }
 
 private extension View {
-    /// Makes a file preview a drag source for its underlying file.
     func fileExportDrag(_ url: URL) -> some View {
         self
             .draggable(url)

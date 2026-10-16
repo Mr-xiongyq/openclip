@@ -7,8 +7,7 @@ import Foundation
 public struct SettingKey<Value: Sendable>: Sendable {
     public let name: String
     public let defaultValue: Value
-    /// Bumped when the meaning or shape of this setting's stored value changes, so a future
-    /// migration can tell old data from new. Brand-new keys start at 1.
+    /// Bumped when the stored value's shape changes, so a migration can tell old data from new.
     public let schemaVersion: Int
 
     public init(_ name: String, defaultValue: Value, schemaVersion: Int = 1) {
@@ -18,10 +17,7 @@ public struct SettingKey<Value: Sendable>: Sendable {
     }
 }
 
-/// Stable per-action option namespaces (Phase 7). `defaultsKey` is the SettingsStore/UserDefaults
-/// key for non-secret options; `keychainAccount` names the Keychain account for `.secret` options.
-/// Both produce the same `action.<actionID>.option.<optionID>` string — one namespace, two backends
-/// (secrets never touch UserDefaults).
+/// Per-action option namespace: `defaultsKey` and `keychainAccount` yield the same string; secrets never touch UserDefaults.
 public enum ActionOptionKey {
     public static func defaultsKey(actionID: String, optionID: String) -> String {
         "action.\(actionID).option.\(optionID)"
@@ -40,8 +36,7 @@ public enum PopupBarAlignment: String, Codable, CaseIterable, Sendable {
 }
 
 /// Which side of the main bar the contextual actions island sits on ("auto" | "left" | "right").
-/// `auto` follows the bar's horizontal alignment: a right-aligned bar puts the island on the
-/// right, a left- or center-aligned bar keeps it on the left.
+/// `auto` follows the bar's alignment: right-aligned puts the island on the right, otherwise left.
 public enum ContextualPillPosition: String, Codable, CaseIterable, Sendable {
     case auto
     case left
@@ -64,9 +59,7 @@ public enum PopupVerticalPosition: String, Codable, CaseIterable, Sendable {
     case below
 }
 
-/// Which Sparkle update feed the app follows ("stable" | "beta"). Beta builds are pre-releases
-/// tagged with Sparkle's `beta` channel and served from a separate appcast, so opting in never
-/// affects users on the stable channel.
+/// Sparkle update feed. Beta uses a separate appcast, so opting in never affects stable users.
 public enum UpdateChannel: String, Codable, CaseIterable, Sendable {
     case stable
     case beta
@@ -77,7 +70,6 @@ public extension SettingKey where Value == [String] {
 }
 
 public extension SettingKey where Value == Set<String> {
-    /// AI presets moved out of AI Tools and into the main popup bar.
     static var standaloneAIActionIDs: SettingKey<Set<String>> { SettingKey<Set<String>>("standaloneAIActionIDs", defaultValue: []) }
     static var disabledActionIDs: SettingKey<Set<String>> { SettingKey<Set<String>>("disabledActionIDs", defaultValue: []) }
     static var disabledPackages: SettingKey<Set<String>> { SettingKey<Set<String>>("disabledPackages", defaultValue: []) }
@@ -109,8 +101,7 @@ public extension SettingKey where Value == Bool {
     static var isAIEnabled: SettingKey<Bool> { SettingKey<Bool>("aiEnabled", defaultValue: true) }
     static var isMouseHoldEnabled: SettingKey<Bool> { SettingKey<Bool>("isMouseHoldEnabled", defaultValue: true) }
     static var hasCompletedOnboarding: SettingKey<Bool> { SettingKey<Bool>("hasCompletedOnboarding", defaultValue: false) }
-    /// True once the one-time post-onboarding coach-mark ("select any text" / "finish setup")
-    /// has been dismissed by any path — it never shows again for this install.
+    /// Once dismissed by any path, the post-onboarding coach-mark never shows again.
     static var hasDismissedPostOnboardingCoachMark: SettingKey<Bool> { SettingKey<Bool>("hasDismissedPostOnboardingCoachMark", defaultValue: false) }
     static var startAtLogin: SettingKey<Bool> { SettingKey<Bool>("startAtLogin", defaultValue: false) }
     static var captureTextAutoCopy: SettingKey<Bool> { SettingKey<Bool>("captureTextAutoCopy", defaultValue: true) }
@@ -167,8 +158,7 @@ public extension SettingKey where Value == String {
     /// Popup vertical placement relative to cursor/selection ("auto" | "above" | "below").
     static var popupVerticalPosition: SettingKey<String> { SettingKey<String>("popupVerticalPosition", defaultValue: PopupVerticalPosition.auto.rawValue) }
 
-    /// The last version string (CFBundleShortVersionString) the app was launched on.
-    /// Used to classify launch scenarios (First Install, App Update, Reinstall, Normal Launch).
+    /// Last launched CFBundleShortVersionString; used to classify launch scenarios.
     static var lastRunVersion: SettingKey<String> { SettingKey<String>("app.lastRunVersion", defaultValue: "") }
     /// The last build number (CFBundleVersion) the app was launched on.
     static var lastRunBuild: SettingKey<String> { SettingKey<String>("app.lastRunBuild", defaultValue: "") }
@@ -176,8 +166,7 @@ public extension SettingKey where Value == String {
     /// Which update feed the app follows: `UpdateChannel.stable` (default) or `UpdateChannel.beta`.
     static var updateChannel: SettingKey<String> { SettingKey<String>("updates.channel", defaultValue: UpdateChannel.stable.rawValue) }
 
-    /// Per-action option value key. The key name matches the legacy `action.<id>.option.<optID>`
-    /// convention so existing stored values migrate over with zero data changes.
+    /// Matches the legacy `action.<id>.option.<optID>` key so stored values migrate unchanged.
     static func actionOption(actionID: String, optionID: String, default defaultValue: String = "") -> SettingKey<String> {
         SettingKey<String>("action.\(actionID).option.\(optionID)", defaultValue: defaultValue)
     }

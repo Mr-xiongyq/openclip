@@ -1,9 +1,8 @@
 // OpenClipSnippetParser.swift
 // OpenClip
 //
-// Parses OpenClip script snippet headers into extension and action metadata structures without UI dependencies.
-// Pure text parsing + action construction, so it is intentionally nonisolated — extension scanning
-// must run off the main actor.
+// Parses OpenClip script snippet headers into extension and action metadata. Pure text parsing,
+// intentionally nonisolated: extension scanning runs off the main actor.
 import Foundation
 
 public struct OpenClipSnippetParser: Sendable {
@@ -12,8 +11,7 @@ public struct OpenClipSnippetParser: Sendable {
         
         let knownKeys = ["title", "name", "icon", "identifier", "id", "url", "javascript", "js", "applescript", "shell script", "sh", "shell"]
         
-        // A snippet must actually look like an OpenClip header: either the #openclip/`//openclip`
-        // marker or a recognized key line (e.g. `# Title: Foo`). A bare `#`/`//` comment is not enough.
+        // Requires the `#openclip` marker or a recognized key line; a bare comment is not enough.
         let isHeaderPresent = lines.contains { line in
             let trimmed = line.trimmingCharacters(in: .whitespaces).lowercased()
             if trimmed.hasPrefix("#openclip") || trimmed.hasPrefix("//openclip") { return true }
@@ -36,9 +34,8 @@ public struct OpenClipSnippetParser: Sendable {
         for line in lines {
             var trimmed = line.trimmingCharacters(in: .whitespaces)
             
-            // In body mode, only a `#`-prefixed recognized header key closes the body and starts a new
-            // header line; `//`-prefixed lines and everything else stay body content (e.g. JS comments,
-            // URLs with fragments). This lets a later `# Icon:` header survive after a `js:`/`url:` body.
+            // In body mode only a recognized `#` header key ends the body; `//` lines stay body content,
+            // so a later `# Icon:` header still works after a `js:`/`url:` body.
             if let key = activeBodyKey {
                 var closesBody = false
                 if trimmed.hasPrefix("#") {
@@ -96,7 +93,6 @@ public struct OpenClipSnippetParser: Sendable {
         var actionType: String? = nil
         var scriptCodeValue: String? = nil
         
-        // 1. URL template action
         if let urlVal = dict["url"], !urlVal.isEmpty {
             let body = bodyDict["url"]?.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             urlValue = body.isEmpty ? urlVal : urlVal + "\n" + body
@@ -104,7 +100,6 @@ public struct OpenClipSnippetParser: Sendable {
             urlValue = bodyLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         }
         
-        // 2. Native JavaScript action
         if urlValue == nil {
             let jsKey = dict.keys.contains("javascript") ? "javascript" : (dict.keys.contains("js") ? "js" : nil)
             if let key = jsKey {
@@ -115,7 +110,6 @@ public struct OpenClipSnippetParser: Sendable {
             }
         }
         
-        // 3. Native AppleScript action
         if urlValue == nil && scriptCodeValue == nil {
             if let appleVal = dict["applescript"] {
                 let bodyLines = bodyDict["applescript"] ?? []
@@ -124,7 +118,6 @@ public struct OpenClipSnippetParser: Sendable {
             }
         }
         
-        // 4. Shell script action
         if urlValue == nil && scriptCodeValue == nil {
             let shKey = dict.keys.contains("shell script") ? "shell script" : (dict.keys.contains("sh") ? "sh" : (dict.keys.contains("shell") ? "shell" : nil))
             if let key = shKey {

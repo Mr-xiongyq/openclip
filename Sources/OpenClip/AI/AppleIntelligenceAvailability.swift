@@ -12,8 +12,7 @@ import FoundationModels
 #endif
 
 enum AppleIntelligenceAvailability {
-    /// Every distinct reason the on-device model can be unusable. The OS floor is folded in here
-    /// so callers never have to think about `#available` themselves.
+    /// Every reason the model can be unusable. The OS floor is folded in, so callers never check `#available`.
     enum Status: Equatable {
         case available
         case unsupportedOS
@@ -89,8 +88,7 @@ enum AppleIntelligenceAvailability {
         }
     }
 
-    /// Actionable sentence used as the provider's runtime error. Points at the specific fix — the
-    /// System Settings toggle, a retry, or switching provider — rather than a generic failure.
+    /// Actionable runtime error that points at the specific fix, not a generic failure.
     static func unavailableExplanation(for status: Status) -> String {
         switch status {
         case .available:

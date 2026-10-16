@@ -32,7 +32,6 @@ final class ExtensionOutputContractTests: XCTestCase {
     // MARK: - Contract Compatibility & Defaults
 
     func testCompatibilityRules() {
-        // Text outputs
         XCTAssertTrue(ExtensionOutputContract.isCompatible(output: .text, result: .preview))
         XCTAssertTrue(ExtensionOutputContract.isCompatible(output: .text, result: .paste))
         XCTAssertTrue(ExtensionOutputContract.isCompatible(output: .text, result: .copy))
@@ -40,7 +39,6 @@ final class ExtensionOutputContractTests: XCTestCase {
         XCTAssertFalse(ExtensionOutputContract.isCompatible(output: .text, result: .open))
         XCTAssertFalse(ExtensionOutputContract.isCompatible(output: .text, result: .save))
 
-        // File outputs
         XCTAssertTrue(ExtensionOutputContract.isCompatible(output: .file, result: .preview))
         XCTAssertTrue(ExtensionOutputContract.isCompatible(output: .file, result: .save))
         XCTAssertTrue(ExtensionOutputContract.isCompatible(output: .file, result: .open))
@@ -48,12 +46,10 @@ final class ExtensionOutputContractTests: XCTestCase {
         XCTAssertFalse(ExtensionOutputContract.isCompatible(output: .file, result: .paste))
         XCTAssertFalse(ExtensionOutputContract.isCompatible(output: .file, result: .pasteOrCopy))
 
-        // None output
         XCTAssertFalse(ExtensionOutputContract.isCompatible(output: .none, result: .copy))
         XCTAssertFalse(ExtensionOutputContract.isCompatible(output: .none, result: .paste))
         XCTAssertFalse(ExtensionOutputContract.isCompatible(output: .none, result: .preview))
 
-        // Dynamic output
         XCTAssertTrue(ExtensionOutputContract.isCompatible(output: .dynamic, result: .preview))
         XCTAssertTrue(ExtensionOutputContract.isCompatible(output: .dynamic, result: .paste))
         XCTAssertTrue(ExtensionOutputContract.isCompatible(output: .dynamic, result: .save))
@@ -115,7 +111,6 @@ final class ExtensionOutputContractTests: XCTestCase {
         XCTAssertNil(act2.output)
         XCTAssertNil(act2.result)
 
-        // Inheritance resolution
         let resolvedAct1 = ExtensionOutputContract.resolveEffective(action: act1, package: manifest)
         XCTAssertEqual(resolvedAct1.output, .text)
         XCTAssertEqual(resolvedAct1.result, .copy)

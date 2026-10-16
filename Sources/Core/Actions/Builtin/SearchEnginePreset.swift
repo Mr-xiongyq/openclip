@@ -1,16 +1,13 @@
 // SearchEnginePreset.swift
 // OpenClip
 //
-// Curated one-click search engine presets for the built-in Search action. Pure domain metadata:
-// the configured value always stays the `{query}` URL template string written through the option
-// store, so a stored template that matches no preset simply renders as "Custom" — no migration,
-// no loss of custom/self-hosted endpoints.
+// Curated one-click search engine presets for the built-in Search action. The configured value stays
+// the `{query}` URL template, so a template matching no preset renders as "Custom" with no migration.
 import Foundation
 
 public struct SearchEnginePreset: Sendable, Equatable, Identifiable {
     /// Stable identifier used as the picker tag (e.g. "google", "kagi").
     public let id: String
-    /// User-facing display name (e.g. "Google", "Brave Search").
     public let displayName: String
     /// The `{query}` URL template that SearchAction resolves against selected text.
     public let urlTemplate: String
@@ -72,14 +69,11 @@ public struct SearchEnginePreset: Sendable, Equatable, Identifiable {
 
     // MARK: - Lookup
 
-    /// Returns the preset whose URL template exactly matches `template`, or nil when the template
-    /// is custom/empty. Matching is exact so a user's hand-edited variant of a preset URL (e.g.
-    /// appending `&hl=en`) is treated as Custom rather than silently snapping back to the preset.
+    /// Exact match only: a hand-edited variant (e.g. appending `&hl=en`) is Custom, not snapped back to the preset.
     public static func preset(matching template: String) -> SearchEnginePreset? {
         all.first { $0.urlTemplate == template }
     }
 
-    /// Returns the preset with the given stable id, or nil.
     public static func preset(id: String) -> SearchEnginePreset? {
         all.first { $0.id == id }
     }

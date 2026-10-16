@@ -1,25 +1,23 @@
 // ScriptOutputSniffers.swift
 // OpenClip
 //
-// Heuristic sniffers for script content (JS, AppleScript, Shell) used as an inference bridge
-// for legacy extensions that do not declare an explicit `output` contract in their manifest.
+// Heuristics for legacy extensions that declare no `output` contract in their manifest.
 import Foundation
 
 public enum ScriptOutputSniffers {
-    /// Determines if a JavaScript extension produces text output governed by the delivery preference.
     public static func jsProducesText(code: String) -> Bool {
-        // 1. Check for arrow function with direct expression body (e.g. `const action = (text) => text.trim()`):
+        // 1. Arrow function with expression body.
         let arrowExprPattern = #"(?:(?:var|let|const)\s+)?(?:action|main)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[a-zA-Z0-9_]+)\s*=>\s*([^{\s\n;][^;\n]*)"#
         if let match = code.range(of: arrowExprPattern, options: .regularExpression) {
             let matchedStr = String(code[match])
-            // If the arrow expression evaluates to a non-text literal like void/undefined/null/boolean:
+            // Non-text literals (void/undefined/null/boolean) are not text.
             if matchedStr.range(of: #"=>\s*(?:undefined|null|true|false)\b"#, options: .regularExpression) == nil {
                 return true
             }
             return false
         }
 
-        // 2. Look for action/main entry function with block body:
+        // 2. Action/main entry function with block body.
         let entryHeaderPattern = #"(?:(?:async\s+)?function\s+(?:action|main)\s*\([^)]*\)|(?:(?:var|let|const)\s+)?(?:action|main)\s*=\s*(?:async\s*)?(?:function\s*\([^)]*\)|\([^)]*\)\s*=>|[a-zA-Z0-9_]+\s*=>))\s*\{"#
         if let match = code.range(of: entryHeaderPattern, options: .regularExpression) {
             let openBraceIndex = code.index(before: match.upperBound)
@@ -28,7 +26,7 @@ public enum ScriptOutputSniffers {
             }
         }
 
-        // Fallback: check whole script if no formal action/main entry function was found
+        // Fallback: no action/main entry found, scan the whole script.
         return bodyHasReturnText(code)
     }
 
@@ -55,18 +53,16 @@ public enum ScriptOutputSniffers {
         return String(text[openBrace...])
     }
 
-    /// Determines if an AppleScript extension produces text output.
     public static func appleScriptProducesText(code: String) -> Bool {
         let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return false }
 
-        // Explicit non-empty return produces text regardless of preceding side-effects
+        // Explicit non-empty return counts regardless of side-effects.
         let hasExplicitReturn = trimmed.range(of: #"return\s+(?!\s*["']["']|missing value\b)\S+"#, options: .regularExpression) != nil
         if hasExplicitReturn {
             return true
         }
 
-        // Explicit empty return produces no text
         if trimmed.contains("return \"\"") || trimmed.contains("return ''") || trimmed.contains("return missing value") {
             return false
         }
@@ -81,12 +77,11 @@ public enum ScriptOutputSniffers {
         return true
     }
 
-    /// Determines if a shell extension produces text output to stdout.
     public static func shellProducesText(code: String) -> Bool {
         let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return false }
 
-        // QuickLook preview window (e.g. qlmanage -p in QR Code Generator)
+        // QuickLook previews print nothing unless stdout is produced.
         if let qlRange = trimmed.range(of: "qlmanage") {
             let after = String(trimmed[qlRange.upperBound...])
             if !hasStdoutProducer(after) && !hasStdoutProducer(trimmed) {
@@ -94,14 +89,14 @@ public enum ScriptOutputSniffers {
             }
         }
 
-        // Background process with output redirected to /dev/null and no stdout
+        // Backgrounded with stdout sent to /dev/null.
         if (trimmed.contains(">/dev/null") || trimmed.contains("> /dev/null")) && trimmed.contains("&") {
             if !hasStdoutProducer(trimmed) {
                 return false
             }
         }
 
-        // Swift / Cocoa GUI runner or binary with no stdout (e.g. Large Type)
+        // GUI runners (swift, largetype) print nothing to stdout.
         if let guiRange = trimmed.range(of: #"(?:swift\s+|main\.swift|largetype)"#, options: .regularExpression) {
             let after = String(trimmed[guiRange.upperBound...])
             if !hasStdoutProducer(after) && !hasStdoutProducer(trimmed) {
@@ -109,19 +104,17 @@ public enum ScriptOutputSniffers {
             }
         }
 
-        // Piping into `open` (e.g. `printf ... | open -f -a TextEdit`) or bare `open -a`
         if trimmed.contains("| open ") || trimmed.contains("| /usr/bin/open ") {
             return false
         }
 
-        // Opens an application without producing text
         if trimmed.contains("open -a ") || trimmed.contains("open -f ") || trimmed.contains("open -g ") {
             if !hasStdoutProducer(trimmed) {
                 return false
             }
         }
 
-        // Emits only JSON toast effects (like Harper check/dictionary/forget)
+        // Toast-only JSON effects (e.g. Harper) print nothing.
         if trimmed.contains("{\"type\":\"toast\"") || trimmed.contains("{type:\"toast\"") {
             if !trimmed.contains("| implode") && !trimmed.contains("type:\"copy\"") {
                 return false

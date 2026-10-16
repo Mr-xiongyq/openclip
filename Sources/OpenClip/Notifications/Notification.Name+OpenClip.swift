@@ -6,10 +6,7 @@
 import Foundation
 
 extension Notification.Name {
-    /// Posted when an action requests its configuration UI. The popup hides first
-    /// (`.openConfiguration` dismisses the popup); the payload `ConfigurationRequest` travels in
-    /// `userInfo["request"]`. StatusBarController/Preferences observes this, finds the action by id
-    /// in `ActionCoordinator.shared.actions`, and presents its `ActionEditorPage`.
+    /// Posted to open an action's configuration UI. Payload `ConfigurationRequest` is in `userInfo["request"]`.
     static let openClipOpenActionConfiguration = Notification.Name("OpenClipOpenActionConfiguration")
 
     /// Posted when extension packages are installed, uninstalled, enabled, or disabled.
@@ -30,8 +27,6 @@ extension Notification.Name {
     /// Posted to switch the active tab in the Preferences window. The target `PreferenceTab` travels in `object`.
     static let openClipSelectPreferencesTab = Notification.Name("OpenClipSelectPreferencesTab")
 
-    /// Posted every time the Settings window is brought to the front (created or reused). The
-    /// sidebar scrolls its selected row into view on this, because a reused window never sees
-    /// `onAppear` again and the selection itself may not change.
+    /// Posted each time the Settings window is shown. Reused windows skip `onAppear`, so the sidebar scrolls on this.
     static let openClipPreferencesWindowDidShow = Notification.Name("OpenClipPreferencesWindowDidShow")
 }

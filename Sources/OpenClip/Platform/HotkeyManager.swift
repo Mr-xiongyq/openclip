@@ -32,12 +32,8 @@ public final class HotkeyManager {
     private var popupTriggerTask: Task<Void, Never>?
     private var popupTriggerRequestID: UUID?
     
-    /// Gating for the ⌥⌘C trigger. Deliberately does **not** consult `SettingKey.isAppEnabled`:
-    /// that setting is "Appear Automatically" (both in Preferences and the menu bar), so it owns
-    /// the selection monitor's automatic popup, not the explicit shortcut — turning automatic
-    /// appearance off is the global form of the per-app `hotkeyOnly` rule, which has always kept
-    /// the hotkey alive. The real kill switches still apply here: Pause OpenClip
-    /// (`pauseUntilTimestamp`), the app-exclusion list, and a per-app `disabled` rule.
+    /// Does not consult `isAppEnabled` ("Appear Automatically" only gates the automatic popup).
+    /// Pause, app exclusions, and per-app `disabled` rules still apply.
     internal static func triggerAllowed(
         frontmost: NSRunningApplication?,
         settingsStore: SettingsStore = DefaultSettingsStore.shared
@@ -49,7 +45,7 @@ public final class HotkeyManager {
         if let bundleID = frontmost.bundleIdentifier, AppFilter.isExcluded(bundleID: bundleID) {
             return false
         }
-        // A transient helper with no bundle ID, name, or path cannot be configured — never trigger.
+        // Bundle-less transient helpers cannot be configured, so never trigger.
         let identity = AppIdentity(frontmost)
         guard identity.ruleIdentifier != nil else { return false }
         return !RuleEngine.shared.resolvePolicies(for: identity).disabled
@@ -70,8 +66,7 @@ public final class HotkeyManager {
         self.popupController = popupController
         self.selectionMonitor = selectionMonitor
         self.captureTextController = captureTextController
-        // ⌘1…⌘9 pick a palette row. Parked until a palette opens — see PaletteRowShortcuts for why
-        // they must be global hot keys rather than key equivalents on the panel.
+        // ⌘1…⌘9 must be global hot keys, not panel key equivalents (see PaletteRowShortcuts).
         PaletteRowShortcuts.install { [weak popupController] row in
             popupController?.runPaletteRow(row) ?? false
         }
@@ -112,8 +107,7 @@ public final class HotkeyManager {
             return
         }
         guard KeyboardShortcuts.isEnabled else { return }
-        // Popup already visible: if in search mode, the hotkey dismisses the popup (toggle off);
-        // if in actions bar mode, the hotkey transitions directly into search mode.
+        // Visible popup: search mode toggles off; actions bar switches into search.
         if let popupController = self.popupController, popupController.isVisible {
             if popupController.modeStore.mode == .search {
                 popupController.toggleMode()
@@ -160,10 +154,7 @@ public final class HotkeyManager {
     }
 
     private func showSearch(for trigger: (context: SelectionContext, canPaste: Bool?)) {
-        // When both the monitored selection and clipboard are empty, check whether there are any
-        // standalone actions (e.g. extensions declaring `input: "optional"`) available to run.
-        // If not, avoid showing an empty search palette ("No matching actions" dead end); instead,
-        // surface a lightweight floating toast anchored at the mouse cursor.
+        // Empty selection and clipboard with no standalone actions: toast instead of an empty palette.
         if trigger.context.text.isEmpty {
             let actionContext = ActionContext(selection: trigger.context, modifiers: [])
             let catalog = ActionCoordinator.shared.searchCatalog(for: actionContext)
@@ -184,26 +175,17 @@ public final class HotkeyManager {
         self.popupController?.show(for: trigger.context, pasteAvailable: trigger.canPaste, initialMode: .search)
     }
 
-    /// Synchronous retrieve path for ⌥⌘C: checks gating, reuses monitored selection,
-    /// falls back to clipboard (paste fallback), or falls back to an empty context so the search
-    /// palette opens with zero delay.
-    ///
-    /// When `frontmostApp` is `nil` (common during clipboard-manager handoffs) the method skips
-    /// the per-app gating and monitored-selection paths, falling straight through to clipboard /
-    /// empty-context. The global pause check still applies.
+    /// Synchronous ⌥⌘C path: monitored selection, then clipboard, then empty context (zero delay).
+    /// A nil `frontmostApp` skips per-app gating; the global pause still applies.
     internal func resolveSynchronousTrigger(
         frontmostApp: NSRunningApplication? = NSWorkspace.shared.frontmostApplication,
         settingsStore: SettingsStore = DefaultSettingsStore.shared
     ) -> (context: SelectionContext, canPaste: Bool?)? {
-        // Global pause applies regardless of which app is frontmost.
         if settingsStore.get(.pauseUntilTimestamp) > Date().timeIntervalSince1970 {
             return nil
         }
 
-        // When an identifiable frontmost app exists — including a bundle-less one identified by
-        // process name or executable path — apply per-app gating. When it is nil (e.g. during a
-        // clipboard-manager → destination app transition) skip the per-app checks and fall
-        // through to the clipboard / empty-context path.
+        // A nil frontmost app (clipboard-manager handoff) skips per-app checks.
         let appIdentity: AppIdentity
         let policy: AppPolicyContext
         let canUseMonitoredSelection: Bool
@@ -216,8 +198,7 @@ public final class HotkeyManager {
             policy = resolved
             canUseMonitoredSelection = true
         } else {
-            // No identifiable app — per-app exclusion and disabled rules cannot apply, so only
-            // the global pause (checked above) is honoured.
+            // No identifiable app: per-app rules cannot apply; only the global pause does.
             appIdentity = AppIdentity(bundleIdentifier: nil, localizedName: nil)
             policy = .default
             canUseMonitoredSelection = false
@@ -295,7 +276,6 @@ public final class HotkeyManager {
               ActionIdentity.isBindable(action),
               !(action is GatedExtensionAction) else { return }
 
-        // Refuse to run actions or packages that have been disabled in preferences
         let disabledIDs = settingsStore.get(.disabledActionIDs)
         let disabledPackages = settingsStore.get(.disabledPackages)
         guard !disabledIDs.contains(action.id) else { return }
@@ -334,8 +314,7 @@ public final class HotkeyManager {
         }
     }
 
-    /// Shared retrieve path for ⌥⌘C and per-action hotkeys: gate, probe paste, read selection
-    /// (clipboard fallback), reject oversized input and empty input unless explicitly allowed.
+    /// Shared retrieve path for ⌥⌘C and per-action hotkeys.
     internal private(set) var lastTriggerResponse: SelectionTriggerResponse?
     internal var onTriggerOutcome: ((SelectionTriggerResponse) -> Void)?
 

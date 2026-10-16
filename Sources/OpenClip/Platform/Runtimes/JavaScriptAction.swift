@@ -1,12 +1,8 @@
 // JavaScriptAction.swift
 // OpenClip
 //
-// Implements action execution for JavaScript snippets using JavaScriptCore, reading options via the
-// Settings Door. Enablement and match resolution delegate to the shared ActionVisibility evaluator
-// when rules are attached. perform short-circuits to `.openConfiguration` when a declaratively
-// required option has no resolved value (Phase 7), then delegates to OpenClipJSHost (the dedicated,
-// testable bridge that exposes the read-only openclip.* surface) for the RAW runtime result.
-// Secondary/delivery handling happens downstream via the action's declared `delivery`.
+// Runs JavaScript extension actions. Returns `.openConfiguration` when a required option is unset,
+// otherwise delegates to OpenClipJSHost for the raw runtime result.
 import Foundation
 import JavaScriptCore
 import Core
@@ -22,12 +18,11 @@ public struct JavaScriptAction: ConfigurableAction, ActionWithRules {
     public let chrome: ActionChrome
     public let optionStore: any ActionOptionReading
     public let rules: ExtensionActionRules?
-    /// When true the JS host runs asynchronously (promise awaiting + fetch polyfill + watchdog).
+    /// Runs the JS host asynchronously (promise awaiting, fetch, watchdog).
     public let isAsync: Bool
-    /// The extension package directory. When non-nil the JS host runs in module mode
-    /// (`require`/multi-file); nil means inline `scriptCode` keeps the legacy single-file behavior.
+    /// Enables module mode (`require`). Nil keeps the single-file inline script.
     public let packageDirectory: URL?
-    /// The entry script directory. When nil, defaults to packageDirectory.
+    /// Defaults to packageDirectory when nil.
     public let entryDirectory: URL?
 
     nonisolated public init(
@@ -94,13 +89,10 @@ public struct JavaScriptAction: ConfigurableAction, ActionWithRules {
         try await perform(context, timeout: nil)
     }
 
-    /// Performs with an optional caller-supplied runtime deadline. Inline evaluation uses its
-    /// shorter UI budget so JavaScriptCore can interrupt synchronous scripts at the same deadline.
+    /// Inline evaluation passes its shorter UI budget so JavaScriptCore interrupts sync scripts at the same deadline.
     func perform(_ context: ActionContext, timeout: TimeInterval?) async throws -> ActionResult {
-        // Phase 7: a declaratively-required option with no resolved value short-circuits to
-        // configuration BEFORE any JS runs. Distinct from the runtime `openclip.requireConfiguration`
-        // call (a script-time request); this is the manifest `requiredOptions` auto-check and must
-        // not be duplicated inside OpenClipJSHost.
+        // Manifest `requiredOptions` check, run before any JS. Distinct from the runtime
+        // `openclip.requireConfiguration` call, so keep it out of OpenClipJSHost.
         let missing = ActionVisibility.missingRequiredOptions(
             requirements: rules?.requirements,
             options: actionOptions,

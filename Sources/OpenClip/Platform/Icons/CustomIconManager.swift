@@ -1,9 +1,7 @@
 // CustomIconManager.swift
 // OpenClip
 //
-// Manages custom user-provided icons stored in ~/.openclip/custom_icons/.
-// Supports importing icons from Finder, resolving website favicons,
-// and listing saved custom icons.
+// Custom user icons in ~/.openclip/custom_icons/: Finder imports, favicon resolution, listing.
 import Foundation
 import AppKit
 import Core
@@ -48,7 +46,6 @@ public final class CustomIconManager: ObservableObject, Sendable {
         scanCustomIcons()
     }
 
-    /// Ensures the custom icons directory exists
     public func ensureDirectoryExists() {
         if !FileManager.default.fileExists(atPath: directoryURL.path) {
             try? FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
@@ -80,8 +77,7 @@ public final class CustomIconManager: ObservableObject, Sendable {
         customIcons = sorted.map { "\(Constants.customIconPrefix)\($0.lastPathComponent)" }
     }
 
-    /// Imports an image file selected from Finder into ~/.openclip/custom_icons/
-    /// and returns its `custom:<filename>` identifier.
+    /// Copies a Finder-selected image into the icons directory; returns its `custom:<filename>` id.
     @discardableResult
     public func importIcon(from sourceURL: URL) throws -> String {
         guard FileManager.default.fileExists(atPath: sourceURL.path) else {
@@ -93,7 +89,6 @@ public final class CustomIconManager: ObservableObject, Sendable {
             throw CustomIconError.unsupportedFileType
         }
 
-        // Validate that image data is readable
         guard let data = try? Data(contentsOf: sourceURL), !data.isEmpty else {
             throw CustomIconError.invalidImageData
         }
@@ -130,8 +125,7 @@ public final class CustomIconManager: ObservableObject, Sendable {
         return host.lowercased()
     }
 
-    /// Resolves a favicon for the provided website URL or domain, saves it to
-    /// the custom icons directory, and returns the `custom:<filename>` identifier.
+    /// Downloads a favicon for the URL or domain, saves it as PNG, and returns its `custom:<filename>` id.
     @discardableResult
     public func resolveFavicon(from inputString: String) async throws -> String {
         guard let host = Self.normalizeHost(from: inputString) else {
@@ -180,7 +174,6 @@ public final class CustomIconManager: ObservableObject, Sendable {
             throw CustomIconError.networkFailed(host)
         }
 
-        // 3. Decode image and normalize to PNG
         guard let image = NSImage(data: data) else {
             throw CustomIconError.invalidImageData
         }

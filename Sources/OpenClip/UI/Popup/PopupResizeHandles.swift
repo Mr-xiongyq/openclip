@@ -1,19 +1,13 @@
 // PopupResizeHandles.swift
 // OpenClip
 //
-// The resize handles shared by the popup's resizable surfaces — the result card and the
-// action-search palette: invisible strips along the right and bottom edges plus a visible grip in
-// the bottom-right corner. They are SwiftUI gestures because the borderless panel has no AppKit
-// resize edges, and an AppKit handle would never see the `mouseDown` (`NSHostingView` answers
-// `hitTest` with itself for the whole surface — see `ResultCardDragPhase`). The handles only
-// report phases; the owner (`PopupWindowController.handleResize`) computes the size from the
-// absolute cursor position, resizes the panel, and remembers the result.
+// Resize handles for the popup's resizable surfaces: edge strips plus a corner grip. These are
+// SwiftUI gestures because the borderless panel has no AppKit resize edges and `NSHostingView`
+// swallows `mouseDown`. The owner (`PopupWindowController.handleResize`) computes the size.
 import SwiftUI
 import AppKit
 
-/// The handle a resize drag started on. A surface's top-left corner stays fixed (the card's
-/// header is its move handle; the palette is anchored on the bar), so only the right edge, the
-/// bottom edge and the corner joining them resize.
+/// The top-left corner stays fixed, so only the right edge, bottom edge, and corner resize.
 public enum PopupResizeEdge: Sendable, Equatable {
     case right
     case bottom
@@ -24,16 +18,12 @@ public enum PopupResizeEdge: Sendable, Equatable {
 }
 
 struct PopupResizeHandles: View {
-    /// Color of the grip glyph — the surface's resting foreground, dimmed until hovered.
     let tint: Color
-    /// Accessibility label of the grip, naming the surface it resizes.
     let accessibilityLabel: String
-    /// Phases mirror the card's header drag; `.began` is reported exactly once per drag.
+    /// `.began` is reported exactly once per drag.
     let onResize: @MainActor (PopupResizeEdge, ResultCardDragPhase) -> Void
 
-    /// The handle under the pointer, driving the cursor and the grip's emphasis.
     @State private var hoveredEdge: PopupResizeEdge?
-    /// The handle being dragged, from the gesture crossing its threshold to its end.
     @State private var activeEdge: PopupResizeEdge?
 
     private static let edgeThickness: CGFloat = 5.0
@@ -41,9 +31,7 @@ struct PopupResizeHandles: View {
     private static let gripGlyphSize: CGFloat = 9.0
     private static let gripInset: CGFloat = 5.0
 
-    /// The strips are thin so they stay clear of footer buttons and result rows and leave most of
-    /// a body's overlay scrollbar grabbable; the grip is drawn last so it wins where it overlaps
-    /// the strips.
+    /// Thin strips leave the body's scrollbar grabbable; the grip is drawn last so it wins on overlap.
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             strip(.right)
@@ -74,7 +62,6 @@ struct PopupResizeHandles: View {
             .accessibilityLabel(accessibilityLabel)
     }
 
-    /// Three diagonal strokes hugging the corner, longest outermost — the classic grip.
     private var gripGlyph: some View {
         let size = Self.gripGlyphSize
         let isEmphasized = hoveredEdge == .bottomRight || activeEdge == .bottomRight
@@ -88,8 +75,7 @@ struct PopupResizeHandles: View {
         .frame(width: size, height: size)
     }
 
-    /// A tiny threshold so a plain click on a handle is not a resize; `.began` is reported once,
-    /// on the first update past it.
+    /// `.began` fires once, on the first update, so a plain click is not a resize.
     private func gesture(_ edge: PopupResizeEdge) -> some Gesture {
         DragGesture(minimumDistance: 1)
             .onChanged { _ in
@@ -117,10 +103,7 @@ struct PopupResizeHandles: View {
         updateCursor()
     }
 
-    /// The cursor follows the hovered handle and stays for the whole drag, even when a fast pull
-    /// carries the pointer off the thin strip. `PopupPanel.ContentView` forces the arrow whenever
-    /// the pointer enters the panel, so the handles set the cursor themselves rather than relying
-    /// on cursor rects.
+    /// Set manually: `PopupPanel.ContentView` forces the arrow on entry, and cursor rects miss fast drags.
     private func updateCursor() {
         if let edge = activeEdge ?? hoveredEdge {
             Self.cursor(for: edge).set()

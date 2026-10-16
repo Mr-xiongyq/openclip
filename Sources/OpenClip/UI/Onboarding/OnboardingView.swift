@@ -1,12 +1,8 @@
 // OnboardingView.swift
 // OpenClip
 //
-// Native macOS onboarding flow following Apple System Settings / Setup Assistant conventions:
-// - Solid, edge-to-edge window background (Color(nsColor: .windowBackgroundColor))
-// - Plain SF Symbols with .symbolRenderingMode(.hierarchical)
-// - Tactile primary button style (gradient + arrow icon + scale on press)
-// - Flat system inset cards with zero web drop-shadows
-// - Vertically centered content with zero dead space
+// Native macOS onboarding flow following System Settings conventions: solid window background,
+// hierarchical SF Symbols, flat system inset cards, no web drop-shadows.
 import SwiftUI
 import AppKit
 import Core

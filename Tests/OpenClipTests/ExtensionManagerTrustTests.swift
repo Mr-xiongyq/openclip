@@ -84,7 +84,6 @@ final class ExtensionManagerTrustTests: XCTestCase {
         XCTAssertEqual(store.get(.extensionTrust)["com.t.tf"], "trusted")
         XCTAssertEqual(store.get(.extensionTrustHashes)["com.t.tf"]?.count, 64)
 
-        // Disable → revoked, gated again.
         await manager.disablePackage(packageID: "com.t.tf", in: tempDir)
         let revoked = try XCTUnwrap(manager.loadedActions.first as? GatedExtensionAction)
         XCTAssertEqual(revoked.reason, .revoked)
@@ -106,7 +105,7 @@ final class ExtensionManagerTrustTests: XCTestCase {
         let initialHash = store.get(.extensionTrustHashes)["com.t.dev"]
         XCTAssertNotNil(initialHash)
 
-        // Edit the script: developer extension seamlessly auto-rehashes and stays runnable!
+        // Developer packages auto-rehash on edit and stay runnable.
         try writePackage(packageID: "com.t.dev", name: "Dev", script: "echo updated")
         await manager.loadExtensions(from: tempDir)
         XCTAssertFalse(manager.loadedActions[0] is GatedExtensionAction)
@@ -138,8 +137,7 @@ final class ExtensionManagerTrustTests: XCTestCase {
         manager.actionFactory = DefaultActionFactory()
         defer { manager.actionFactory = nil }
 
-        // A standalone script declaring `// identifier:` derives its package id from the header,
-        // not the filename, so packageHash(forPackageID:) must resolve the declared identifier.
+        // Package id comes from the `// identifier:` header, not the filename; packageHash must resolve it.
         let scriptURL = tempDir.appendingPathComponent("myid.sh")
         try """
         // identifier: com.myid
@@ -151,14 +149,12 @@ final class ExtensionManagerTrustTests: XCTestCase {
         var events: [ExtensionTrustChange] = []
         manager.onTrustChange = { events.append($0) }
 
-        // First load = migration: auto-trusts with the gate-computed hash.
         await manager.loadExtensions(from: tempDir)
         XCTAssertEqual(manager.loadedActions.count, 1)
         XCTAssertFalse(manager.loadedActions[0] is GatedExtensionAction)
         XCTAssertEqual(store.get(.extensionTrust)["com.myid"], "trusted")
 
-        // Re-enable through the trust model — this records the hash via
-        // packageHash(forPackageID:), which must resolve the declared identifier (I3).
+        // Enabling records the hash via packageHash(forPackageID:), which must resolve the declared id.
         await manager.enablePackage(packageID: "com.myid", in: tempDir)
         XCTAssertEqual(store.get(.extensionTrustHashes)["com.myid"]?.count, 64)
 
@@ -176,7 +172,7 @@ final class ExtensionManagerTrustTests: XCTestCase {
         try writePackage(packageID: "com.t.enil", name: "ENil")
         store.set(.extensionTrust, value: ["com.t.enil": "seen"])
 
-        // Break the manifest so no fingerprint can resolve; enablePackage must persist nothing.
+        // Unreadable manifest: no fingerprint resolves, so enablePackage must persist nothing.
         try FileManager.default.removeItem(at: tempDir.appendingPathComponent("ENil.openclipext").appendingPathComponent("openclip.json"))
         await manager.enablePackage(packageID: "com.t.enil", in: tempDir)
         XCTAssertEqual(store.get(.extensionTrust)["com.t.enil"], "seen", "trust must not be persisted without a fingerprint")
@@ -214,7 +210,7 @@ final class ExtensionManagerTrustTests: XCTestCase {
 
     @MainActor
     func testUnconfiguredManagerSkipsGatingEntirely() async throws {
-        // settingsStore nil → raw behavior, existing tests stay green.
+        // A nil settingsStore disables gating entirely.
         let manager = ExtensionManager.shared
         manager.settingsStore = nil
         try writePackage(packageID: "com.t.raw", name: "Raw")

@@ -6,9 +6,7 @@ import AppKit
 import ApplicationServices
 import Core
 
-/// Centralized manager for macOS system accessibility permissions.
-/// Uses a continuous async polling loop (not Timer) to reliably detect
-/// AXIsProcessTrusted changes on the main actor.
+/// Polls `AXIsProcessTrusted` with an async loop on the main actor rather than a Timer.
 @MainActor
 public final class PermissionManager: ObservableObject {
     public static let shared = PermissionManager()
@@ -23,7 +21,6 @@ public final class PermissionManager: ObservableObject {
 
     // MARK: - Public API
 
-    /// Start continuously polling AX status every 0.5 s.
     public func startMonitoring() {
         guard pollingTask == nil else { return }
         pollingTask = Task { @MainActor [weak self] in
@@ -34,13 +31,11 @@ public final class PermissionManager: ObservableObject {
         }
     }
 
-    /// Stop polling.
     public func stopMonitoring() {
         pollingTask?.cancel()
         pollingTask = nil
     }
 
-    /// Single manual check — useful for the "Re-check" button.
     public func checkStatus() {
         let current = Self.queryAX()
         if isAccessibilityGranted != current {
@@ -49,8 +44,7 @@ public final class PermissionManager: ObservableObject {
         }
     }
 
-    /// Open System Settings → Accessibility and prompt macOS TCC to evaluate the running binary.
-    /// TCC entries are reset only through the explicit recovery action below.
+    /// Prompts TCC to evaluate the running binary. TCC entries are reset only by `resetTCCAndRelaunch`.
     public func requestAccessibilityPermission() {
         startMonitoring()
         promptAndOpenAccessibilitySettings()
@@ -66,8 +60,7 @@ public final class PermissionManager: ObservableObject {
 
     /// Reset TCC permission database entry for OpenClip if macOS TCC is caching a stale signature.
     public func resetTCCAndRelaunch() {
-        // Run tccutil asynchronously — never `waitUntilExit` on the main actor. The app relaunches
-        // regardless so TCC re-evaluates the running binary.
+        // Async: never `waitUntilExit` on the main actor. The app relaunches regardless.
         Task {
             do {
                 _ = try await ShellProcessRunner.run(ShellProcessRunner.Invocation(

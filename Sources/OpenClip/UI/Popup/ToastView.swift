@@ -10,8 +10,7 @@ struct ToastView: View {
     let feedback: StatusFeedback
     var onCancel: (() -> Void)? = nil
     var reservedWidth: CGFloat? = nil
-    /// Reports pointer enter/leave so the controller can hold the toast under the cursor and
-    /// restart its auto-dismissal once the cursor moves away.
+    /// Pointer enter/leave; the controller holds the toast while hovered.
     var onHover: ((Bool) -> Void)? = nil
 
     @State private var isHovered = false
@@ -33,11 +32,9 @@ struct ToastView: View {
         _popupScale = Setting(SettingKey.popupScale, store: settingsStore)
     }
 
-    /// Visual multiplier derived from the user's Popup Scale level (1...5) so the toast keeps pace
-    /// with the popup bar it attaches to — same scale factor `PopupView` applies to the bar.
+    /// Same popup scale factor `PopupView` applies to the bar.
     private var scale: CGFloat { PopupMetrics.scaleMultiplier(for: popupScale) }
 
-    /// Corner radius for the toast bubble, scaled with the popup scale.
     private var cornerRadius: CGFloat { PopupMetrics.toastCornerRadius * scale }
 
     private var isGlass: Bool {
@@ -62,8 +59,7 @@ struct ToastView: View {
         }
     }
 
-    /// Formats a raw feedback message for presentation: flattens multiline text into single-line
-    /// and truncates with an ellipsis if it exceeds `limit`.
+    /// Flattens newlines and truncates with an ellipsis past `limit`.
     static func formatMessage(_ message: String, limit: Int = PopupMetrics.toastMaxCharacterLength) -> String {
         let singleLine = message
             .replacingOccurrences(of: "\r\n", with: " ")
@@ -173,9 +169,7 @@ struct ToastView: View {
     }
 }
 
-/// A smoothly rotating, color-adaptive spinner that respects foreground styling and scales with the popup.
-/// Replaces AppKit-backed `ProgressView`, whose native CoreUI blades ignore `.foregroundColor`,
-/// `.tint`, and `.colorMultiply` on macOS.
+/// Custom spinner: AppKit-backed `ProgressView` ignores foreground color and tint on macOS.
 private struct ToastSpinnerView: View {
     let color: Color
     let scale: CGFloat

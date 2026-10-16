@@ -1,7 +1,7 @@
 // CalculateAction.swift
 // OpenClip
 //
-// Implements the builtin math expression evaluation action, computing mathematical expressions found in selected text.
+// Builtin action that evaluates arithmetic expressions found in the selection.
 import Foundation
 
 public struct CalculateAction: ConfigurableAction {
@@ -42,9 +42,7 @@ public struct CalculateAction: ConfigurableAction {
             return .none
         }
         let resultString = formatResult(result)
-        // `formatResult` renders a non-finite value as "", which would paste nothing and delete the
-        // selection. `MathEvaluator` now rejects non-finite results outright, but keep the guard so
-        // an empty render can never become `.text("")` (issue #50).
+        // Never return `.text("")`: it would paste nothing and delete the selection (#50).
         guard !resultString.isEmpty else { return .none }
         return .text(resultString)
     }
@@ -52,45 +50,39 @@ public struct CalculateAction: ConfigurableAction {
     private func sanitize(_ text: String) -> String? {
         var s = text.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Strip common currency symbols
         let currencies = ["$", "€", "£", "¥", "₹", "₩", "₽", "฿", "¢"]
         for sym in currencies {
             s = s.replacingOccurrences(of: sym, with: "")
         }
         
-        // Strip trailing/leading equals signs and question marks
         s = s.replacingOccurrences(of: "=", with: " ")
              .replacingOccurrences(of: "?", with: " ")
 
-        // Normalize unicode multiplication & division
         s = s.replacingOccurrences(of: "×", with: "*")
              .replacingOccurrences(of: "÷", with: "/")
              .replacingOccurrences(of: "·", with: "*")
 
-        // Normalize unicode dashes & minus signs (macOS smart dashes)
+        // macOS smart dashes.
         s = s.replacingOccurrences(of: "–", with: "-") // En-dash
              .replacingOccurrences(of: "—", with: "-") // Em-dash
              .replacingOccurrences(of: "−", with: "-") // Unicode minus
 
-        // Normalize letter x / X as multiplication when surrounded by whitespace: "5 x 10" -> "5 * 10"
+        // Spaced x/X means multiplication ("5 x 10").
         s = s.replacingOccurrences(of: " x ", with: " * ")
              .replacingOccurrences(of: " X ", with: " * ")
 
-        // Normalize decimal & thousands separators intelligently
         s = normalizeSeparators(s)
 
         s = s.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !s.isEmpty else { return nil }
 
-        // Allowed character set (digits, operators, parens, dot, percent, power, spaces)
         let allowed = CharacterSet(charactersIn: "0123456789.+-*/%^() ")
         guard s.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return nil }
 
         return s
     }
 
-    /// Intelligently resolves decimal points and thousands separators across US (1,250.50)
-    /// and European (1.250,50 / 12,5 + 3,5) math expressions without requiring manual settings.
+    /// Resolves '.' and ',' as decimal or thousands separators per token (US and European input).
     private func normalizeSeparators(_ text: String) -> String {
         guard text.contains(",") else { return text }
 
@@ -113,7 +105,6 @@ public struct CalculateAction: ConfigurableAction {
 
             let normalizedToken: String
             if token.contains(".") {
-                // Contains both '.' and ','
                 if let lastDot = token.lastIndex(of: "."),
                    let lastComma = token.lastIndex(of: ","),
                    lastDot < lastComma {
@@ -126,17 +117,14 @@ public struct CalculateAction: ConfigurableAction {
                     normalizedToken = token.replacingOccurrences(of: ",", with: "")
                 }
             } else {
-                // Contains only ','
                 let parts = token.split(separator: ",")
                 if parts.count > 2 {
-                    // Multiple commas: e.g. "1,000,000"
                     normalizedToken = token.replacingOccurrences(of: ",", with: "")
                 } else if parts.count == 2 {
                     let intPart = parts[0]
                     let fracPart = parts[1]
-                    // Precedence heuristic: If exactly 3 fractional digits and non-zero integer on a
-                    // period-decimal locale (e.g. US "1,250"), assume comma is a thousands separator ("1250").
-                    // Otherwise (e.g. European "12,5" or "0,250"), normalize comma to decimal period ("12.5").
+                    // Exactly 3 fractional digits after a non-zero integer is a thousands separator
+                    // ("1,250") unless the system uses a comma decimal; otherwise a decimal ("12,5").
                     if fracPart.count != 3 || intPart == "0" || isSystemCommaDecimal {
                         normalizedToken = "\(intPart).\(fracPart)"
                     } else {

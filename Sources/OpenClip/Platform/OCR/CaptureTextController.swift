@@ -75,15 +75,8 @@ final class CaptureTextController {
             panel.makeKeyAndOrderFront(nil)
             return panel
         }
-        // The window server only consults cursor rects (and honors
-        // NSCursor.push/set) for the active app: a background
-        // nonactivating overlay keeps the arrow no matter what the views
-        // request (same reason ⌘⇧4 lives in the window server itself).
-        // Follow the SnipController pattern (cf. Microsoft ZoomItMac):
-        // order a key-capable borderless overlay front, activate so its
-        // cursor rects are evaluated, then hold one explicit crosshair
-        // override for the session. Activation resets the cursor, so the
-        // lease re-asserts after it settles.
+        // The window server honors cursor rects only for the active app, so activate and hold
+        // one explicit crosshair lease; activation resets the cursor, so the lease re-asserts.
         NSApp.activate(ignoringOtherApps: true)
         for panel in panels {
             panel.makeFirstResponder(panel.contentView)
@@ -112,8 +105,7 @@ final class CaptureTextController {
             showFailure(String(localized: "Select a larger area"))
             return
         }
-        // Restore the captured display immediately. The screenshot and Vision work do not need
-        // the selector panels, and ScreenCaptureKit already excludes every OpenClip window.
+        // ScreenCaptureKit already excludes OpenClip windows, so the panels can close now.
         CaptureTextReleaseHandoff.closeOverlayThenStartWork(closeOverlay: closePanels) { [weak self] in
             guard let self else { return }
             self.captureTask = Task { @MainActor [weak self] in
@@ -300,9 +292,7 @@ final class CaptureCursorLease {
         guard !isActive else { return }
         isActive = true
         pushIfActive()
-        // App/window activation resets the cursor after the synchronous
-        // push, so re-assert once it has settled (cf. ZoomItMac's
-        // CrosshairCursorLease second push).
+        // Activation resets the cursor after the synchronous push, so re-assert once it settles.
         asyncSet { [weak self] in self?.setIfActive() }
         asyncReassert { [weak self] in self?.pushIfActive() }
     }
@@ -390,11 +380,8 @@ private final class RegionSelectionPanel: NSPanel {
 
     init(screen: NSScreen) {
         displayScreen = screen
-        // A borderless window that can still become key (and main), so the
-        // selection view receives key events (Escape) and the crosshair
-        // cursor rects are honored. A `.nonactivatingPanel` would keep the
-        // source app active but the window server ignores cursor requests
-        // from inactive apps, so the arrow would linger over the overlay.
+        // Borderless but key-capable, so Escape and crosshair cursor rects work. A
+        // `.nonactivatingPanel` would have its cursor requests ignored by the window server.
         super.init(contentRect: screen.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
@@ -465,8 +452,7 @@ private final class RegionSelectionView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        // The cursor rect is only evaluated once the view is in an active
-        // key window; assert immediately so no arrow frame slips through.
+        // Cursor rects apply only in a key window; assert now so no arrow frame shows.
         if window != nil {
             NSCursor.crosshair.set()
         }

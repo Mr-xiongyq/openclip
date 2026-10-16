@@ -17,8 +17,7 @@ public struct DefineAction: ConfigurableAction {
         ActionChrome(outputKind: .text, recommendedResult: .preview)
     }
 
-    /// How a single selected word is presented when Define runs. A single user-visible picker keeps
-    /// the three mutually-exclusive outcomes explicit instead of a set of independent toggles.
+    /// One picker for the three mutually exclusive outcomes, instead of independent toggles.
     public enum Display: String, CaseIterable, Sendable {
         /// Resolve the definition in-process and render it in the result card (default).
         case card
@@ -28,10 +27,8 @@ public struct DefineAction: ConfigurableAction {
         case dictionary
     }
 
-    /// Option id for the display picker.
     static let displayOptionID = "definitionDisplay"
-    /// Legacy boolean option, superseded by `displayOptionID`; `true` meant "open in Dictionary.app".
-    /// Kept so existing installs migrate to `display = dictionary` instead of silently resetting.
+    /// Legacy boolean superseded by `displayOptionID` (`true` meant Dictionary.app); kept so installs migrate.
     static let legacyOpenInDictionaryOptionID = "openInDictionaryApp"
 
     public var actionOptions: [ExtensionOption] {
@@ -57,8 +54,7 @@ public struct DefineAction: ConfigurableAction {
         self.settingsStore = settingsStore
     }
 
-    /// The configured presentation mode. Falls back to the legacy boolean for installs that set
-    /// `openInDictionaryApp` before the picker existed.
+    /// Falls back to the legacy boolean for installs that set `openInDictionaryApp`.
     var display: Display {
         let stored = settingsStore.get(
             SettingKey.actionOption(actionID: id, optionID: Self.displayOptionID)
@@ -70,8 +66,7 @@ public struct DefineAction: ConfigurableAction {
         return legacy.caseInsensitiveCompare("true") == .orderedSame ? .dictionary : .card
     }
 
-    /// One-time normalization run at launch: a legacy `openInDictionaryApp = true` becomes
-    /// `display = dictionary` so the picker matches the behaviour the install already had.
+    /// One-time launch migration: a legacy `openInDictionaryApp = true` becomes `display = dictionary`.
     static func migrateLegacyDisplayOptionIfNeeded(settingsStore: any SettingsStore) {
         let displayKey = SettingKey.actionOption(actionID: actionID, optionID: displayOptionID)
         guard settingsStore.get(displayKey).isEmpty else { return }
@@ -86,28 +81,22 @@ public struct DefineAction: ConfigurableAction {
     public func isEnabled(for context: ActionContext) -> Bool {
         let text = context.selection.text.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Length check: 1 to 40 characters
         guard !text.isEmpty && text.count <= 40 else { return false }
 
-        // Word count check: strictly 1 word
         let words = text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
         guard words.count == 1 else { return false }
 
-        // Must contain letters
         guard text.rangeOfCharacter(from: .letters) != nil else { return false }
 
-        // For non-space-delimited scripts (Chinese, Japanese, Korean), verify single-word boundary
+        // CJK, Japanese and Korean have no spaces, so check word boundaries with the tokenizer.
         guard isSingleLinguisticWord(text) else { return false }
 
-        // Exclude URLs, email addresses, and math symbols
         let isURL = text.lowercased().hasPrefix("http://") || text.lowercased().hasPrefix("https://") || text.contains("www.")
         let hasMathSymbol = text.contains("+") || text.contains("*") || text.contains("/") || text.contains("=") || text.contains("%")
 
         guard !isURL && !hasMathSymbol else { return false }
 
-        // Dictionary-app mode hands any single word to the app (which reports its own "no entry"),
-        // and popover mode asks the system dictionaries to render the entry; neither needs an
-        // in-process definition, so both skip the `DCSCopyTextDefinition` probe entirely.
+        // Dictionary-app and popover modes need no in-process definition, so skip the DCSCopyTextDefinition probe.
         if display != .card { return true }
 
         guard let definition = lookup(text), !definition.isEmpty else { return false }
@@ -164,9 +153,7 @@ public struct DefineAction: ConfigurableAction {
         }
     }
 
-    /// Builds a Dictionary.app lookup URL using the documented `x-dictionary:d:<key_text>`
-    /// definition form (`x-dictionary:` is the scheme Dictionary.app registers).
-    /// Exposed for tests.
+    /// Dictionary.app lookup URL for the documented `x-dictionary:d:<key>` form. Exposed for tests.
     static func dictionaryURL(for word: String) -> URL? {
         guard !word.isEmpty,
               let encoded = word.addingPercentEncoding(withAllowedCharacters: Constants.queryValueAllowed)

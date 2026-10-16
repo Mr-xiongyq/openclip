@@ -7,7 +7,6 @@
 import Foundation
 import os
 
-/// Severity level of a log entry.
 public enum LogLevel: String, Sendable, CaseIterable, Comparable, Equatable, CustomStringConvertible {
     case debug
     case info
@@ -46,14 +45,12 @@ public enum LogLevel: String, Sendable, CaseIterable, Comparable, Equatable, Cus
     }
 }
 
-/// Privacy specifier for string interpolations in log messages.
 public enum LogPrivacy: Sendable {
     case `public`
     case `private`
     case auto
 }
 
-/// A formatted log message supporting string interpolation with optional privacy annotations.
 public struct LogMessage: ExpressibleByStringInterpolation, ExpressibleByStringLiteral, CustomStringConvertible, Sendable {
     public let stringValue: String
 
@@ -142,10 +139,8 @@ public struct LogChannel: Sendable {
     }
 }
 
-/// Central logging surface. Add a category here (not a brand-new `Logger` instance) whenever a new
-/// subsystem starts emitting logs, and keep the table in `docs/logging.md` in step.
+/// Central logging surface. Add new categories here; keep `docs/logging.md` in step.
 public enum Log: Sendable {
-    /// Bundle / process identifier shared by every logged message.
     public static let subsystem = "com.openclip"
 
     private static let lock = NSLock()

@@ -1,8 +1,7 @@
 // LocalizedStringValue.swift
 // OpenClip
 //
-// Pure Core representation of a user-facing string that can either be a plain String
-// or a dictionary of localized strings keyed by language tag (e.g. "en", "zh-Hans", "zh-Hant", "fr", "ja").
+// Core representation of a user-facing string: a plain String or a per-language-tag dictionary.
 import Foundation
 
 public struct LocalizedStringValue: Codable, Sendable, Equatable, ExpressibleByStringLiteral, CustomStringConvertible {
@@ -34,7 +33,7 @@ public struct LocalizedStringValue: Codable, Sendable, Equatable, ExpressibleByS
         }
     }
 
-    /// Merges additional locale mappings into this value, ensuring the base string is preserved as English/default.
+    /// Keeps the default string as `en` when no `en` is given.
     public func merging(locales: [String: String]?) -> LocalizedStringValue {
         guard let locales, !locales.isEmpty else { return self }
         var merged = values
@@ -47,7 +46,6 @@ public struct LocalizedStringValue: Codable, Sendable, Equatable, ExpressibleByS
         return LocalizedStringValue(dictionary: merged)
     }
 
-    /// Combines an optional base value with an optional locale dictionary.
     public static func merge(base: LocalizedStringValue?, locales: [String: String]?) -> LocalizedStringValue? {
         if let base {
             return base.merging(locales: locales)
@@ -66,15 +64,7 @@ public struct LocalizedStringValue: Codable, Sendable, Equatable, ExpressibleByS
         }
     }
 
-    /// Resolves the best string match for the given locale identifier (defaults to system/app locale).
-    /// Resolution order:
-    /// 1. Direct match with script (e.g. "zh-Hans", "zh-Hant")
-    /// 2. Exact match on locale identifier (e.g. "fr_FR", "en_US")
-    /// 3. Normalized case- and delimiter-insensitive match ("zh-hans" matches "zh_Hans")
-    /// 4. Primary language code match (e.g. "fr", "ja", "en", "zh")
-    /// 5. English fallback ("en", "en-US", "en_US")
-    /// 6. Default key fallback ("default")
-    /// 7. First available string in values
+    /// Best match for `locale`: script tag, exact, normalized, language, English, default, then first value.
     public func resolve(for locale: Locale = .current) -> String {
         guard !values.isEmpty else { return "" }
         if let def = values["default"], values.count == 1 { return def }
@@ -83,7 +73,7 @@ public struct LocalizedStringValue: Codable, Sendable, Equatable, ExpressibleByS
         let langCode = locale.language.languageCode?.identifier ?? "en"
         let scriptCode = locale.language.script?.identifier
 
-        // 1. Script tag match (crucial for Chinese zh-Hans vs zh-Hant)
+        // Script tag first: distinguishes zh-Hans from zh-Hant.
         if let scriptCode {
             let scriptTagHyphen = "\(langCode)-\(scriptCode)"
             for (k, v) in values {
@@ -102,12 +92,10 @@ public struct LocalizedStringValue: Codable, Sendable, Equatable, ExpressibleByS
             }
         }
 
-        // 2. Exact match on full identifier
         if let val = values[activeTag] {
             return val
         }
 
-        // 3. Normalized matching
         let normalizedActive = activeTag.lowercased().replacingOccurrences(of: "_", with: "-")
         for (k, v) in values {
             let normKey = k.lowercased().replacingOccurrences(of: "_", with: "-")
@@ -116,7 +104,6 @@ public struct LocalizedStringValue: Codable, Sendable, Equatable, ExpressibleByS
             }
         }
 
-        // 4. Primary language code match (e.g. "fr", "ja", "en")
         for (k, v) in values {
             let normKey = k.lowercased().replacingOccurrences(of: "_", with: "-")
             if normKey == langCode.lowercased() {
@@ -124,17 +111,14 @@ public struct LocalizedStringValue: Codable, Sendable, Equatable, ExpressibleByS
             }
         }
 
-        // 5. English fallback
         if let val = values["en"] ?? values["en-US"] ?? values["en_US"] {
             return val
         }
 
-        // 6. Default key fallback
         if let val = values["default"] {
             return val
         }
 
-        // 7. First available string
         return values.values.first ?? ""
     }
 

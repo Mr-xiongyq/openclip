@@ -1,12 +1,8 @@
 // TooltipPanelController.swift
 // OpenClip
 //
-// Owns the TooltipPanel + its hosting view and the measure → place → show cycle for hover
-// tooltips. The single tooltip surface for both the main bar and the sub-bar: callers pass the
-// hovered button's screen frame plus the rects to avoid (the sibling panel), TooltipPlacer picks
-// the edge and origin, and the panel renders unclipped in screen space. Shared singleton — the
-// tooltip is transient chrome with exactly one instance alive at a time, mirroring
-// PopupHoverState.shared; both popup controllers hide() it on teardown.
+// Owns the TooltipPanel and its measure → place → show cycle for hover tooltips. A shared
+// singleton: the one tooltip surface for both popup bars, hidden by both controllers on teardown.
 import AppKit
 import SwiftUI
 import Core
@@ -15,14 +11,12 @@ import Core
 public final class TooltipPanelController {
     public static let shared = TooltipPanelController()
 
-    /// Transparent ring (pt) around the tooltip bubble inside the panel frame so its SwiftUI
-    /// drop shadow (radius 3, y 1.5) renders instead of being clipped at the window edge.
+    /// Transparent ring so the SwiftUI drop shadow is not clipped at the window edge.
     static let shadowInset: CGFloat = 6
 
     private let panel: TooltipPanel
     private let hostingView: TooltipHostingView
     public private(set) var isShowing = false
-    /// The tooltip panel's current frame (screen coords). Internal for tests.
     var panelFrame: NSRect { panel.frame }
 
     public init(panel: TooltipPanel = TooltipPanel()) {
@@ -35,12 +29,7 @@ public final class TooltipPanelController {
         self.panel.contentView = container
     }
 
-    /// Measures, places, and shows the tooltip for a hovered target.
-    ///
-    /// - Parameters:
-    ///   - targetScreenFrame: the hovered button's frame in screen coordinates.
-    ///   - avoidanceRects: screen rects the tooltip must not intersect (the sibling bar panel).
-    ///   - maxWidth: cap on the tooltip bubble width (mirrors the old in-panel clamp).
+    /// Measures, places, and shows the tooltip for a hovered target, avoiding the sibling bar panel.
     public func show(
         text: String,
         targetScreenFrame: CGRect,
@@ -113,8 +102,7 @@ public final class TooltipPanelController {
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             MainActor.assumeIsolated {
-                // A show() racing the fade-out flips isShowing back and animates alpha to 1;
-                // only tear the window down when the hide is still the latest intent.
+                // A show() racing the fade-out restores alpha, so only tear down if the hide is still latest.
                 guard let self, !self.isShowing, self.panel.alphaValue == 0 else { return }
                 self.panel.orderOut(nil)
                 self.panel.alphaValue = 1

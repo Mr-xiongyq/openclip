@@ -1,13 +1,11 @@
 // ActionSearchKeywords.swift
 // OpenClip
 //
-// Pure Core lookup providing multi-lingual search keywords (English, Chinese Simplified,
-// Chinese Traditional, French, Japanese) and common synonyms for builtin actions, AI presets,
-// and popular extension catalog actions.
+// Pure lookup of multi-lingual search keywords for builtin actions, AI presets, and catalog extensions.
 import Foundation
 
 public enum ActionSearchKeywords {
-    /// Returns multi-lingual search keywords (synonyms in EN, ZH-Hans, ZH-Hant, FR, JA) for an action.
+    /// Multi-lingual search keywords for an action.
     public static func keywords(for actionID: String, actionTitle: String = "") -> [String] {
         var results = Set<String>()
         let lowerID = actionID.lowercased()
@@ -41,7 +39,6 @@ public enum ActionSearchKeywords {
         return Array(results)
     }
 
-    /// Strips spaces, punctuation, and non-alphanumeric characters for slug matching.
     public static func normalizedSlug(_ text: String) -> String {
         text.lowercased().filter { $0.isLetter || $0.isNumber }
     }

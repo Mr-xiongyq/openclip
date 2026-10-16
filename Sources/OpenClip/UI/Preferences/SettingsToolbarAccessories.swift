@@ -1,13 +1,8 @@
 // SettingsToolbarAccessories.swift
 // OpenClip
 //
-// What the toolbar shows on the trailing side for the page on screen: the subject's on/off switch
-// and an ellipsis menu of the things you can do to the subject as a whole.
-//
-// They live in the toolbar rather than in the page for the reason System Settings puts a pane's
-// master switch there — it belongs to the whole page, not to a row of it — and it puts the switch
-// on the same line as the back and forward arrows, where it is in reach wherever the page is
-// scrolled to. The window fills these in for the current page; the AppKit toolbar only draws them.
+// Trailing toolbar items for the current page: the subject's on/off switch and an ellipsis menu.
+// They sit in the toolbar, not the page, so the switch stays in reach while the page scrolls.
 
 import Foundation
 
@@ -16,8 +11,7 @@ public struct SettingsToolbarToggle: Equatable, Sendable {
     public var isOn: Bool
     /// Spoken and shown on hover: "Enable JWT".
     public var label: String
-    /// False while the switch cannot be moved (a package the trust gate is holding back can only
-    /// be turned on, which is what re-trusts it — so it is never disabled, only off).
+    /// False only for a trust-gated package, which can be turned on (re-trusting it) but never off.
     public var isEnabled: Bool
 
     public init(isOn: Bool, label: String, isEnabled: Bool = true) {
@@ -31,7 +25,6 @@ public struct SettingsToolbarToggle: Equatable, Sendable {
 public struct SettingsToolbarMenuItem: Identifiable, Equatable, Sendable {
     public enum Role: Sendable, Equatable {
         case normal
-        /// Drawn in red, the way a destructive menu item is everywhere in macOS.
         case destructive
         case separator
     }
@@ -71,8 +64,7 @@ public enum SettingsToolbarCommand {
     public static let storeRefresh = "store.refresh"
 }
 
-/// Builds the ellipsis menu for a page. Pure, so what each kind of page offers is pinned by tests
-/// rather than by reading the window.
+/// Builds the ellipsis menu for a page. Pure, so tests can pin what each page offers.
 public enum SettingsToolbarAccessories {
     public struct ExtensionMenuContext: Equatable, Sendable {
         public var hasReadme: Bool
@@ -84,8 +76,7 @@ public enum SettingsToolbarAccessories {
         }
     }
 
-    /// View README, Show in Finder, then Uninstall — the two ways to look at what is installed,
-    /// then the one way to get rid of it, behind a separator so it is never the click you meant.
+    /// Uninstall sits behind a separator so it is never the click you meant.
     public static func extensionMenuItems(_ context: ExtensionMenuContext) -> [SettingsToolbarMenuItem] {
         var items: [SettingsToolbarMenuItem] = []
         if context.hasReadme {
@@ -114,9 +105,7 @@ public enum SettingsToolbarAccessories {
         return items
     }
 
-    /// The Store's own menu: the two things you can do to the catalogue as a whole. Installing a
-    /// package you already have on disk belongs here rather than on Customize — the Store is where
-    /// extensions come from, however they arrive.
+    /// Catalogue-wide actions. Installing from disk lives here because the Store is where extensions come from.
     public static func storeMenuItems(isRefreshing: Bool) -> [SettingsToolbarMenuItem] {
         [
             SettingsToolbarMenuItem(

@@ -1,11 +1,8 @@
 // WindowConfigurator.swift
 // OpenClip
 //
-// Reaches the NSWindow hosting a SwiftUI view. Some window properties have no
-// SwiftUI spelling — a hard minimum size among them — and a view can be hosted
-// by more than one window (the Settings scene and the window StatusBarController
-// opens both show the preferences), so the settings belong with the view rather
-// than with one of the call sites.
+// Reaches the NSWindow hosting a SwiftUI view, for properties SwiftUI cannot set (e.g. a hard
+// minimum size). A view can sit in more than one window, so the settings live with the view.
 import AppKit
 import SwiftUI
 
@@ -54,20 +51,16 @@ struct WindowConfigurator: NSViewRepresentable {
 }
 
 extension View {
-    /// Clamps the hosting window to a minimum content size.
     func minimumWindowContentSize(width: CGFloat, height: CGFloat) -> some View {
         background(
             WindowConfigurator { window in
                 let content = NSSize(width: width, height: height)
-                // Re-asserted every time rather than skipped when it already
-                // matches: SwiftUI rewrites these as the split view's layout
-                // changes, and it does not always rewrite both of them.
+                // Re-asserted on every update: SwiftUI rewrites these on layout changes, not always both.
                 window.contentMinSize = content
                 window.minSize = window.frameRect(
                     forContentRect: NSRect(origin: .zero, size: content)
                 ).size
-                // A window already smaller than the new floor keeps its size
-                // until something nudges it, so bring it up now.
+                // AppKit does not resize a window already below the new floor; grow it now.
                 let frame = window.frame
                 if frame.width < window.minSize.width || frame.height < window.minSize.height {
                     window.setContentSize(
@@ -83,14 +76,7 @@ extension View {
 }
 
 extension View {
-    /// Keeps the title bar's hairline hidden on every page of the hosting window.
-    ///
-    /// macOS decides this per split-view column, from whether that column's content scrolls under
-    /// the title bar: a page whose top element is a scroll view got no line, and a page that
-    /// starts with something static — a hero, a search field, a preview — got one. Setting it on
-    /// the window is not enough, because `NSSplitViewItem.titlebarSeparatorStyle` outranks the
-    /// window's, and SwiftUI rewrites the items' style as the layout changes. So both are set, and
-    /// re-set on every update the way `minimumWindowContentSize` re-asserts its own values.
+    /// Set on both window and split items, re-set on each update: macOS overrides per column and SwiftUI rewrites item styles.
     func hidesTitlebarSeparator() -> some View {
         background(
             WindowConfigurator { window in
@@ -115,9 +101,7 @@ extension View {
 }
 
 extension WindowConfigurator {
-    /// Every `NSSplitViewController` in `window`: checks the root controller hierarchy as well as
-    /// any `NSSplitView` whose delegate is an `NSSplitViewController` in the view hierarchy (such
-    /// as those created by SwiftUI's `NavigationSplitView`).
+    /// Split view controllers in `window`, including delegate-linked ones (SwiftUI `NavigationSplitView`).
     static func splitViewControllers(in window: NSWindow) -> [NSSplitViewController] {
         var found = splitViewControllers(in: window.contentViewController)
         if let contentView = window.contentView {
@@ -127,8 +111,7 @@ extension WindowConfigurator {
         return found.filter { seen.insert(ObjectIdentifier($0)).inserted }
     }
 
-    /// Every `NSSplitViewController` under `root`, including nested ones: SwiftUI hosts a
-    /// `NavigationSplitView` inside one, but how deep it sits is its own business.
+    /// Split view controllers under `root`, at any depth.
     static func splitViewControllers(in root: NSViewController?) -> [NSSplitViewController] {
         guard let root else { return [] }
         var found: [NSSplitViewController] = []
@@ -141,7 +124,6 @@ extension WindowConfigurator {
         return found
     }
 
-    /// Every `NSSplitViewController` whose split view lives in `view`'s subtree.
     static func splitViewControllers(in view: NSView?) -> [NSSplitViewController] {
         guard let view else { return [] }
         var found: [NSSplitViewController] = []

@@ -1,10 +1,8 @@
 // ExtensionTrustGate.swift
 // OpenClip
 //
-// The fail-closed consent gate. Groups already-scanned actions by package, resolves each
-// package's trust state against the persisted trust/hash/source records, and returns the final
-// action list (real actions or a single GatedExtensionAction per gated package) plus the dict
-// writes and events the caller must apply. Pure Core, no side effects besides file reads.
+// Fail-closed consent gate. Resolves each package's trust state and returns the action list plus
+// the settings writes and events to apply. Pure Core; no side effects besides file reads.
 import Foundation
 
 public enum ExtensionGateReason: Sendable, Equatable {
@@ -13,8 +11,7 @@ public enum ExtensionGateReason: Sendable, Equatable {
     case needsNewerApp(required: String)
     case revoked
 
-    /// Plist-safe string encoding for `UNNotificationContent.userInfo` (which only accepts
-    /// plist types). `needsNewerApp` carries its required version after a colon.
+    /// Plist-safe encoding for `UNNotificationContent.userInfo`; `needsNewerApp` carries its version after a colon.
     public var plistTag: String {
         switch self {
         case .notEnabled: return "notEnabled"
@@ -40,10 +37,8 @@ public enum ExtensionGateReason: Sendable, Equatable {
     }
 }
 
-/// Placeholder action registered in place of a package's real actions when the package must not
-/// run (not enabled / files changed / revoked / incompatible). Keeps the package discoverable in
-/// the bar and Preferences; clicking it surfaces a review toast. `isEnabled` returns true so the
-/// row appears — the gate, not the enable toggle, is what blocks execution.
+/// Placeholder registered in place of a gated package's actions. `isEnabled` is true so the row
+/// appears; the gate, not the enable toggle, blocks execution.
 public struct GatedExtensionAction: Action {
     public let packageID: String
     public let title: String
@@ -162,8 +157,7 @@ public enum ExtensionTrustGate {
             func real() {
                 result.append(contentsOf: packageActions)
             }
-            /// Trusts the package only when its content fingerprint resolved. Returns false (and
-            /// persists no trust, no hash) when it didn't, so the flow fails closed.
+            /// Trusts only when the content fingerprint resolved; otherwise persists nothing.
             func writeTrusted() -> Bool {
                 guard let currentHash else { return false }
                 if trust[packageID] != "trusted" || hashes[packageID] != currentHash {
@@ -176,9 +170,7 @@ public enum ExtensionTrustGate {
             }
 
             if (source == .store || source == .package), record == nil {
-                // Fresh store or package install = consent: trust with the current hash. The install
-                // path seeds `extensionSources` before the load; this branch must not consult the
-                // migration flag either way.
+                // Fresh install is consent. extensionSources is seeded before load; don't consult the migration flag here.
                 if writeTrusted() {
                     if compatible { real() } else { gated(.needsNewerApp(required: required ?? "")) }
                 } else {
@@ -191,13 +183,12 @@ public enum ExtensionTrustGate {
                 if compatible { real() } else { gated(.needsNewerApp(required: required ?? "")) }
             } else if record == "trusted" {
                 if isDeveloperSource, let currentHash {
-                    // Developer / local workspace: live hot-reload on file edits, auto-update stored fingerprint
+                    // Developer workspace: hot-reload on edits, so refresh the stored fingerprint.
                     hashes[packageID] = currentHash
                     hashesChanged = true
                     if compatible { real() } else { gated(.needsNewerApp(required: required ?? "")) }
                 } else {
-                    // Store or Packaged extension: unexpected content drift is a silent disable!
-                    // Only the update flow or user toggle in Preferences re-trusts.
+                    // Store/packaged: unexpected drift disables silently; only update or user toggle re-trusts.
                     trust[packageID] = "seen"
                     trustChanged = true
                     gated(.filesChanged)

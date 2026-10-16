@@ -8,9 +8,7 @@
 import CoreGraphics
 
 public enum PopupResizeGeometry {
-    /// The size implied by the cursor having moved from `anchorMouse` (where the drag began,
-    /// when the surface measured `anchorSize`) to `mouse`, both in screen coordinates (y up). Only
-    /// the dimensions the handle controls change: a bottom-edge drag never touches the width.
+    /// Size after the cursor moved from `anchorMouse` to `mouse` (screen coords, y up); only the handle's dimensions change.
     public static func size(from anchorSize: CGSize, edge: PopupResizeEdge,
                             anchorMouse: CGPoint, mouse: CGPoint) -> CGSize {
         var size = anchorSize
@@ -24,10 +22,7 @@ public enum PopupResizeGeometry {
         return size
     }
 
-    /// Clamps a proposed size so the surface never shrinks below `minSize` and the panel around it
-    /// (surface plus shadow ring) stays inside `screenBounds` by `PopupMetrics.popupPadding` while
-    /// growing from a fixed `panelTopLeft`. When the panel already sits too close to a screen edge
-    /// for even the minimum, the minimum wins — the surface must stay usable.
+    /// Clamps to `minSize` and keeps the panel (with shadow ring) inside `screenBounds` while growing from `panelTopLeft`. The minimum wins near an edge.
     public static func clamp(_ proposed: CGSize, minSize: CGSize, panelTopLeft: CGPoint, screenBounds: CGRect) -> CGSize {
         let ring = 2 * PopupMetrics.popupShadowInset
         let padding = PopupMetrics.popupPadding
@@ -39,10 +34,7 @@ public enum PopupResizeGeometry {
         )
     }
 
-    /// Fits a remembered size to what `screenBounds` can show at all (panel inside the screen by
-    /// `popupPadding` on every side), independent of where the panel will be placed — placement
-    /// is decided afterwards and nudged back on-screen by the controller. A size remembered on a
-    /// large external display must still open usable on a laptop screen.
+    /// Fits a remembered size to what `screenBounds` can show, independent of placement, so a size from a large display still opens on a small one.
     public static func fit(_ remembered: CGSize, minSize: CGSize, in screenBounds: CGRect) -> CGSize {
         let ring = 2 * PopupMetrics.popupShadowInset
         let padding = 2 * PopupMetrics.popupPadding

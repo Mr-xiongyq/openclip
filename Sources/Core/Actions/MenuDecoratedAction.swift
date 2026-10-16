@@ -1,11 +1,8 @@
 // MenuDecoratedAction.swift
 // OpenClip
 //
-// Pure Core wrapper that stamps optional sub-menu behavior — a relevance regex — onto an existing
-// action. It decoratively conforms the wrapped action to RelevanceProviding without changing its
-// identity: id/title/icon/chrome, enablement, and perform are all forwarded to the base action, so
-// registry sorting, disabling, and customization that key off the action ID are unaffected. The
-// factory wraps extension actions that declare menuRelevance; non-declaring actions stay plain.
+// Pure Core wrapper that stamps an optional menu relevance regex onto an action without changing its
+// identity: id, chrome, enablement and perform forward to the base, so registry sorting is unaffected.
 import Foundation
 
 public struct MenuDecoratedAction: Action, RelevanceProviding {
@@ -28,9 +25,7 @@ public struct MenuDecoratedAction: Action, RelevanceProviding {
     public var chrome: ActionChrome { base.chrome }
     public var actionOptions: [ExtensionOption] { base.actionOptions }
 
-    /// Forwards any declared `ActionDelivery` from the base action so wrapping this
-    /// decorator around a delivery-declaring action (e.g. DeliveryDecoratedAction) never
-    /// shadows the declared delivery with the protocol's nil default.
+    /// Forwards the base's delivery so this decorator never shadows it with the protocol's nil default.
     public var delivery: ActionDelivery? { base.delivery }
     public var keywords: [String] { base.keywords }
 
@@ -51,9 +46,7 @@ public struct MenuDecoratedAction: Action, RelevanceProviding {
 
     // MARK: - RelevanceProviding
 
-    /// Relevant unless a `menuRelevanceRegex` is present and the trimmed selection doesn't match.
-    /// A malformed regex is treated as relevant (defensive, mirroring ActionVisibility), so a bad
-    /// author pattern never hides a sub-action.
+    /// Relevant unless the trimmed selection misses the regex; a malformed regex counts as relevant.
     public func isRelevant(for text: String) -> Bool {
         guard let regex = menuRelevanceRegex, !regex.isEmpty else { return true }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)

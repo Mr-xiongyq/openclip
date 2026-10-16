@@ -1,9 +1,8 @@
 // AppUpdateManager.swift
 // OpenClip
 //
-// Wraps Sparkle's SPUStandardUpdaterController in an ObservableObject manager with @Published
-// properties that the status bar menu and General preferences tab can drive. Ed25519-verified updates
-// are fetched from the appcast URL in Info.plist (SUFeedURL) — no Apple Developer ID or notarization required.
+// Sparkle updater wrapper. Updates are fetched from the Info.plist SUFeedURL appcast and verified
+// with Ed25519, so no Apple Developer ID or notarization is needed.
 import Foundation
 import AppKit
 import Sparkle
@@ -19,8 +18,7 @@ public final class AppUpdateManager: NSObject, ObservableObject, SPUUpdaterDeleg
 
     public static let updateNotificationCategory = "OPENCLIP_UPDATE_CATEGORY"
 
-    /// Sparkle's standard controller; `startingUpdater: true` enables the background schedule
-    /// configured via `SUScheduledCheckInterval` in Info.plist.
+    /// Background schedule comes from `SUScheduledCheckInterval` in Info.plist.
     private var controller: SPUStandardUpdaterController?
     private let settingsStore: any SettingsStore
     public let updatesEnabled: Bool
@@ -29,19 +27,15 @@ public final class AppUpdateManager: NSObject, ObservableObject, SPUUpdaterDeleg
     }
     @Published public private(set) var hasUpdateReminder = false
 
-    /// Set when a newer version has been detected, nil when up to date.
     @Published public private(set) var availableUpdateVersion: String?
 
-    /// Release notes for the detected update version, extracted from appcast description.
     @Published public private(set) var availableUpdateReleaseNotes: String?
 
-    /// Sparkle format for the embedded release notes (markdown, html, or plain-text).
+    /// markdown, html, or plain-text.
     @Published public private(set) var availableUpdateReleaseNotesFormat: String?
 
-    /// True when the update archive has been downloaded and staged to install upon app termination.
     @Published public private(set) var isUpdateStagedForQuitInstall: Bool = false
 
-    /// KVO-backed published state so SwiftUI views can bind directly.
     @Published public private(set) var canCheckForUpdates = false
 
     @Published public var automaticallyChecksForUpdates: Bool {
@@ -71,7 +65,7 @@ public final class AppUpdateManager: NSObject, ObservableObject, SPUUpdaterDeleg
         }
     }
 
-    /// Kept for settings persistence. Always targets the stable feed release.
+    /// Always targets the stable feed; kept for settings persistence.
     @Published public var updateChannel: UpdateChannel {
         didSet {
             guard updateChannel != oldValue else { return }
@@ -117,7 +111,6 @@ public final class AppUpdateManager: NSObject, ObservableObject, SPUUpdaterDeleg
         controller.updater.automaticallyChecksForUpdates = autoCheck
         controller.updater.automaticallyDownloadsUpdates = autoDownload
 
-        // Mirror Sparkle's KVO-observable `canCheckForUpdates` into our @Published property.
         controller.updater
             .publisher(for: \.canCheckForUpdates)
             .receive(on: DispatchQueue.main)
@@ -179,7 +172,6 @@ public final class AppUpdateManager: NSObject, ObservableObject, SPUUpdaterDeleg
         allowedChannelNames
     }
 
-    /// The feed URL for OpenClip releases.
     public var currentFeedURL: String {
         Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String ?? Self.defaultFeedURL
     }
@@ -188,14 +180,14 @@ public final class AppUpdateManager: NSObject, ObservableObject, SPUUpdaterDeleg
         []
     }
 
-    /// Triggers an interactive update check (shows Sparkle's native update window or dialog).
+    /// Interactive check; shows Sparkle's update UI.
     public func checkForUpdates() {
         guard canPresentUpdate, let controller else { return }
         beginInteractiveUpdatePresentation()
         controller.checkForUpdates(nil)
     }
 
-    /// Share the Settings window's activation lease so overlapping windows keep the app regular.
+    /// Shares the activation lease with the Settings window.
     func beginInteractiveUpdatePresentation() {
         guard !isInteractiveUpdatePresented else { return }
         isInteractiveUpdatePresented = true
@@ -209,16 +201,15 @@ public final class AppUpdateManager: NSObject, ObservableObject, SPUUpdaterDeleg
     }
 
     public func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: (any Error)?) {
-        // Sparkle calls this after the driver finishes, including cancellation, no update, and errors.
+        // Fires after the driver finishes, including cancel, no-update, and error.
         finishInteractiveUpdatePresentation()
     }
 
-    /// Opens Sparkle's standard flow, including updates already staged for installation.
+    /// Opens Sparkle's flow, including updates staged for install.
     public func installUpdateNow() {
         checkForUpdates()
     }
 
-    /// Returns the date of the last successful update check, if any.
     public var lastUpdateCheckDate: Date? {
         controller?.updater.lastUpdateCheckDate
     }
@@ -269,8 +260,7 @@ public final class AppUpdateManager: NSObject, ObservableObject, SPUUpdaterDeleg
 
     public func updater(_ updater: SPUUpdater, didAbortWithError error: any Error) {
         let nsError = error as NSError
-        // Sparkle uses error code 1001 (SUNoUpdateError) when no update is found and 4001 (SUInstallationCanceledError)
-        // when an update check is canceled. These are expected control flow, not system failures.
+        // 1001 (no update) and 4001 (check canceled) are expected control flow, not failures.
         if nsError.code == 1001 || nsError.code == 4001 {
             if nsError.code == 1001 {
                 Log.updates.info("Sparkle update check completed: app is up to date")
@@ -310,7 +300,7 @@ public final class AppUpdateManager: NSObject, ObservableObject, SPUUpdaterDeleg
     func postUpdateNotification(version: String) {
         guard updatesEnabled, shouldNotify(version: version) else { return }
         clearUpdateNotification()
-        // A unique request ID also prevents a late, canceled delivery from replacing a newer one.
+        // Unique ID so a late, canceled delivery can't replace a newer one.
         let identifier = "\(Self.notificationIdentifier).\(UUID().uuidString)"
         activeNotificationIdentifier = identifier
         notificationTask = Task { [weak self] in
@@ -348,7 +338,7 @@ public final class AppUpdateManager: NSObject, ObservableObject, SPUUpdaterDeleg
     }
 }
 
-/// Keeps notification delivery injectable so overlapping requests can be tested without system alerts.
+/// Injectable so tests avoid system notifications.
 @MainActor
 struct UpdateNotificationClient {
     var authorize: () async throws -> Bool

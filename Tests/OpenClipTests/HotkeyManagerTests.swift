@@ -4,11 +4,8 @@ import KeyboardShortcuts
 @testable import OpenClip
 @testable import Core
 
-/// Regression coverage for the hotkey trigger path: ⌥⌘C must obey the gating that actually
-/// applies to an explicit request — Pause, app exclusion (including OpenClip itself), per-app
-/// `disabled` rules, and the text substantiality/length contract — instead of retrieving and
-/// injecting a synthetic ⌘C into any frontmost app unconditionally. "Appear Automatically" is
-/// **not** one of those gates: it owns the automatic popup only.
+/// Hotkey trigger gating: ⌥⌘C obeys Pause, app exclusion, per-app `disabled` rules and the text
+/// length contract. "Appear Automatically" does not gate it.
 @MainActor
 final class HotkeyManagerTests: XCTestCase {
     override func setUp() async throws {
@@ -121,9 +118,7 @@ final class HotkeyManagerTests: XCTestCase {
         XCTAssertEqual(response.context?.selectionGeneration, monitor.selectionGeneration)
     }
 
-    /// "Appear Automatically" off means the popup stops following selections — the shortcut is an
-    /// explicit request and must still work. It used to be gated on the same setting, so the
-    /// hotkey silently did nothing whenever the toggle was off.
+    /// "Appear Automatically" off stops the popup following selections; the explicit hotkey must still work.
     func testAutomaticAppearanceOffStillAllowsTheHotkey() {
         let store = MemorySettingsStore()
         store.set(.isAppEnabled, value: false)
@@ -132,8 +127,7 @@ final class HotkeyManagerTests: XCTestCase {
     }
 
     func testNoIdentifiableTargetNeverTriggers() {
-        // Covers both a nil frontmost app and one without a bundle ID: previously this fell back
-        // to OpenClip itself.
+        // Covers a nil app and a nil bundle ID; neither may fall back to OpenClip itself.
         XCTAssertFalse(HotkeyManager.triggerAllowed(frontmost: nil))
         XCTAssertFalse(HotkeyManager.triggerAllowed(frontmost: MockFrontmostApp(bundleID: nil)))
     }
@@ -245,9 +239,8 @@ final class HotkeyManagerTests: XCTestCase {
         monitor.latestSelection = (context: selection, canPaste: false)
         manager.selectionMonitor = monitor
 
-        // App filter would reject if com.openclip, but TextEdit is ordinary
         let frontmost = MockFrontmostApp(bundleID: "com.apple.TextEdit")
-        // Mismatched bundle ID means currentSelection returns nil, so the mismatched monitored selection is ignored
+        // Mismatched bundle IDs yield no monitored selection.
         let trigger = await manager.collectTrigger(frontmostApp: frontmost)
         XCTAssertNotEqual(trigger?.context.text, "safari text")
     }
@@ -308,9 +301,7 @@ final class HotkeyManagerTests: XCTestCase {
         XCTAssertEqual(result?.context.isClipboardFallback, false)
     }
 
-    /// Issue #74: When a clipboard manager (Paste, Raycast, Maccy) dismisses itself, macOS may
-    /// report `frontmostApp` as `nil` during the transition. The trigger should still fire using
-    /// clipboard text rather than silently dropping the hotkey.
+    /// Issue #74: a clipboard manager dismissing itself can report a nil frontmost app; the hotkey must still fire from the clipboard.
     func testResolveSynchronousTriggerFallsBackToClipboardWhenFrontmostAppIsNil() {
         let manager = HotkeyManager.shared
         let monitor = MockSelectionMonitor()
@@ -394,7 +385,7 @@ final class HotkeyManagerTests: XCTestCase {
         manager.selectionMonitor = monitor
 
         let frontmost = MockFrontmostApp(bundleID: "com.apple.TextEdit")
-        // Pass a random request ID that does not match manager.popupTriggerRequestID
+        // Random request ID never matches popupTriggerRequestID.
         let trigger = await manager.collectTrigger(frontmostApp: frontmost, requestID: UUID())
         XCTAssertNil(trigger)
     }
@@ -667,9 +658,7 @@ private struct BoundTestAction: Action {
     }
 }
 
-/// `NSRunningApplication` cannot be constructed with an arbitrary bundle ID; the gate only reads
-/// `bundleIdentifier`, so a lightweight stand-in keeps the tests hermetic. `triggerAllowed` takes
-/// an `NSRunningApplication?`, so the mock subclasses it.
+/// `NSRunningApplication` can't take an arbitrary bundle ID, so this stand-in subclasses it for hermetic tests.
 private final class MockFrontmostApp: NSRunningApplication {
     private let bundleID: String?
     private let pid: pid_t

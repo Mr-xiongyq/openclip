@@ -1,35 +1,25 @@
 // OpenClipDeepLink.swift
 // OpenClip
 //
-// The inbound `openclip://` URL grammar, parsed into a typed value. This is a small,
-// fire-and-forget control surface: a URL asks OpenClip to do one thing and nothing is returned.
-//
-// The parser is pure and lives in Core so the grammar is testable without the app: the router that
-// performs the side effects stays in the app target.
+// Pure parser for the inbound `openclip://` grammar (fire-and-forget, no return value). The router
+// that performs side effects stays in the app target.
 //
 // Routes (host-based, matching the existing `openclip://install`):
 //
 //   openclip://install?id=<id>&url=<https-url>[&name=<name>]   install a store extension
 //   openclip://command/<name>                                  run an app-level command
 //
-// There is deliberately no settings read/write route and no x-callback-url reply. A URL scheme is
-// unauthenticated (any local process can open it) and a round-trip reply needs the caller to
-// register a scheme and switch apps; both are the wrong tool for configuration or for reading a
-// value back. Anything that needs a return value belongs in the CLI or App Intents.
+// No settings read/write route and no x-callback reply: URL schemes are unauthenticated, and
+// replies need scheme registration. Values belong in the CLI or App Intents.
 import Foundation
 
-/// An app-level verb the integration can invoke. These are side effects that are not a settings
-/// write and carry no return value.
+/// An app-level verb the integration can invoke. Side effects only, no return value.
 public enum IntegrationCommand: String, CaseIterable, Sendable, Equatable {
-    /// Bring OpenClip's Settings window to the front.
     case openSettings = "open-settings"
-    /// Temporarily pause the popup (the same pause the menu bar offers).
     case pause
-    /// Clear a temporary pause.
     case resume
 }
 
-/// A parsed `openclip://` URL.
 public enum OpenClipDeepLink: Equatable, Sendable {
     case install(id: String, name: String?, downloadURL: URL)
     case command(IntegrationCommand)

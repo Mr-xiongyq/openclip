@@ -8,9 +8,7 @@ import AppKit
 
 @MainActor
 public struct AIConfigureForm: View {
-    /// `true` when the caller supplies the surrounding `Form` (the AI preferences pane, which
-    /// appends the AI action library as a further section). `false` renders a self-contained form,
-    /// which is what the first-launch onboarding flow wants.
+    /// `true` when the caller supplies the surrounding `Form` (AI preferences); `false` renders a self-contained form for onboarding.
     private let embedded: Bool
 
     @ObservedObject private var aiManager = AIServiceManager.shared
@@ -31,8 +29,7 @@ public struct AIConfigureForm: View {
 
     @State private var cliAuthStatus: (isAuthenticated: Bool, message: String)? = nil
     @State private var isCheckingCLIAuth: Bool = false
-    /// Expanded state of the inline "how to authenticate" note. It was a popover hanging off an
-    /// info button — a popover opened from inside a popover, for two sentences and a button.
+    /// Expanded state of the inline "how to authenticate" note.
     @State private var showingAuthHelp: Bool = false
 
     public init(embedded: Bool = false) {
@@ -154,7 +151,6 @@ public struct AIConfigureForm: View {
                         fetchCLIModels()
                     }
 
-                    // Authentication Status Row
                     HStack(spacing: 6) {
                         Text("Status:")
                             .foregroundColor(.secondary)
@@ -332,8 +328,7 @@ public struct AIConfigureForm: View {
         }
     }
 
-    /// Inline replacement for the old authentication popover. Same copy, same button, but it
-    /// expands the row it belongs to instead of opening a layer on top of the settings it explains.
+    /// Inline auth help that expands its own row rather than opening a popover.
     private var authHelpNote: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(authHelpText)

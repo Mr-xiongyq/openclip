@@ -58,11 +58,8 @@ public struct ResolvedModule: Equatable, Sendable {
 }
 
 public enum OpenClipModuleLoader {
-    /// Resolves `require(specifier)` from `requiringDirectory` in `packageRoot`. Throws a
-    /// `ModuleResolutionError` if resolution fails. Resolution follows Node rules: exact file, then
-    /// `<candidate>.js`, then `<candidate>/index.js`. The loader checks containment on the final
-    /// file after symlink resolution. The returned `url` and `directoryURL` are real paths
-    /// (Node default, without `--preserve-symlinks`).
+    /// Resolves `require(specifier)` Node-style (file, `.js`, `index.js`), with containment checked on the final
+    /// real path. Returned URLs are real paths (no `--preserve-symlinks`).
     public static func load(
         specifier: String,
         requiringDirectory: URL,
@@ -94,9 +91,8 @@ public enum OpenClipModuleLoader {
             var isDir: ObjCBool = false
             return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
         }
-        /// Reads `url` as the module source. Containment is verified against the real path of the
-        /// opened file descriptor via `fcntl(F_GETPATH)`, binding verification directly to the open
-        /// file to eliminate time-of-check to time-of-use (TOCTOU) symlink substitution races (issue #39).
+        /// Reads `url` with containment checked against the open descriptor's real path (`F_GETPATH`), so a symlink
+        /// swap cannot race the check (TOCTOU, #39).
         func resolved(_ url: URL, tried: [String]) throws -> ResolvedModule {
             let fd = open(url.path, O_RDONLY | O_CLOEXEC)
             guard fd >= 0 else {

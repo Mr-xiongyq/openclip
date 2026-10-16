@@ -163,27 +163,21 @@ final class ActionResultHandlerTests: XCTestCase {
             try await handler.handle(.copyDefinition("zzznotaword"), in: nil)
             XCTFail("Expected empty definition lookup to throw")
         } catch {
-            // Expected: surfaces as an error status.
         }
         XCTAssertNil(isolatedPasteboard.string(forType: .string))
     }
 
-    /// The `shortcut` effect routes through the shortcuts CLI under a watchdog. Only exercised when
-    /// the binary is present; there is no deterministic short-lived Shortcut to invoke here, so the
-    /// assertion is that a non-existent name surfaces as a thrown error (→ status) and that the
-    /// missing-binary guard throws cleanly too.
+    /// Skipped without the shortcuts CLI; a missing shortcut must throw rather than hang.
     func testRunShortcutDoesNotCrash() async throws {
         let handler = makeHandler()
         let binary = URL(fileURLWithPath: Constants.shortcutsBinaryPath)
         guard FileManager.default.isExecutableFile(atPath: binary.path) else {
             throw XCTSkip("shortcuts CLI unavailable; skipping run-shortcut handler test")
         }
-        // A name that almost certainly does not exist: either it runs and logs, or the CLI exits
-        // non-zero (→ throw). Both are acceptable; the point is the handler path does not hang.
+        // Either the CLI runs it or exits non-zero; both are fine as long as nothing hangs.
         do {
             try await handler.handle(.runShortcut(name: "__openclip_should_not_exist__", input: nil), in: nil)
         } catch {
-            // Expected: non-existent shortcut → non-zero exit → thrown error.
         }
     }
 
@@ -203,7 +197,6 @@ final class ActionResultHandlerTests: XCTestCase {
         isolatedPasteboard.clearContents()
         isolatedPasteboard.setString("UserNewCopy", forType: .string)
 
-        // Wait for restore delay
         try await Task.sleep(nanoseconds: UInt64((testDelay + 0.05) * 1_000_000_000))
 
         // Ensure user's new copy was NOT overwritten by stale restore task
@@ -309,12 +302,11 @@ final class ActionResultHandlerTests: XCTestCase {
         isolatedPasteboard.clearContents()
         isolatedPasteboard.setString("BaselineClipboard", forType: .string)
 
-        // Spawn a paste in background task that will restore after delay:
         let pasteTask = Task { @MainActor in
             try await handler.handle(.paste("PastedText"), in: nil)
         }
 
-        // Wait briefly for paste to acquire coordinator session and write temporary text:
+        // Let the paste acquire its session before the explicit copy.
         try await Task.sleep(nanoseconds: 20_000_000)
 
         // User explicitly copies before the restore delay expires:
@@ -322,7 +314,6 @@ final class ActionResultHandlerTests: XCTestCase {
 
         _ = await pasteTask.result
 
-        // The user's explicit copy must remain and not be overwritten by the paste restore:
         XCTAssertEqual(isolatedPasteboard.string(forType: .string), "ExplicitUserCopy")
     }
 
@@ -343,10 +334,9 @@ final class ActionResultHandlerTests: XCTestCase {
             try await handler.handle(.pasteContent(payload1), in: nil)
         }
 
-        // Yield slightly so task1 begins and sets dirty state:
+        // Let task1 begin and set the dirty state first.
         try await Task.sleep(nanoseconds: 20_000_000)
 
-        // task2 preempts task1:
         let task2 = Task { @MainActor in
             try await handler.handle(.pasteContent(payload2), in: nil)
         }
@@ -354,7 +344,6 @@ final class ActionResultHandlerTests: XCTestCase {
         _ = await task1.result
         _ = await task2.result
 
-        // The final restored text must be OriginalBaseline, NOT Temp 1 or Temp 2!
         XCTAssertEqual(isolatedPasteboard.string(forType: .string), "OriginalBaseline")
     }
 }

@@ -9,8 +9,7 @@ import Core
 import os
 
 extension Notification.Name {
-    /// Posted by `AIServiceManager` after the AI preset list has been written, so observers
-    /// (e.g. `AIActionSync`) can re-register AI actions against the freshly committed list.
+    /// Posted after the AI preset list is written; `AIActionSync` re-registers on it.
     public static let aiActionPresetsDidChange = Notification.Name("OpenClip.AIActionPresetsDidChange")
 }
 
@@ -20,9 +19,7 @@ public final class AIServiceManager: ObservableObject {
 
     private let settingsStore = DefaultSettingsStore.shared
 
-    // Settings-backed properties route through SettingsStore (the single settings door) and
-    // manually forward `objectWillChange` so Preferences (and any other observers) refresh when
-    // a value changes. Key names and defaults are unchanged from the former @AppStorage surface.
+    // Settings-backed properties route through SettingsStore and forward `objectWillChange` so Preferences refresh.
     public var isAIEnabled: Bool {
         get { settingsStore.get(.isAIEnabled) }
         set { objectWillChange.send(); settingsStore.set(.isAIEnabled, value: newValue) }
@@ -31,10 +28,7 @@ public final class AIServiceManager: ObservableObject {
         get { settingsStore.get(.aiActiveProvider) }
         set { objectWillChange.send(); settingsStore.set(.aiActiveProvider, value: newValue) }
     }
-    /// Re-entrancy guard for `cloudAPIKey.didSet`. Reverting `cloudAPIKey = oldValue` after a
-    /// failed SecretStore write re-triggers the observer; if persisting the old value also fails,
-    /// the two assignments ping-pong and exhaust the stack (issue #42). While the guard is set we
-    /// skip the observer body entirely, so a failed write reverts in memory once and stops.
+    /// Re-entrancy guard: reverting `cloudAPIKey` after a failed SecretStore write re-enters `didSet` and can ping-pong forever (issue #42).
     private var isRevertingCloudAPIKey = false
 
     // API key is stored in ~/.openclip/secrets.json via SecretStore.
@@ -200,9 +194,7 @@ public final class AIServiceManager: ObservableObject {
             } else {
                 Log.ai.error("Failed to encode AI action presets for persistence")
             }
-            // Posted after the value above has committed, so observers always read the fresh list
-            // (objectWillChange fires before @AppStorage lands). AIActionSync keeps the registered
-            // AI actions in step with this list.
+            // Post after the write commits so observers read the new list.
             NotificationCenter.default.post(name: .aiActionPresetsDidChange, object: self)
         }
     }
@@ -212,22 +204,14 @@ public final class AIServiceManager: ObservableObject {
         return list.isEmpty ? [Self.defaultPresets[0]] : list
     }
 
-    /// Reorders the preset list, moving `id` into `gapIndex` — the gap the insertion bar was
-    /// drawn in, counted between rows (0 = above the first, `count` = below the last), matching
-    /// the drop semantics of the Actions outline. The list order *is* the order everywhere — the
-    /// AI sub-bar, the search palette, and the Preferences list all read it — so persisting the
-    /// new array is the whole feature.
+    /// Moves `id` into `gapIndex` (between-rows gap, as in the Actions outline). List order drives every AI surface.
     public func movePreset(id: String, toGap gapIndex: Int) {
         let reordered = Self.reordering(presets, moving: id, toGap: gapIndex)
         guard reordered.map(\.id) != presets.map(\.id) else { return }
         presets = reordered
     }
 
-    /// Pure reorder used by `movePreset`, split out so the ordering rules are testable without the
-    /// `@AppStorage`-backed singleton. Gap indices are pre-removal (SwiftUI's `move(fromOffsets:
-    /// toOffset:)` convention), so dropping into the gap directly below a row is a no-op rather
-    /// than an off-by-one. An unknown id or an out-of-range gap leaves the list intact — the gap
-    /// is clamped, never trapped on.
+    /// Pure reorder for `movePreset`. Gap indices are pre-removal (SwiftUI `move` convention); an unknown id leaves the list intact.
     public static func reordering(_ presets: [AIActionPreset], moving id: String, toGap gapIndex: Int) -> [AIActionPreset] {
         guard let sourceIndex = presets.firstIndex(where: { $0.id == id }) else { return presets }
         var list = presets
@@ -235,9 +219,7 @@ public final class AIServiceManager: ObservableObject {
         return list
     }
 
-    /// Builds a user-authored preset with a fresh `custom_` id — the same shape the "Add Custom AI
-    /// Action" sheet writes, so it is deletable in AI → Actions like any other custom preset.
-    /// Pure, so the id/title/prompt rules are testable without the `@AppStorage` singleton.
+    /// Builds a user preset with a fresh `custom_` id, deletable like any other custom preset.
     public static func makeCustomPreset(title: String, prompt: String) -> AIActionPreset {
         AIActionPreset(
             id: "custom_\(UUID().uuidString.prefix(8))",
@@ -247,9 +229,7 @@ public final class AIServiceManager: ObservableObject {
         )
     }
 
-    /// Appends a new custom preset and returns it. The preset list is the single source of truth
-    /// for every AI surface (palette, AI sub-bar, Preferences), so persisting it is the whole
-    /// registration — `AIActionSync` picks the change up through `aiActionPresetsDidChange`.
+    /// Appends a custom preset; `AIActionSync` picks the change up via `aiActionPresetsDidChange`.
     @discardableResult
     public func addCustomPreset(title: String, prompt: String) -> AIActionPreset {
         let preset = Self.makeCustomPreset(title: title, prompt: prompt)
@@ -257,13 +237,11 @@ public final class AIServiceManager: ObservableObject {
         return preset
     }
 
-    /// The preset whose prompt is `prompt` (case- and whitespace-insensitive), if one exists — so
-    /// saving a prompt the user already saved reuses that tool instead of minting a duplicate.
+    /// Existing preset with the same prompt (case and whitespace insensitive), so saves don't duplicate.
     public func preset(matchingPrompt prompt: String) -> AIActionPreset? {
         Self.preset(in: presets, matchingPrompt: prompt)
     }
 
-    /// Pure lookup behind `preset(matchingPrompt:)`.
     public static func preset(in presets: [AIActionPreset], matchingPrompt prompt: String) -> AIActionPreset? {
         let wanted = normalizedPrompt(prompt)
         guard !wanted.isEmpty else { return nil }
@@ -287,9 +265,7 @@ public final class AIServiceManager: ObservableObject {
         presets = current
     }
 
-    /// Maps a registered AI action id (`ai.preset.<presetID>`, see `AIAction`) back to its live
-    /// preset, so palette/preferences routing can resolve the preset without touching `AIAction`'s
-    /// internals.
+    /// Maps an `ai.preset.<presetID>` action id back to the live preset.
     public func preset(forActionID actionID: String) -> AIActionPreset? {
         let prefix = "ai.preset."
         guard actionID.hasPrefix(prefix) else { return nil }
@@ -301,7 +277,6 @@ public final class AIServiceManager: ObservableObject {
         presets = Self.defaultPresets
     }
 
-    /// Resolves the effective prompt for an AI preset.
     public func promptForPreset(_ preset: AIActionPreset) -> String {
         preset.prompt
     }
@@ -309,7 +284,6 @@ public final class AIServiceManager: ObservableObject {
     private static let cloudAPIKeyAccount = "aiCloudAPIKey"
 
     private init() {
-        // Load the API key from the SecretStore (~/.openclip/secrets.json)
         if let stored = SecretStore.get(account: Self.cloudAPIKeyAccount) {
             self.cloudAPIKey = stored
         } else if let legacy = UserDefaults.standard.string(forKey: "aiCloudAPIKey"), !legacy.isEmpty {

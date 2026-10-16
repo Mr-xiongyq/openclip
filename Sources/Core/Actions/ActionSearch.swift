@@ -24,14 +24,11 @@ public struct ActionSearchIndex: Sendable {
     public let keywords: String
     public let alias: String
     public let action: any Action
-    /// Pre-normalized (lowercased) search fields so `ActionSearch.search` never lowercases per
-    /// catalog item per call — the index is built once per palette entry, so the cost lands
-    /// there instead of on the per-keystroke hot path.
+    /// Pre-lowercased fields so `ActionSearch.search` avoids per-keystroke lowercasing; built once per palette entry.
     let normalizedTitle: String
     let normalizedKeywords: String
     let normalizedAlias: String
-    /// MRU usage counter (higher = more recent); breaks ties below match quality. Zero = never
-    /// used. Baked in at index build, constant for a palette session.
+    /// MRU usage counter (higher = more recent); breaks ties below match quality. Constant per palette session.
     public let usageRecency: Int
 
     public init(id: String, title: String, keywords: String, action: any Action, usageRecency: Int = 0, alias: String = "") {
@@ -48,10 +45,7 @@ public struct ActionSearchIndex: Sendable {
 }
 
 public enum ActionSearch {
-    /// Returns `items` ranked for `query`. Match-kind tiers are hard: exact alias (4) beats
-    /// title prefix (3), which beats title contains (2), which beats a fuzzy title subsequence
-    /// (1), which beats keyword contains (0). Within a tier: tighter fuzzy alignments first,
-    /// then usage recency (most recent first), then original (bar) order as the final tie-break.
+    /// Ranks `items` for `query`: tiers are hard, ties break by fuzzy score, usage recency, then original order.
     public static func search(_ query: String, in items: [ActionSearchIndex]) -> [ActionSearchIndex] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return items }
@@ -91,10 +85,7 @@ public enum ActionSearch {
             .map(\.item)
     }
 
-    /// fzf-style subsequence score: each matched char gets a base score plus a word-boundary
-    /// bonus (after whitespace/start/delimiter) and a consecutive-run bonus; chars skipped
-    /// between matches incur a start + extension penalty. Computed over the optimal alignment
-    /// with a small DP (titles are ~15 chars). Higher = tighter / better-anchored match.
+    /// fzf-style subsequence score over the optimal alignment (boundary and consecutive-run bonuses, gap penalties).
     private static func fuzzyMatchScore(query: String, in text: String) -> Int? {
         let q = Array(query.unicodeScalars)
         let t = Array(text.unicodeScalars)

@@ -1,18 +1,13 @@
 // ActionIconView.swift
 // OpenClip
 //
-// Renders action icons dynamically across SF Symbols, custom images, remote URLs, and text representations,
-// applying smart optical normalization so line icons, solid shapes, SVGs, and glyphs maintain balanced visual weight.
+// Renders action icons (SF Symbols, Iconify, remote and local images, text) with optical normalization.
 import SwiftUI
 import SDWebImage
 import SDWebImageSVGCoder
 import Core
 
-/// Fetches a remote monochrome (`currentColor`) SVG and renders it as an AppKit
-/// template image so it inherits the environment tint and adapts to light/dark —
-/// the same decode pipeline as `IconifySVGView`, generalized to arbitrary URLs.
-/// Used for extension-store/onboarding icons sourced from the publish pipeline's
-/// normalized SVGs. Results are cached per URL for the session.
+/// Remote monochrome SVG rendered as a template image so it adopts the environment tint.
 @MainActor
 struct RemoteTemplateIcon: View {
     let url: URL?
@@ -57,7 +52,6 @@ struct RemoteTemplateIcon: View {
     }
 }
 
-/// Session cache for decoded template images keyed by absolute URL.
 actor RemoteTemplateIconCache {
     static let shared = RemoteTemplateIconCache()
     private let cache = NSCache<NSString, Box>()
@@ -73,13 +67,12 @@ actor RemoteTemplateIconCache {
         }
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
-            // Decode off-main: SDImageSVGCoder produces an NSImage from raw SVG data.
+            // Decode off the main actor.
             let decoded = await Task.detached(priority: .utility) { () -> NSImage? in
                 SDImageSVGCoder.shared.decodedImage(with: data, options: nil)
             }.value
             guard let decoded else { return nil }
-            // Template mode → AppKit renders it as a mask tinted by foregroundColor,
-            // which is what makes currentColor-style icons theme-adaptive.
+            // Template mode lets AppKit tint the mask with foregroundColor.
             decoded.isTemplate = true
             decoded.size = NSSize(width: 64, height: 64)
             let box = Box(decoded)
@@ -91,23 +84,14 @@ actor RemoteTemplateIconCache {
     }
 }
 
-/// SF Symbols draw at wildly different optical sizes for the same point size: an open outlined
-/// circle like `equal.circle` sits well inside its box, while a two-page `doc.on.doc` runs edge to
-/// edge. Scaling them all identically left the sidebar's icon column visibly uneven, so every
-/// symbol OpenClip ships is now named here and scaled to read the same size; only unknown symbols
-/// (an extension's own, say) fall through to the heuristics in `classify`.
+/// Per-symbol optical correction so the sidebar icon column reads evenly; unknown symbols use `classify`.
 public enum IconOpticalCategory: Sendable {
-    /// Heavy, filled shapes: shrink so their solid mass matches the line-drawn icons.
     case solidOrFilled
-    /// Thin, open strokes: grow so they are not lost beside the heavier glyphs.
     case thinLine
-    /// Glyphs already as wide as their box: shrink to keep the column's left edge even.
     case wideAspect
-    /// Neither extreme.
     case standard
 
-    /// The symbols OpenClip ships, each with the correction that makes it match the rest. Keys are
-    /// lower-cased symbol names.
+    /// Keys are lower-cased symbol names.
     private static let known: [String: IconOpticalCategory] = [
         // Thin, open strokes read small for their size, so they grow.
         "sparkle": .thinLine,
@@ -205,7 +189,7 @@ public struct ActionIconView: View {
             switch effectiveIcon {
             case .symbol(let name):
                 if name.contains(":") {
-                    // Iconify SVGs usually have internal padding in their viewBox; scale up so optical weight matches SF Symbols.
+                    // Iconify viewBoxes carry padding; scale up to match SF Symbol weight.
                     let isBrand = name.hasPrefix("simple-icons:") || name.hasPrefix("logos:") || name.hasPrefix("cib:") || name.contains("brand")
                     let opticalFactor: CGFloat = isBrand ? 1.08 : 1.20
                     let dim = targetDimension * opticalFactor

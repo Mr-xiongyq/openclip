@@ -124,8 +124,7 @@ final class NewExtensionKindTests: XCTestCase {
     // MARK: - service isolation
 
     func testNamedServiceExecutionPreservesGlobalClipboard() async throws {
-        // Live integration: directly exercising the named-service flow must not touch
-        // NSPasteboard.general (which holds the user's real clipboard).
+        // The named-service flow must not touch NSPasteboard.general, which holds the user's clipboard.
         let changeCountBefore = NSPasteboard.general.changeCount
 
         var service = NamedServiceAction(id: "com.test.isolated", title: "Service", serviceName: "com.apple.text.input")
@@ -149,9 +148,7 @@ final class NewExtensionKindTests: XCTestCase {
 
     // MARK: - canvas (removed)
 
-    /// The canvas feature was removed: `type: "canvas"` is no longer a recognized kind, so the
-    /// factory must NOT produce a canvas runtime. With only `scriptCode` (no URL/script file) the
-    /// generic script path finds nothing runnable and the action is dropped.
+    /// `type: "canvas"` is no longer recognized, so scriptCode alone produces no action.
     @MainActor
     func testFactoryNoLongerProducesCanvasAction() async throws {
         let factory = DefaultActionFactory()
@@ -166,8 +163,7 @@ final class NewExtensionKindTests: XCTestCase {
         XCTAssertNil(action, "canvas-type metadata must not produce an action after canvas removal")
     }
 
-    /// A canvas manifest with a `.js` script file degrades to the generic JS runtime (still
-    /// rejected at validation, but never a canvas action).
+    /// A canvas manifest with a `.js` script file degrades to the plain JS runtime, never a canvas action.
     @MainActor
     func testFactoryRoutesCanvasScriptFileToPlainJavaScriptAction() async throws {
         let factory = DefaultActionFactory()

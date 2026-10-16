@@ -1,14 +1,9 @@
 // ReorderableRows.swift
 // OpenClip
 //
-// A list whose rows are put in order by dragging them, with the blue insertion bar drawn in the
-// gap the drag is over.
-//
-// It is the settings window's stand-in for the Customize outline, which is an `NSOutlineView` and
-// cannot be embedded in a form. The gesture and the rule are deliberately the same: the gap a drag
-// is over is the number of rows whose midpoint it has passed, and the bar is drawn on a row edge,
-// never across a row. Rows drop *between* rows only — dropping one onto another means something in
-// the Customize outline (it makes a group) and means nothing here.
+// Drag-to-reorder list with a blue insertion bar in the gap under the drag. Stands in for the
+// Customize outline (an NSOutlineView that can't live in a Form). Drops land between rows only;
+// dropping onto a row would make a group in the outline, which doesn't apply here.
 
 import SwiftUI
 import UniformTypeIdentifiers
@@ -21,9 +16,7 @@ private struct ReorderableRowFramePreferenceKey: PreferenceKey {
     }
 }
 
-/// Drop handling for the list. A `DropDelegate` rather than `dropDestination` because only this
-/// API reports the drag position *continuously*, which is what the insertion bar needs to follow
-/// the cursor between rows.
+/// `DropDelegate` rather than `dropDestination`: only it reports the drag position continuously.
 private struct ReorderableDropDelegate: DropDelegate {
     let isDraggingActive: () -> Bool
     let gapForLocation: (CGPoint) -> Int
@@ -53,14 +46,10 @@ private struct ReorderableDropDelegate: DropDelegate {
 
 @MainActor
 struct ReorderableRows<Row: View>: View {
-    /// The rows, in the order they are shown.
     let ids: [String]
-    /// What is shown while a row is being dragged.
     let dragPreviewTitle: (String) -> String
-    /// The dragged row and the gap it was dropped into: 0 is above the first row, `ids.count` is
-    /// below the last.
+    /// Gap 0 is above the first row; `ids.count` is below the last.
     let onMove: (String, Int) -> Void
-    /// How far the separators between rows are inset, to match the list they are drawn in.
     var dividerInset: CGFloat = 0
     @ViewBuilder let row: (String) -> Row
 
@@ -75,7 +64,7 @@ struct ReorderableRows<Row: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(ids, id: \.self) { id in
                 row(id)
-                    // The row itself is the drag handle — no grip glyph, matching the outline.
+                    // Whole row is the drag handle (no grip glyph), like the outline.
                     .background(frameReader(for: id))
                     .onDrag {
                         draggingID = id
@@ -113,8 +102,7 @@ struct ReorderableRows<Row: View>: View {
         ))
     }
 
-    /// Reports a row's frame in the list's coordinate space, drawn as a clear background so it
-    /// never affects layout.
+    /// Reports the row's frame via a clear background, so layout is unaffected.
     private func frameReader(for id: String) -> some View {
         GeometryReader { geo in
             Color.clear.preference(
@@ -142,18 +130,14 @@ struct ReorderableRows<Row: View>: View {
     }
 }
 
-/// Where a drag lands, as pure arithmetic. Kept off `ReorderableRows` so neither a caller nor a
-/// test has to name that view's generic row type to ask.
+/// Pure drop arithmetic, kept off the generic `ReorderableRows` so tests needn't name its Row type.
 enum RowReordering {
-    /// The gap a drag at `y` is over: every row whose midpoint it has passed counts, so 0 is above
-    /// the first row and `rowFrames.count` is below the last — the rule AppKit's insertion bar
-    /// follows in the Customize outline.
+    /// Counts rows whose midpoint the drag has passed, matching AppKit's outline rule.
     static func insertionGap(atY y: CGFloat, rowFrames: [CGRect]) -> Int {
         rowFrames.filter { y > $0.midY }.count
     }
 
-    /// Where the bar is drawn: the top edge of the row the gap precedes, or the bottom edge of the
-    /// last row for the trailing gap. Nil when there are no rows to sit between.
+    /// Top edge of the row the gap precedes, or bottom of the last row for the trailing gap.
     static func insertionY(forGap gap: Int, rowFrames: [CGRect]) -> CGFloat? {
         guard let first = rowFrames.first, let last = rowFrames.last else { return nil }
         if gap <= 0 { return first.minY }
@@ -161,8 +145,7 @@ enum RowReordering {
         return rowFrames[gap].minY
     }
 
-    /// `ids` with `id` moved into `gap`. Gap indices are read against the list *before* the row is
-    /// lifted out, which is what `move(fromOffsets:toOffset:)` expects.
+    /// Gap is read against the list before the row is lifted out, as `move(fromOffsets:toOffset:)` expects.
     static func reordering(_ ids: [String], moving id: String, toGap gap: Int) -> [String] {
         guard let source = ids.firstIndex(of: id) else { return ids }
         var reordered = ids

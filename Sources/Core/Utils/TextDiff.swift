@@ -1,22 +1,13 @@
 // TextDiff.swift
 // OpenClip
 //
-// Hierarchical diff between an action's input text and the text it produced, used by the result
-// card's change view. Pure domain code: it returns ordered segments (equal / inserted / deleted)
-// and leaves colours, strikethrough and typography to the card.
+// Hierarchical diff between an action's input and its output, for the result card's change view.
+// Returns equal/insert/delete segments; styling is left to the card.
 //
-// The comparison is a hierarchical Myers greedy diff:
-// 1. Text is partitioned into round-trippable tokens (words, whitespace runs, individual symbols).
-// 2. Common prefix/suffix tokens are trimmed at token boundaries.
-// 3. Myers diff runs on tokens to prevent chopping common letters across unrelated words
-//    (e.g. replacing "large" with "huge" produces clean whole-word replacements, not ~lar~huge).
-// 4. Sub-word / typo refinement: when a replacement involves a single word typo or a case change,
-//    character-level Myers refines the edit (e.g. "definately" -> "definitely" highlights only "a"->"i",
-//    and "hey" -> "Hey" highlights only "h"->"H").
-//
-// Two budgets keep pathological input cheap: `maxComparableLength` on the trimmed middle and
-// `maxEditDistance` on Myers D. Exceeding either yields the honest fallback of "the middle was
-// replaced" (one delete + one insert).
+// Tokenize (words, whitespace, single symbols), trim common prefix/suffix tokens, run Myers on the
+// tokens so unrelated words aren't chopped, then refine single-word typos and case changes at
+// character level ("hey" -> "Hey" highlights only "h"->"H"). Budgets (`maxComparableLength`,
+// `maxEditDistance`) fall back to one whole-middle replacement.
 import Foundation
 
 /// One run of the diff: a stretch of text that survived, was added, or was removed.
@@ -37,16 +28,12 @@ public struct TextDiffSegment: Sendable, Equatable {
 }
 
 public enum TextDiff {
-    /// Combined character budget for the *trimmed* middle. Beyond it the middle is reported as a
-    /// wholesale replacement instead of being diffed.
+    /// Budget for the trimmed middle; beyond it the middle is reported as one replacement.
     public static let maxComparableLength = 2_500
-    /// Maximum edit distance the Myers search explores before giving up (its cost — and the
-    /// trace it keeps — grow with D², so an unrelated pair of texts must not run unbounded).
+    /// Myers search budget; its cost grows with D², so unrelated texts must not run unbounded.
     public static let maxEditDistance = 300
 
-    /// Whether the diff between `old` and `new` represents a meaningful revision (e.g. proofreading,
-    /// tone adjustments, or spelling fixes) rather than a complete rewrite (translations, summaries,
-    /// explanations). Used to gate the diff view toggle.
+    /// True for a revision (proofreading, tone, spelling) rather than a rewrite (translation, summary).
     public static func isMeaningfulEdit(from old: String, to new: String, minSimilarity: Double = 0.5) -> Bool {
         let trimmedOld = old.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedNew = new.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -59,8 +46,7 @@ public enum TextDiff {
         return equalRatio(of: segs) >= minSimilarity
     }
 
-    /// Diffs `old` into `new`, using hierarchical tokenized Myers diff with sub-word refinement
-    /// for typos and casing, coalescing consecutive segments of the same kind.
+    /// Diffs `old` into `new` as coalesced equal/insert/delete segments.
     public static func segments(from old: String, to new: String) -> [TextDiffSegment] {
         if old == new {
             return old.isEmpty ? [] : [TextDiffSegment(kind: .equal, text: old)]
@@ -116,10 +102,10 @@ public enum TextDiff {
                 switch op {
                 case .equal(let token):
                     if isWhitespaceToken(token) && (!pendingDeleted.isEmpty || !pendingInserted.isEmpty) {
-                        // Buffer whitespace immediately following an edit in case another edit immediately follows
+                        // Whitespace after an edit may join the same edit cluster.
                         pendingWhitespaceEquals.append(token)
                     } else {
-                        // Followed by a stable equal word/symbol anchor, flush pending edits and whitespace
+                        // Stable anchor: flush pending edits.
                         flushPending()
                         middleSegs.append(TextDiffSegment(kind: .equal, text: token))
                     }
@@ -133,7 +119,6 @@ public enum TextDiff {
                     pendingDeleted.append(token)
                 case .insert(let token):
                     if !pendingWhitespaceEquals.isEmpty {
-                        // Edit continues across whitespace: absorb the whitespace into the cluster
                         pendingDeleted.append(contentsOf: pendingWhitespaceEquals)
                         pendingInserted.append(contentsOf: pendingWhitespaceEquals)
                         pendingWhitespaceEquals.removeAll()
@@ -158,9 +143,7 @@ public enum TextDiff {
         return coalesced(result)
     }
 
-    /// Share of the diffed material that survived unchanged, 0...1 — 1.0 for identical texts and
-    /// near 0 for a full rewrite. The card uses it to decide whether the change view is worth
-    /// showing by default (a rewrite diffs into noise; an edit reads perfectly).
+    /// Share of the material that survived unchanged: 1.0 when identical, near 0 for a rewrite.
     public static func equalRatio(of segments: [TextDiffSegment]) -> Double {
         var equal = 0
         var total = 0

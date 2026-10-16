@@ -66,10 +66,8 @@ final class BuiltinActionsTests: XCTestCase {
         
         XCTAssertTrue(action.isEnabled(for: context))
         
-        // We just test perform logic here.
         let result = try await action.perform(context)
         if case .simulatePaste = result {
-            // Success
         } else {
             XCTFail("Expected .simulatePaste result")
         }
@@ -91,9 +89,7 @@ final class BuiltinActionsTests: XCTestCase {
         }
     }
 
-    /// The Preferences edit sheet writes the `url` option via SettingsActionOptionStore
-    /// (key `action.builtin.search.option.url`); perform() must honor it, not just the
-    /// legacy pre-option-store key.
+    /// perform() must honor the `url` option the Preferences sheet writes, not just the legacy key.
     @MainActor
     func testSearchActionUsesConfiguredURLOption() async throws {
         let store = MemorySettingsStore()
@@ -108,8 +104,7 @@ final class BuiltinActionsTests: XCTestCase {
         }
     }
 
-    /// Values stored under the legacy `action.search.url` key (written before the option
-    /// store existed) keep working; the option key takes precedence over it.
+    /// Legacy `action.search.url` values still work; the option key takes precedence.
     @MainActor
     func testSearchActionFallsBackToLegacyKeyAndPrefersOption() async throws {
         let legacyOnly = MemorySettingsStore()
@@ -139,7 +134,6 @@ final class BuiltinActionsTests: XCTestCase {
     func testOpenURLAction() async throws {
         let action = OpenURLAction()
         
-        // Test valid URL
         let validContext = createMockContext(with: "https://apple.com")
         XCTAssertTrue(action.isEnabled(for: validContext))
         
@@ -150,7 +144,6 @@ final class BuiltinActionsTests: XCTestCase {
             XCTFail("Expected .openURL result for valid URL")
         }
         
-        // Test URL embedded in surrounding text
         let embeddedContext = createMockContext(with: "Check out https://github.com/apple/swift in this PR!")
         XCTAssertTrue(action.isEnabled(for: embeddedContext))
         let embeddedResult = try await action.perform(embeddedContext)
@@ -160,7 +153,7 @@ final class BuiltinActionsTests: XCTestCase {
             XCTFail("Expected .openURL for embedded URL")
         }
 
-        // Test multiple links in text opens first link
+        // First of several links wins.
         let multipleContext = createMockContext(with: "First https://first.com and second https://second.com")
         XCTAssertTrue(action.isEnabled(for: multipleContext))
         let multipleResult = try await action.perform(multipleContext)
@@ -170,7 +163,7 @@ final class BuiltinActionsTests: XCTestCase {
             XCTFail("Expected first URL to be extracted")
         }
 
-        // Test bare domain & case insensitivity
+        // Uppercase input is accepted.
         let bareContext = createMockContext(with: "HTTPS://APPLE.COM")
         XCTAssertTrue(action.isEnabled(for: bareContext))
         let bareResult = try await action.perform(bareContext)
@@ -180,7 +173,6 @@ final class BuiltinActionsTests: XCTestCase {
             XCTFail("Expected .openURL for uppercase URL")
         }
 
-        // Test localhost with port
         let localContext = createMockContext(with: "Server at localhost:3000/api")
         XCTAssertTrue(action.isEnabled(for: localContext))
         let localResult = try await action.perform(localContext)
@@ -190,7 +182,7 @@ final class BuiltinActionsTests: XCTestCase {
             XCTFail("Expected .openURL for localhost")
         }
 
-        // Test wrapped web links & punctuation wrapping
+        // Angle-bracketed links are unwrapped.
         let wrappedContext = createMockContext(with: "Open <https://example.com/docs>.")
         XCTAssertTrue(action.isEnabled(for: wrappedContext))
         let wrappedResult = try await action.perform(wrappedContext)
@@ -213,13 +205,11 @@ final class BuiltinActionsTests: XCTestCase {
         let deepLinkContext = createMockContext(with: "Open obsidian://open?vault=Work&file=Note")
         XCTAssertFalse(action.isEnabled(for: deepLinkContext), "custom app deep links must not enable Open Link")
 
-        // Test invalid URL
         let invalidContext = createMockContext(with: "No URL here")
         XCTAssertFalse(action.isEnabled(for: invalidContext))
         
         let invalidResult = try await action.perform(invalidContext)
         if case .failure(_) = invalidResult {
-            // Success
         } else {
             XCTFail("Expected .failure result for invalid URL")
         }

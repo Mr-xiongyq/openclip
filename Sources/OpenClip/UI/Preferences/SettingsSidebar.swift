@@ -1,14 +1,8 @@
 // SettingsSidebar.swift
 // OpenClip
 //
-// The window's table of contents:
-// - Sits directly on the window background (no card, border or shadow).
-// - Top-left traffic lights space, then a translucent capsule search field.
-// - Fixed width (~216pt), ~30pt pitch rows.
-// - Every row has a ~20pt rounded-square icon tile with a white glyph on a colored fill.
-// - Selection: subtle translucent rounded highlight (~11% opacity, ~10pt radius), NOT accent color.
-// - Dim, unobtrusive "Actions" group label with extra vertical spacing.
-// - Hidden scroll indicators, no separator lines.
+// The window's table of contents: a fixed-width sidebar on the window background with a search capsule,
+// ~30pt rows, ~20pt icon tiles, a translucent (not accent) selection, and hidden scroll indicators.
 
 import SwiftUI
 import AppKit
@@ -61,8 +55,7 @@ struct SettingsSidebarRow: Identifiable {
         )
     }
 
-    /// Whether the row answers `query`. Every word of the query has to appear somewhere in the
-    /// title or the keywords, so "api key" finds AI and "jwt verify" finds the JWT extension.
+    /// Whether the row answers `query`: every query word must appear in the title or keywords.
     func matches(_ query: String) -> Bool {
         let words = Self.words(in: query)
         guard !words.isEmpty else { return true }
@@ -78,12 +71,9 @@ struct SettingsSidebarRow: Identifiable {
     }
 }
 
-/// The order of the sidebar's second group: what OpenClip ships first, then what the user
-/// installed. Inside a rank the rows read alphabetically, so a name is still where you expect it.
+/// Order of the second group: shipped items first, then installed; alphabetical within a rank.
 enum SettingsSidebarOrder {
-    /// Lower sorts first. AI leads because it is the headline feature; the built-in actions
-    /// follow; the user's own actions close out what came with the app or was written here; and
-    /// installed extensions come last, because they are the part that changes.
+    /// Lower sorts first: AI, built-in actions, custom actions, then installed extensions.
     static func rank(of page: SettingsPage) -> Int {
         switch page {
         case .ai: return 0
@@ -94,8 +84,7 @@ enum SettingsSidebarOrder {
         }
     }
 
-    /// Whether a row is a package the user installed, which is where the second gap goes: what
-    /// OpenClip ships reads as one block, what was installed as another.
+    /// Installed packages sit after a gap, separate from the shipped block.
     static func isInstalledExtension(_ page: SettingsPage) -> Bool {
         if case .extensionPackage = page { return true }
         return false
@@ -297,7 +286,6 @@ struct SettingsSidebar: View {
                 .padding(.horizontal, 14)
                 .padding(.bottom, 8)
 
-                // Scrollable rows with hidden indicators and no separator lines
                 ScrollView {
                     VStack(alignment: .leading, spacing: 2) {
                         if isSearching {

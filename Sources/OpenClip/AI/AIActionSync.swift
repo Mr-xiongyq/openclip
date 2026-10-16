@@ -1,13 +1,9 @@
 // AIActionSync.swift
 // OpenClip
 //
-// Keeps AIServiceManager's AI presets registered in the ActionCoordinator as individual
-// `AIAction`s, so every preset shows up as a searchable entry in the action-search palette and
-// as its own row in Preferences → Actions. The user's standalone placement and action order
-// survive reconciliation, while other presets stay under the `builtin.aiTools` launcher.
-// Reconciles the registered set whenever the preset list changes; the title snapshot on
-// `AIAction` is refreshed by re-registering on any content change, and a changed *order* is
-// re-registered from scratch so the catalog (palette, AI sub-bar) follows the user's ordering.
+// Mirrors AIServiceManager presets as individual `AIAction`s in the ActionCoordinator, so each
+// preset is a palette entry and a Preferences → Actions row. Standalone placement survives
+// reconciliation; the rest stay under `builtin.aiTools`.
 import Foundation
 import Core
 
@@ -16,8 +12,7 @@ public final class AIActionSync {
     public static let shared = AIActionSync()
 
     private let coordinator = ActionCoordinator.shared
-    /// The preset ids currently registered, in the order they were registered. Order matters:
-    /// the catalog position of the AI actions (and so the palette / AI sub-bar order) follows it.
+    /// Registered preset ids in registration order; sets the AI actions' catalog position.
     private var registeredOrder: [String] = []
     private var lastFingerprint: [String] = []
     private var observer: NSObjectProtocol?
@@ -35,8 +30,7 @@ public final class AIActionSync {
         sync()
     }
 
-    /// Reconciles the registered AI actions against the current preset list. Cheap when nothing
-    /// changed (single fingerprint compare), so it is safe to call from any display surface too.
+    /// No-op when nothing changed, so it is safe to call from any surface.
     public func sync() {
         let presets = AIServiceManager.shared.presets
         let fingerprint = presets.map { "\($0.id)|\($0.title)|\($0.prompt)|\($0.isEnabled)" }
@@ -45,17 +39,14 @@ public final class AIActionSync {
         let currentOrder = presets.map { AIAction(presetID: $0.id, title: $0.title).id }
 
         if currentOrder != registeredOrder {
-            // The user reordered (or added/removed) presets. Replace all AI actions atomically
-            // in list order so the catalog and palette follow the new order without cascading
-            // notifications.
+            // Reordered or added/removed: replace atomically so the catalog follows without cascading notifications.
             let newAIActions = presets.map { AIAction(presetID: $0.id, title: $0.title) }
             coordinator.replaceActions(
                 matching: { ActionIdentity.isAIPreset($0) },
                 with: newAIActions
             )
         } else {
-            // Same presets in the same order — only titles/prompts/enabled state changed, so an
-            // in-place refresh is enough (and leaves the catalog undisturbed).
+            // Same order: an in-place refresh leaves the catalog undisturbed.
             for preset in presets {
                 coordinator.register(action: AIAction(presetID: preset.id, title: preset.title))
             }

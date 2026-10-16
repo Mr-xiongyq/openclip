@@ -15,8 +15,7 @@ import AppKit
 public struct IconPickerView: View {
     @Binding var selectedSymbol: String
     var onSelect: (() -> Void)? = nil
-    /// True when the picker is a page of its own and the grids may take all the height they are
-    /// given; false keeps the compact heights the picker had inside a popover.
+    /// Grids take all available height when true; false keeps the compact popover heights.
     var fillsAvailableHeight: Bool = false
 
     @StateObject private var provider = UnifiedIconProvider.shared
@@ -44,13 +43,11 @@ public struct IconPickerView: View {
         self.onSelect = onSelect
     }
 
-    /// Height of the icon grids: the page lets them grow, the compact layout caps them.
     private var gridMaxHeight: CGFloat { fillsAvailableHeight ? .infinity : 180 }
     private var savedGridMaxHeight: CGFloat { fillsAvailableHeight ? .infinity : 110 }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Segmented tab control (Native Icons | Open Source | Custom)
             Picker("", selection: $iconTab) {
                 Text("Native Icons").tag(IconTab.native)
                 Text("Open Source").tag(IconTab.openSource)
@@ -61,7 +58,6 @@ public struct IconPickerView: View {
 
             Divider()
 
-            // Active Tab Content
             switch iconTab {
             case .native:
                 nativeIconsTab
@@ -71,7 +67,6 @@ public struct IconPickerView: View {
                 customTab
             }
 
-            // Preview footer for selected icon
             if !selectedSymbol.isEmpty {
                 Divider()
                 HStack(spacing: 8) {
@@ -157,7 +152,7 @@ public struct IconPickerView: View {
     @ViewBuilder
     private var openSourceTab: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // Search field - fires Iconify query only when Enter is pressed
+            // Iconify query fires on Enter only.
             HStack(spacing: 6) {
                 NativeSearchField(
                     text: $searchText,
@@ -206,7 +201,6 @@ public struct IconPickerView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: gridMaxHeight)
                 } else {
-                    // Grid display for Open Source icons
                     ScrollView {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 8), spacing: 4) {
                             ForEach(openSourceResults) { item in
@@ -234,7 +228,6 @@ public struct IconPickerView: View {
     @ViewBuilder
     private var customTab: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Favicon from URL
             VStack(alignment: .leading, spacing: 4) {
                 Text("Favicon from URL")
                     .font(.caption)
@@ -286,7 +279,6 @@ public struct IconPickerView: View {
                 }
             }
 
-            // Upload from Finder
             HStack(spacing: 8) {
                 Button {
                     chooseFileFromFinder()
@@ -306,7 +298,6 @@ public struct IconPickerView: View {
 
             Divider()
 
-            // Saved Custom Icons Grid
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text("Saved Icons")
@@ -466,10 +457,7 @@ struct IconifySVGView: View {
         }
     }
 
-    /// Fetches and decodes an Iconify SVG entirely off the main actor: `nonisolated` runs on the
-    /// cooperative thread pool, `URLSession` performs the network I/O without blocking the UI, and
-    /// the SVG decode (synchronous CPU work) also happens off-main. Previously `Data(contentsOf:)`
-    /// blocked the main thread for the whole fetch on the view's main-actor task.
+    /// Fetches and decodes off the main actor so neither the network nor the SVG decode blocks the UI.
     private nonisolated func fetchSVGImage(iconId: String) async -> IconImageBox? {
         if let cached = await IconSVGCache.shared.get(iconId) { return cached }
 
@@ -487,12 +475,11 @@ struct IconifySVGView: View {
             return nil
         }
 
-        // Use SDImageSVGCoder to decode raw SVG data into an NSImage (off the main actor)
         guard let decoded = SDImageSVGCoder.shared.decodedImage(with: data, options: nil) else {
             return nil
         }
 
-        // Set as template so AppKit / SwiftUI renders it as a white vector mask
+        // Template image: rendered as a tintable vector mask.
         decoded.isTemplate = true
         let box = IconImageBox(image: decoded)
         await IconSVGCache.shared.set(iconId, box: box)
@@ -502,9 +489,7 @@ struct IconifySVGView: View {
 
 // MARK: - Icon Cache Actor
 
-/// Boxes a decoded icon so it can cross the actor boundary after off-main decoding. `NSImage` is
-/// not `Sendable`, but the image is fully decoded off-main and only handed to the main-actor view
-/// to render, so this transfer is safe.
+/// `NSImage` is not Sendable; the box is fully decoded before it crosses to the main actor.
 fileprivate struct IconImageBox: @unchecked Sendable {
     let image: NSImage
 }
@@ -518,7 +503,7 @@ fileprivate actor IconSVGCache {
 
 // MARK: - Minimalistic Popover Wrapper
 
-/// Compact popover container for choosing icons inline without navigating away from the current settings page.
+/// Compact inline icon picker for settings pages.
 public struct IconPickerPopover: View {
     @Binding public var selectedSymbol: String
     public var onSelect: (() -> Void)?

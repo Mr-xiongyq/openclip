@@ -72,7 +72,6 @@ public final class UnifiedIconProvider: ObservableObject, Sendable {
         guard trimmed != lastQuery else { return }
         lastQuery = trimmed
 
-        // Cancel any in-flight search
         searchTask?.cancel()
 
         if trimmed.isEmpty {
@@ -89,11 +88,9 @@ public final class UnifiedIconProvider: ObservableObject, Sendable {
 
             let lower = trimmed.lowercased()
 
-            // SF Symbol matches (local, instant)
             let sfMatches = sfSymbols.filter { $0.id.contains(lower) }.prefix(30)
 
-            // Iconify search API — palette=false gives only monochrome icons. The network call +
-            // JSON parse run off the main actor (nonisolated helper); results merge back below.
+        // palette=false keeps only monochrome icons. The network call runs off the main actor; results merge back below.
             let iconifyMatches = await Self.fetchIconifySearchResults(query: trimmed)
 
             guard !Task.isCancelled else { return }
@@ -105,15 +102,12 @@ public final class UnifiedIconProvider: ObservableObject, Sendable {
         }
     }
 
-    /// Default icons shown when search is empty (first 160 SF Symbols)
     public var defaultIcons: [IconEntry] {
         Array(sfSymbols.prefix(160))
     }
 
     /// Queries the Iconify search API off the main actor and returns flat "prefix:name" entries.
-    /// `nonisolated` runs on the cooperative thread pool, so the network I/O and JSON parse never
-    /// block the UI — the caller merges results back via `MainActor.run`. `[IconEntry]` is Sendable,
-    /// so it crosses the actor boundary without a box.
+    /// `nonisolated` keeps network I/O and JSON parsing off the main actor; the caller merges results via `MainActor.run`.
     private nonisolated static func fetchIconifySearchResults(query: String) async -> [IconEntry] {
         var components = URLComponents(string: "https://api.iconify.design/search")
         components?.queryItems = [
@@ -131,7 +125,6 @@ public final class UnifiedIconProvider: ObservableObject, Sendable {
             Log.icons.warning("Iconify search for '\(query)' returned no usable results")
             return []
         }
-        // icons are in "prefix:name" format — perfect, use directly
         return icons.map { iconId in
             let parts = iconId.split(separator: ":", maxSplits: 1)
             let label = parts.count == 2 ? String(parts[1]).replacingOccurrences(of: "-", with: " ").capitalized : iconId
