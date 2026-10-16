@@ -92,8 +92,10 @@ internal struct SelectionEditabilityProbe: Sendable {
     }
 
     private static func elementAt(point: CGPoint, deadline: Date) -> AXUIElement? {
+        // Never set a messaging timeout on the system-wide element: that changes the global
+        // default for every AX element in this process. The caller's deadline race bounds this.
+        guard deadline.timeIntervalSinceNow > 0 else { return nil }
         let systemWide = AXUIElementCreateSystemWide()
-        guard applyTimeout(to: systemWide, deadline: deadline) else { return nil }
         var element: AXUIElement?
         guard AXUIElementCopyElementAtPosition(systemWide, Float(point.x), Float(point.y), &element) == .success else { return nil }
         return element

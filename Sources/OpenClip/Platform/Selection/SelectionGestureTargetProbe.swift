@@ -67,9 +67,10 @@ internal struct SelectionGestureTargetProbe: Sendable {
             if role == "AXToolbar" || role == "AXTitleBar" || subrole == "AXTitleBar" {
                 return true
             }
-            // A direct window hit is the window background. A generic group that merely
-            // ends at AXWindow can also be document content, so leave that ambiguous path open.
-            if role == "AXWindow" { return index == 0 }
+            // Reaching AXWindow without a toolbar/title bar is ambiguous. Apps with flat or
+            // lazily built AX trees (terminals, canvas editors, Electron before its tree exists)
+            // report their whole content area as a bare AXWindow hit, so fail open.
+            if role == "AXWindow" { return false }
         }
         return false
     }
@@ -90,15 +91,17 @@ internal struct SelectionGestureTargetProbe: Sendable {
             if ["AXTextField", "AXTextArea", "AXSearchField", "AXComboBox"].contains(role) { return false }
             if role == "AXWebArea" { return false }
             if role == "AXToolbar" || role == "AXTitleBar" || subroles.last == "AXTitleBar" { return true }
-            if role == "AXWindow" { return roles.count == 1 }
+            if role == "AXWindow" { return false }
             current = elementAttribute(kAXParentAttribute, of: element, deadline: deadline)
         }
         return isWindowChrome(ancestorRoles: roles, subroles: subroles)
     }
 
     private static func elementAt(point: CGPoint, deadline: Date) -> AXUIElement? {
+        // Never set a messaging timeout on the system-wide element: that changes the global
+        // default for every AX element in this process. The caller's deadline race bounds this.
+        guard deadline.timeIntervalSinceNow > 0 else { return nil }
         let systemWide = AXUIElementCreateSystemWide()
-        guard applyTimeout(to: systemWide, deadline: deadline) else { return nil }
         var element: AXUIElement?
         guard AXUIElementCopyElementAtPosition(systemWide, Float(point.x), Float(point.y), &element) == .success else { return nil }
         return element

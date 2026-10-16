@@ -39,6 +39,8 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
     private var appActivationObserver: NSObjectProtocol?
     internal var mouseHoldTask: Task<Void, Never>?
     private var mouseDownLocation: CGPoint?
+    /// Preserve text context when a selection drag ends over blank space and the cursor changes.
+    private var mouseDownCursor: CursorClass?
     private var mouseDownWindow: SelectionGestureWindow?
     /// Whether the press that started the current gesture landed on system chrome. Gate on this
     /// (the press), not on where the pointer is released: a drag that begins in a window and
@@ -77,6 +79,11 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
     internal var isSystemChromeAt: @MainActor (CGPoint) -> Bool = { MacSelectionMonitor.isSystemChromeLocation($0) }
     internal var windowAtPoint: @MainActor (CGPoint) -> SelectionGestureWindow? = { SelectionGestureWindow.at($0) }
     internal var windowFrame: @MainActor (CGWindowID) -> CGRect? = { SelectionGestureWindow.currentFrame(for: $0) }
+    internal var requestAppAccessibility: @MainActor (NSRunningApplication?) -> Void = { app in
+        guard NSClassFromString("XCTestCase") == nil else { return }
+        ElectronAccessibilityEnabler.shared.enableIfNeeded(for: app)
+    }
+    internal var gestureScreens: @MainActor () -> SelectionGestureLocality.ScreenLayout = { .current }
     internal var isPressOnWindowChrome: @MainActor (CGPoint, pid_t) async -> Bool = { point, pid in
         guard NSClassFromString("XCTestCase") == nil else { return false }
         let screenTop = NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame.maxY
@@ -121,6 +128,14 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
     internal static let dragThresholdSquared: CGFloat = OpenSelectionMonitor.dragThresholdSquared
     private static let holdStationaryConfirmDelayNanoseconds: UInt64 = 90_000_000
     private static let multiClickWindowSettleDelayNanoseconds: UInt64 = 50_000_000
+    /// A double-click may be the first two presses of a triple-click; the third press usually
+    /// lands 100–200 ms after the second release. Waiting that long lets the third press cancel
+    /// this read instead of flashing a word popup it immediately replaces. Capped so a long
+    /// system double-click interval doesn't make every double-click feel slow.
+    internal var doubleClickSettleNanoseconds: UInt64 = {
+        let interval = min(max(NSEvent.doubleClickInterval, 0.05), 0.22)
+        return UInt64(interval * 1_000_000_000)
+    }()
 
     internal static func holdStationary(downPoint: CGPoint?, pointer: CGPoint, buttonPressed: Bool) -> Bool {
         OpenSelectionMonitor.holdStationary(downPoint: downPoint, pointer: pointer, buttonPressed: buttonPressed)
@@ -166,6 +181,7 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
     
     internal func start() {
         guard monitor == nil else { return }
+        requestAppAccessibility(frontmostAppProvider())
 
         appActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
@@ -276,6 +292,7 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
         clearSelection()
         selectionSourceApp = nil
         mouseDownWindow = nil
+        mouseDownCursor = nil
         if let appActivationObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(appActivationObserver)
             self.appActivationObserver = nil
@@ -322,6 +339,7 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
         mouseHoldTask = nil
         triggeredByHold = false
         selectionSourceApp = nil
+        mouseDownCursor = nil
         clearSelection()
     }
 
@@ -331,6 +349,7 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
             return
         }
         let activated = app ?? frontmost
+        requestAppAccessibility(activated)
         // Ignore queued notifications for an app that is no longer frontmost, and our own
         // popup activation. A real switch to a different source always invalidates the read.
         guard activated.processIdentifier == frontmost.processIdentifier else { return }
@@ -368,6 +387,7 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
     internal func handleMouseDown(at point: CGPoint) {
         cancelPendingSelection()
         selectionSourceApp = frontmostAppProvider()
+        requestAppAccessibility(selectionSourceApp)
         mouseDownWindow = nil
         if isSystemChromeAt(point) {
             mouseDownLocation = nil
@@ -376,6 +396,7 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
         }
         mouseDownWasSystemChrome = false
         mouseDownLocation = point
+        mouseDownCursor = currentCursorProvider()
         mouseDownWindow = windowAtPoint(point)
         triggeredByHold = false
         mouseHoldTask?.cancel()
@@ -548,6 +569,8 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
         clickCount: Int
     ) {
         selectionSourceApp = app
+        let pressCursor = mouseDownCursor
+        mouseDownCursor = nil
         let gestureWindow = mouseDownWindow
         mouseDownWindow = nil
         if let gestureWindow, windowFrame(gestureWindow.id) != gestureWindow.frame {
@@ -593,17 +616,30 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
         guard settingsStore.get(.pauseUntilTimestamp) <= Date().timeIntervalSince1970 else { return }
         guard !shouldSuppress(for: app.bundleIdentifier) else { return }
 
-        // Measure drag distance for click filtering
-        var isDragOrMultiClick = clickCount >= 2
-        if !isDragOrMultiClick, let downPoint {
-            let dx = cursor.x - downPoint.x
-            let dy = cursor.y - downPoint.y
-            isDragOrMultiClick = (dx * dx + dy * dy) > Self.dragThresholdSquared // > 5pt movement
-        }
-        guard isDragOrMultiClick else {
+        // A text drag can finish in whitespace with an arrow/custom cursor. Keep the press's
+        // I-beam as weak context only for an actual drag; the retriever still requires an enabled
+        // Copy menu and rejects object-selection roles when AX cannot provide selected text.
+        let isDrag = downPoint.map { point in
+            let dx = cursor.x - point.x
+            let dy = cursor.y - point.y
+            return (dx * dx + dy * dy) > Self.dragThresholdSquared
+        } ?? false
+        guard isDrag || clickCount >= 2 else {
             clearSelection()
             return
         }
+        // Triple-click selects a paragraph; Chromium reports degenerate or offset bounds for
+        // those ranges, so only words (double-click) and drags are checked for locality.
+        let gesture: SelectionGestureLocality.Gesture? = if isDrag, let downPoint {
+            .drag(from: downPoint, to: cursor)
+        } else if clickCount == 2 {
+            .multiClick(at: cursor)
+        } else {
+            nil
+        }
+        let releaseCursor = currentCursorProvider()
+        let retrievalCursor: CursorClass = isDrag && pressCursor == .beam ? .beam : releaseCursor
+        Log.selection.debug("monitor: mouse selection context press=\(pressCursor?.rawValue ?? "none", privacy: .public) release=\(releaseCursor.rawValue, privacy: .public) retrieval=\(retrievalCursor.rawValue, privacy: .public) drag=\(isDrag, privacy: .public)")
 
         debounceTask = Task { @MainActor in
             guard self.isSelectionSourceActive(app) else {
@@ -611,6 +647,7 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
             }
             if let downPoint, await self.isPressOnWindowChrome(downPoint, app.processIdentifier) {
                 guard self.isSelectionSourceActive(app) else { return }
+                Log.selection.debug("monitor: skipped press on window chrome bundleID=\(app.bundleIdentifier ?? "unknown", privacy: .public)")
                 self.latestSelection = nil
                 self.recordRead(.init(status: .copyBlocked))
                 return
@@ -620,7 +657,9 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
             // Let AppKit settle that operation before treating a multi-click as a text gesture.
             if clickCount >= 2 {
                 do {
-                    try await Task.sleep(nanoseconds: Self.multiClickWindowSettleDelayNanoseconds)
+                    try await Task.sleep(nanoseconds: clickCount == 2
+                        ? self.doubleClickSettleNanoseconds
+                        : Self.multiClickWindowSettleDelayNanoseconds)
                 } catch {
                     return
                 }
@@ -654,7 +693,7 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
             let response = await retriever.retrieveResponse(
                 for: appIdentity,
                 policy: policy,
-                cursor: self.currentCursorProvider(),
+                cursor: retrievalCursor,
                 allowCopyFallback: allowCopyFallback,
                 trigger: clickCount >= 2 ? .doubleClick : .dragEnd
             )
@@ -666,6 +705,7 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
                 policy: policy,
                 cursor: cursor,
                 mouseDownLocation: downPoint,
+                gesture: gesture,
                 probeTask: nil
             )
         }
@@ -729,6 +769,7 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
                 policy: policy,
                 cursor: anchor,
                 mouseDownLocation: nil,
+                gesture: nil,
                 probeTask: probeTask
             )
         }
@@ -749,6 +790,7 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
         policy: AppPolicyContext,
         cursor: CGPoint,
         mouseDownLocation: CGPoint?,
+        gesture: SelectionGestureLocality.Gesture?,
         probeTask: Task<Bool?, Never>?
     ) async {
         guard isSelectionSourceActive(app) else {
@@ -762,6 +804,12 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
         }
         guard TextSanitizer.isSubstantial(result.text), result.text.utf8.count <= Constants.maxTextLength else {
             recordRead(.init(status: result.text.utf8.count > Constants.maxTextLength ? .tooLarge : .noSelection, traceID: response.traceID))
+            latestSelection = nil
+            return
+        }
+        if let gesture, !SelectionGestureLocality.admits(axBounds: result.bounds, gesture: gesture, screens: gestureScreens()) {
+            Log.selection.debug("[Trace#\(response.traceID ?? 0, privacy: .public)] monitor: selection outside gesture bounds=\(String(describing: result.bounds), privacy: .public) gesture=\(String(describing: gesture), privacy: .public)")
+            recordRead(.init(status: .noSelection, traceID: response.traceID))
             latestSelection = nil
             return
         }

@@ -9,10 +9,22 @@ final class SelectionGestureTargetProbeTests: XCTestCase {
         XCTAssertFalse(SelectionGestureTargetProbe.isWindowChrome(ancestorRoles: ["AXGroup", "AXWindow"]))
         XCTAssertTrue(SelectionGestureTargetProbe.isWindowChrome(ancestorRoles: ["AXGroup", "AXToolbar", "AXWindow"]))
         XCTAssertTrue(SelectionGestureTargetProbe.isWindowChrome(ancestorRoles: ["AXButton", "AXTitleBar", "AXWindow"]))
-        XCTAssertTrue(SelectionGestureTargetProbe.isWindowChrome(ancestorRoles: ["AXWindow"]))
         XCTAssertFalse(SelectionGestureTargetProbe.isWindowChrome(ancestorRoles: ["AXUnknown", "AXUnknown"]))
         XCTAssertFalse(SelectionGestureTargetProbe.isWindowChrome(ancestorRoles: ["AXGroup"], subroles: ["AXUnknown"]))
         XCTAssertTrue(SelectionGestureTargetProbe.isWindowChrome(ancestorRoles: ["AXGroup", "AXUnknown"], subroles: [nil, "AXTitleBar"]))
+    }
+
+    /// Flat or lazily built AX trees (terminals, canvas editors, Electron before its tree exists)
+    /// report their whole content area as a bare AXWindow hit. That must not read as chrome, or
+    /// every drag/double-click in those apps is silently rejected before retrieval.
+    func testBareWindowHitIsNotChrome() {
+        XCTAssertFalse(SelectionGestureTargetProbe.isWindowChrome(ancestorRoles: ["AXWindow"]))
+        XCTAssertFalse(SelectionGestureTargetProbe.isWindowChrome(ancestorRoles: ["AXWindow"], subroles: ["AXStandardWindow"]))
+        XCTAssertFalse(SelectionGestureTargetProbe.isWindowChrome(ancestorRoles: ["AXWindow", "AXApplication"]))
+        XCTAssertFalse(SelectionGestureTargetProbe.isWindowChrome(ancestorRoles: ["AXWindow", "AXToolbar"]),
+                       "Roles past the window boundary belong to other windows and must not be read")
+        XCTAssertTrue(SelectionGestureTargetProbe.isWindowChrome(ancestorRoles: ["AXToolbar", "AXWindow"]))
+        XCTAssertTrue(SelectionGestureTargetProbe.isWindowChrome(ancestorRoles: ["AXButton", "AXWindow"], subroles: ["AXTitleBar", nil]))
     }
 
     @MainActor
