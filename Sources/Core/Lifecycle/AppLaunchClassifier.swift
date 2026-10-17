@@ -17,8 +17,7 @@ public enum AppLaunchScenario: Equatable, Sendable {
 }
 
 public struct AppLaunchClassifier: Sendable {
-    /// Classifies the launch scenario based on persisted version/build, current bundle version/build,
-    /// onboarding completion flag, and current accessibility authorization.
+    /// Classifies the launch from persisted version/build and current accessibility state.
     public static func classify(
         lastRunVersion: String,
         currentVersion: String,
@@ -32,13 +31,11 @@ public struct AppLaunchClassifier: Sendable {
         let trimmedLastBuild = lastRunBuild.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedCurrentBuild = currentBuild.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // If onboarding has not been completed or no version was ever recorded, it's a first install.
         if !hasCompletedOnboarding || trimmedLastVersion.isEmpty {
             return .firstInstall
         }
 
-        // If marketing version changed or build number changed, it's an app update.
-        // Build-only bumps count even for migrated installs where lastRunBuild was never persisted (empty).
+        // Build-only bumps count, including migrated installs that never persisted a build.
         let versionChanged = trimmedLastVersion != trimmedCurrentVersion
         let buildChanged: Bool = {
             guard !trimmedCurrentBuild.isEmpty else { return false }
@@ -60,7 +57,6 @@ public struct AppLaunchClassifier: Sendable {
             return .permissionRecovery
         }
 
-        // Otherwise, standard operational launch.
         return .normalLaunch
     }
 }

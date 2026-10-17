@@ -1,21 +1,24 @@
 // DefaultActionFactory.swift
 // OpenClip
 //
-// Serves as the Birth Door implementation, instantiating executable Action instances from extension manifests and snippets.
-// Applies the uniform action-ID rule, threads the option store into every runtime that reads configured option values,
-// and stamps `.extensionPkg` chrome on every action it creates — including shellInline/textSnippet CustomActions — so
-// GUI-authored actions share the extension package trash path. Single-action creation (`createAction`) keeps `group`
-// actions schema-only (returns nil); `createActions` (used by the registry loader) materializes a `.group` into a
-// GroupAction row plus one entry per sub-action under the `\(groupID).\(subID)` ID-prefix convention, and routes the
-// keyPress/shortcut/service kinds (Phase 8) to their runtime actions.
+// Birth Door: instantiates executable Actions from extension manifests and snippets. Applies the
+// uniform action-ID rule, threads the option store into runtimes, and stamps `.extensionPkg` chrome
+// on every action so GUI-authored actions share the trash path. `createAction` keeps groups
+// schema-only; `createActions` materializes a `.group` with sub-actions named `\(groupID).\(subID)`.
 import Foundation
 import Core
 
 public final class DefaultActionFactory: ActionFactory, Sendable {
     private let optionStore: any ActionOptionReading
+    private let captureRichSelection: @MainActor @Sendable (SelectionContext) async throws -> SelectionContext
 
-    public init(optionStore: any ActionOptionReading = SettingsActionOptionStore()) {
+    public init(optionStore: any ActionOptionReading = SettingsActionOptionStore(),
+                isSelectionCurrent: @escaping @MainActor @Sendable (SelectionContext) -> Bool = { _ in true },
+                captureRichSelection: (@MainActor @Sendable (SelectionContext) async throws -> SelectionContext)? = nil) {
         self.optionStore = optionStore
+        self.captureRichSelection = captureRichSelection ?? { selection in
+            try await ActionSelectionCapture(isSelectionCurrent: isSelectionCurrent).capture(selection)
+        }
     }
 
     /// Reduces any `ActionIcon` to the plain symbol name `CustomAction` stores in `iconName`.
@@ -28,8 +31,7 @@ public final class DefaultActionFactory: ActionFactory, Sendable {
         }
     }
 
-    /// Maps manifest/action option metadata to the runtime `ExtensionOption` model, wiring
-    /// `values`/`options` into the `.multiple` picker choices (T1-minor-1 carryover).
+    /// Maps option metadata to `ExtensionOption`; `values` become `.multiple` picker choices.
     private func makeExtensionOption(from metadata: ExtensionOptionMetadata) -> ExtensionOption {
         ExtensionOption(
             identifier: metadata.identifier,
@@ -40,9 +42,7 @@ public final class DefaultActionFactory: ActionFactory, Sendable {
         )
     }
 
-    /// Compiles the manifest expression DSL once (parse-once-eval-many). On a parse failure the
-    /// expression is dropped and logged via Log.js: the action then behaves exactly as before the
-    /// DSL existed (defensive fail-open, mirroring the malformed-regex stance).
+    /// Compiles the manifest expression once. A parse failure is logged and dropped (fail-open).
     private func compiledExpression(for metadata: ExtensionActionMetadata, actionID: String) -> ValidateExpression? {
         guard let source = metadata.requirements?.expression,
               !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -57,10 +57,7 @@ public final class DefaultActionFactory: ActionFactory, Sendable {
         }
     }
 
-    /// Merges per-action option overrides (`metadata.options`) onto the manifest-level defaults
-    /// (`manifest.options`) by identifier. Manifest-level options keep their order; overrides
-    /// replace matching identifiers in place, and identifiers unique to the action are appended
-    /// in declaration order.
+    /// Merges action options onto manifest defaults by identifier, keeping manifest order; action-only options are appended.
     private func mergedOptions(
         manifestOptions: [ExtensionOptionMetadata]?,
         actionOptions: [ExtensionOptionMetadata]?
@@ -100,10 +97,7 @@ public final class DefaultActionFactory: ActionFactory, Sendable {
         return decorate(base, metadata: metadata, manifest: manifest)
     }
 
-    /// Materializes every registry entry for one manifest action. Non-group actions return the
-    /// single `createAction` result; a `.group` returns a GroupAction row plus one entry per
-    /// sub-action whose ID is `\(groupID).\(subID)` (ID-prefix convention — no parentGroupID
-    /// marker). Nested groups are not flattened.
+    /// Materializes all registry entries for one manifest action: a group yields its row plus sub-actions. Nested groups are not flattened.
     public func createActions(
         metadata: ExtensionActionMetadata,
         manifest: ExtensionMetadata,
@@ -146,16 +140,13 @@ public final class DefaultActionFactory: ActionFactory, Sendable {
         return result
     }
 
-    /// Wraps a created action in `MenuDecoratedAction` when its manifest metadata declares
-    /// `menuRelevance`, stamping the action with sub-menu relevance without changing its
-    /// identity. Non-declaring actions pass through unchanged.
-    ///
-    /// Delivery-declaring actions (manifest `secondary`/`toast`/`secondaryToast`) are wrapped in
-    /// `DeliveryDecoratedAction` carrying the mapped `ActionDelivery`. The wraps compose: the
-    /// menuRelevance wrapper stays outermost so `RelevanceProviding` surfaces on the registered
-    /// action, with `MenuDecoratedAction` forwarding `delivery` through to the inner wrapper.
+    /// Wraps `action` per manifest metadata. `menuRelevance` stays outermost so RelevanceProviding surfaces on the registered action.
     private func decorate(_ action: any Action, metadata: ExtensionActionMetadata, manifest: ExtensionMetadata? = nil) -> any Action {
         var result = action
+        if metadata.captureRtf == true || metadata.captureHtml == true {
+            result = RichInputAction(base: result, captureRtf: metadata.captureRtf == true,
+                                     captureHtml: metadata.captureHtml == true, capture: captureRichSelection)
+        }
         let declaredKeywords = (metadata.keywords ?? []) + (manifest?.keywords ?? [])
         if !declaredKeywords.isEmpty {
             result = KeywordDecoratedAction(base: result, keywords: declaredKeywords)
@@ -172,8 +163,7 @@ public final class DefaultActionFactory: ActionFactory, Sendable {
         return result
     }
 
-    /// Builds the declared `ActionDelivery` from manifest metadata, or nil when none of
-    /// secondary/toast/secondaryToast is declared (preserving the current nil-delivery default).
+    /// Declared `ActionDelivery`, or nil when no secondary/toast/secondaryToast is declared.
     private func delivery(from metadata: ExtensionActionMetadata) -> ActionDelivery? {
         guard metadata.secondary != nil || metadata.toast != nil || metadata.secondaryToast != nil else {
             return nil
@@ -185,11 +175,7 @@ public final class DefaultActionFactory: ActionFactory, Sendable {
         )
     }
 
-    /// Maps a manifest `secondary` declaration onto the `ActionResult` it stands for, reusing
-    /// `ShellResultMapper`'s stdout vocabulary where the two overlap: copy/paste/openURL/toast
-    /// map to the same result shapes, `success` is the mapper's fallback, and an unknown type
-    /// fails open to `.success` (mirroring the mapper's default case). `none` is the small pure
-    /// addition — the empty result for an explicitly no-op secondary.
+    /// Maps a manifest `secondary` to an `ActionResult`, sharing `ShellResultMapper`'s vocabulary. Unknown types fail open to `.success`.
     private func actionResult(from secondary: ExtensionSecondaryDeclaration) -> ActionResult {
         switch secondary.type {
         case Constants.actionTypeCopy:
@@ -212,9 +198,7 @@ public final class DefaultActionFactory: ActionFactory, Sendable {
         }
     }
 
-    /// Maps a manifest `toast`/`secondaryToast` declaration onto the `StatusFeedback` it renders.
-    /// `style` mirrors `ShellResultMapper`'s status mapping, defaulting to `.success` (the
-    /// validator's whitelist default) when absent or unknown.
+    /// Maps a `toast`/`secondaryToast` to `StatusFeedback`; style defaults to `.success`.
     private func statusFeedback(from toast: ExtensionToastDeclaration) -> StatusFeedback {
         let style: StatusFeedback.Style
         switch toast.style?.lowercased() {
@@ -226,10 +210,7 @@ public final class DefaultActionFactory: ActionFactory, Sendable {
         return StatusFeedback(message: toast.message, style: style)
     }
 
-    /// Renders a single executable Action for a manifest entry, or nil when the entry is a `.group`
-    /// (schema-only here; `createActions` handles group materialization) or otherwise not runnable.
-    /// `forcedID` overrides the uniform-ID computation so group sub-actions can be stamped with the
-    /// `\(groupID).\(subID)` prefix convention.
+    /// One executable Action for a manifest entry, or nil for groups (see `createActions`). `forcedID` stamps group sub-actions.
     private func makeAction(
         metadata: ExtensionActionMetadata,
         manifest: ExtensionMetadata,
@@ -242,8 +223,7 @@ public final class DefaultActionFactory: ActionFactory, Sendable {
         guard metadata.kind != .group else { return nil }
         let actionId = forcedID ?? ExtensionManager.uniformActionID(metadata: metadata, manifest: manifest, index: index)
         let title = metadata.title ?? manifest.name
-        // Sub-actions inherit their group's icon when they declare none (`inheritedIcon`); otherwise
-        // a missing icon falls back to the default symbol.
+        // Sub-actions without their own icon inherit the group's.
         let icon: ActionIcon
         if let iconString = metadata.icon, !iconString.isEmpty {
             icon = ExtensionManager.parseIcon(iconString, directoryURL: directoryURL)
@@ -255,8 +235,7 @@ public final class DefaultActionFactory: ActionFactory, Sendable {
         
         let options = mergedOptions(manifestOptions: manifest.options, actionOptions: metadata.options)
         
-        // Declarative visibility rules applied to every extension action this factory creates:
-        // requirements (input/destination, regex, app allow/deny) + legacy manifest `regex`.
+        // Declarative visibility rules shared by all extension actions.
         let rules = ExtensionActionRules(
             requirements: metadata.requirements,
             legacyRegex: metadata.regex,
@@ -329,8 +308,7 @@ public final class DefaultActionFactory: ActionFactory, Sendable {
             recommendedResult: resolvedResult
         )
 
-        // Phase 8 runtime kinds: keyPress / shortcut / service. Checked before the generic url and
-        // script branches so a keyPress-without-URL doesn't fall through to a bogus ScriptAction.
+        // Checked before the url/script branches so a keyPress without a URL does not fall through to ScriptAction.
         if metadata.kind == .keyPress, let keyPress = metadata.keyPress, let spec = KeyPressSpec(manifestString: keyPress) {
             return KeyPressAction(
                 id: actionId,
@@ -374,8 +352,7 @@ public final class DefaultActionFactory: ActionFactory, Sendable {
             )
         }
 
-        // Text snippet actions (GUI "Text Snippet", manifest type "textsnippet"/"snippet"/"text")
-        // hold their template in `scriptCode` and run as CustomAction text snippets.
+        // Text snippets keep their template in `scriptCode`.
         if metadata.kind == .textSnippet, let scriptCode = metadata.scriptCode, !scriptCode.isEmpty {
             return CustomAction(
                 id: actionId,
@@ -439,9 +416,7 @@ public final class DefaultActionFactory: ActionFactory, Sendable {
             return nil
         }
 
-        // Guard against garbage metadata: with neither url, scriptCode, nor an existing script file,
-        // there is nothing executable to run. A directory (fileExists is true for directories) or a
-        // script that can't be read must not register as an empty action.
+        // Directories pass fileExists too; neither they nor unreadable scripts may register as empty actions.
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: scriptURL.path, isDirectory: &isDirectory),
               !isDirectory.boolValue else {

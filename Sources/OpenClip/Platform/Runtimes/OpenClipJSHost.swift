@@ -1,37 +1,18 @@
 // OpenClipJSHost.swift
 // OpenClip
 //
-// Dedicated, testable JavaScriptCore bridge for JS extensions (plan §8, Phase 6). Exposes the full
-// read-only `openclip.*` author surface (input/matchedText/captures/app, read-only options, and the
-// effect API) and resolves collected effects into a RAW runtime ActionResult via a deterministic
-// resolution order — no declarative secondary/delivery translation here (that happens downstream
-// via the action's declared `delivery`). JS exceptions surface as
-// `.toast(.error, message)` rather than throwing; Swift-level setup failures may throw.
-//
-// Execution model: every run executes inside a `Task.detached` on a background thread — never the
-// MainActor. JavaScriptCore contexts are not thread-safe, so ALL JavaScript VM access is confined to
-// the single thread that created the context (the detached task's thread). The URLSession→JS
-// hand-off hops back onto that thread's CFRunLoop via CFRunLoopPerformBlock + CFRunLoopWakeUp, so
-// the promise settlement always runs on the JS thread. Async extensions (manifest `"async": true`)
-// get a `fetch(url, options)` polyfill bridged to URLSession (GET/POST with JSON bodies; responses
-// expose `{ status, ok, text(), json() }`) and a promise bridge: the wrapped entry point attaches
-// `.then`/catch handlers that settle a PromiseState, and the host pumps the thread's runloop until
-// the promise settles. A per-evaluation exceptionHandler assigns `context.exception` and rejects
-// the PromiseState if an exception escapes a native-to-JS callback after initial evaluation, so
-// the pump terminates promptly rather than waiting for the idle watchdog. When the caller supplies
-// a `Request.timeout` budget, a JavaScriptCore VM execution limit interrupts synchronous JavaScript
-// and a TimeoutFlag watchdog bounds idle promise waiting; both throw once that budget elapses. With
-// no budget (the default) the run has no timer and ends only when the script settles or the caller
-// cancels it. Synchronous extensions keep the
-// exact legacy wrapped-script shape and immediate-result behavior.
+// Testable JavaScriptCore bridge for JS extensions: runs one script per call and resolves its
+// effects into a raw ActionResult. JS exceptions become `.toast(.error)`.
+// Threading: each run is a Task.detached on a background thread. JSContext is not thread-safe, so
+// all VM access stays on that thread; URLSession callbacks hop back onto its CFRunLoop so promise
+// settlement runs there too. Async extensions pump that runloop until their promise settles.
 import Foundation
 import JavaScriptCore
 import Core
 import AppKit
 
-/// Stateless facade over a URLSession that executes one JS run per call. `@unchecked Sendable`
-/// because it only holds `let session` (URLSession) — all mutable evaluation state lives in locals
-/// passed down to `execute`, and JS VM access is confined to the detached task's thread.
+/// Stateless facade over a URLSession, one JS run per call. `@unchecked Sendable`: only `let session`
+/// is shared; evaluation state lives in locals.
 public final class OpenClipJSHost: @unchecked Sendable {
     public struct PasteboardContent: Sendable {
         public let text: String
@@ -98,18 +79,15 @@ public final class OpenClipJSHost: @unchecked Sendable {
         public var options: [ExtensionOption]
         public var optionStore: any ActionOptionReading
         public var rules: ExtensionActionRules
-        /// When true the host awaits the action's promise (and enables the fetch polyfill). When
-        /// false, legacy synchronous evaluation is used.
+        /// Awaits the action's promise and enables fetch. False uses legacy synchronous evaluation.
         public var isAsync: Bool
-        /// Watchdog budget. `nil` (the default) runs with no timer — the script settles or the
-        /// caller cancels it; callers that want a bound pass one explicitly (tests use short ones).
+        /// Watchdog budget; nil runs with no timer.
         public var timeout: TimeInterval?
-        /// Extension package directory. When non-nil the host enables the module bridge and wraps
-        /// the script in module scaffolding; nil preserves the legacy single-file behavior.
+        /// Enables module mode (`require`). Nil keeps the single-file behavior.
         public var packageDirectory: URL?
-        /// The entry script's parent directory. When nil, defaults to packageDirectory.
+        /// Defaults to packageDirectory when nil.
         public var entryDirectory: URL?
-        /// Optional pre-captured pasteboard content (injectable for testing).
+        /// Pre-captured pasteboard content; injectable for tests.
         public var pasteboardContent: PasteboardContent?
 
         public init(
@@ -178,8 +156,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
         case toast(StatusFeedback)
     }
 
-    /// Result of one JS evaluation: collected effects, any JS exception, and the value resolved from
-    /// an awaited promise (async mode). Sendable because it crosses the detached-task boundary.
+    /// One JS evaluation's effects, exception and awaited value; crosses the detached-task boundary.
     private struct EvaluationResult: Sendable {
         let collected: Collected
         let effects: [Effect]
@@ -187,8 +164,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
         let asyncReturnValue: String?
     }
 
-    /// URLSession used by the fetch polyfill. Injected for tests (URLProtocol mocks); the shared
-    /// session by default.
+    /// Fetch polyfill session; injected for URLProtocol mocks in tests.
     public let session: URLSession
 
     public init(session: URLSession = .shared) {
@@ -198,9 +174,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
     public func run(_ request: Request) async throws -> ActionResult {
         let session = self.session
 
-        // Every run enters the gate because async scripts also have a top-level synchronous phase.
-        // JavaScriptCore's execution limit forcibly ends a CPU-bound phase, allowing the detached
-        // task's defer to release this slot after timeout.
+        // Every run enters the gate, since async scripts also run synchronously first.
         let gate = OpenClipJSHost.syncEvaluationGate
         guard gate.tryEnter() else {
             Log.js.error("Refusing JS evaluation for action \(request.actionID, privacy: .public): \(gate.inFlightCount) in-flight sync evaluations at cap")
@@ -214,9 +188,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
         let cancellationFlag = CancellationFlag()
         let fetchTasks = FetchTaskBox()
 
-        // Note: reference static members via the explicit type name, not `Self` — `Self.X` inside a
-        // Task.detached closure triggers a Swift 6 region-based-isolation checker bug ("pattern that
-        // the region-based isolation checker does not understand how to check").
+        // Use the explicit type name, not `Self`: `Self.X` in a Task.detached closure trips a Swift 6 isolation checker bug.
         return try await withTaskCancellationHandler {
             try await Task.detached {
                 defer { gate.leave() }
@@ -237,8 +209,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
 
     // MARK: - JS evaluation
 
-    /// Runs the whole evaluation on the calling thread (the detached task's thread). Kept as a thin
-    /// nonisolated function so the @Sendable detached closure stays a single call.
+    /// Runs on the detached task's thread.
     private static func execute(
         _ request: Request,
         session: URLSession,
@@ -254,7 +225,6 @@ public final class OpenClipJSHost: @unchecked Sendable {
         return makeActionResult(evaluation, request: request)
     }
 
-    /// Evaluates JavaScript with the OpenClip bridge and captures its return value and effects.
     private static func evaluate(
         _ request: Request,
         session: URLSession,
@@ -266,7 +236,6 @@ public final class OpenClipJSHost: @unchecked Sendable {
         let captures = request.context.match?.captures ?? []
 
         let timeoutFlag = TimeoutFlag()
-        // Only meaningful when a budget exists; `timeoutFlag` is only ever set inside that branch.
         let timeoutSeconds = max(0.001, request.timeout ?? 0)
 
         guard let jsContext = JSContext() else {
@@ -275,10 +244,8 @@ public final class OpenClipJSHost: @unchecked Sendable {
                           userInfo: [NSLocalizedDescriptionKey: "Could not create JavaScript context"])
         }
 
-        // With an explicit budget, install the VM limit before evaluating any script so runaway
-        // synchronous code is interrupted inside JavaScriptCore rather than observed only after
-        // evaluateScript returns, and arm a wall-clock watchdog for an async promise that idles
-        // while the runloop waits for settlement. With no budget (the default) the run has no timer.
+        // With a budget, the VM limit goes in before any script runs so runaway sync code is
+        // interrupted inside JSC, and a watchdog bounds idle async promises.
         let executionLimit: JSExecutionTimeLimit?
         let watchdog: Task<Void, Never>?
         if request.timeout != nil {
@@ -303,16 +270,11 @@ public final class OpenClipJSHost: @unchecked Sendable {
         let collected = CollectedBox()
         let effects = EffectsBox()
         let promiseState = request.isAsync ? PromiseState() : nil
-        // The promise bridge retains settled JSValues, which retain the context. Drop them once the
-        // outcome has been read so the context can deallocate on this (the JS) thread (issue #47).
+        // Drop settled JSValues on the JS thread so the context can deallocate there (issue #47).
         defer { promiseState?.clear() }
 
-        // Per-evaluation exception handler, installed before any bridge script runs. JSContext does
-        // not assign `context.exception` when a handler is present, so we assign it ourselves to
-        // preserve the synchronous `evaluateScript` check. For async evaluations, also reject the
-        // promise bridge so a throw that escapes a native-to-JS callback (after initial evaluation)
-        // terminates the pump instead of waiting for the idle watchdog. Capture only PromiseState;
-        // the handler argument is the only JSContext reference used here.
+        // Assign context.exception ourselves (JSContext skips it when a handler is set), and reject
+        // the promise so an escaped throw ends the pump early.
         jsContext.exceptionHandler = { [promiseState] context, exception in
             guard let exception else { return }
             context?.exception = exception
@@ -320,12 +282,10 @@ public final class OpenClipJSHost: @unchecked Sendable {
         }
         defer { jsContext.exceptionHandler = nil }
 
-        // Give scripts a global `console.log` before anything runs, so it routes to Log.js instead
-        // of throwing a ReferenceError that breaks the action.
+        // Scripts need a global `console` before they run, or a ReferenceError breaks the action.
         installConsoleShim(in: jsContext, actionID: request.actionID)
 
-        // Read-only input context. Options are injected as a plain dictionary (values resolved via
-        // the option store); `option(id)` is a functional form over the same dictionary.
+        // Options are a plain dictionary; `option(id)` reads the same dictionary.
         let optionsDict = optionValues(for: request)
         let pbContent = request.pasteboardContent ?? PasteboardContent.read()
         guard let openclip = makeOpenClipObject(
@@ -464,9 +424,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
         openclip.setObject(toastBlock, forKeyedSubscript: "toast" as NSString)
         openclip.setObject(requireConfigurationBlock, forKeyedSubscript: "requireConfiguration" as NSString)
 
-        // Module bridge: in module mode (packageDirectory != nil) the wrapper prelude calls
-        // `openclip.__resolveModule(dir, specifier)` to resolve a require on the host side via
-        // OpenClipModuleLoader, returning `{ ok, path, dir, source }` or `{ ok: false, message }`.
+        // Module mode: the prelude's require calls `openclip.__resolveModule`, resolved host-side by OpenClipModuleLoader.
         if let packageDirectory = request.packageDirectory {
             let resolveModuleBlock: @convention(block) (String, String) -> [String: Any] = { dirString, specifier in
                 let requiringDirectory = URL(fileURLWithPath: dirString, isDirectory: true)
@@ -507,9 +465,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
         } else {
             asyncResolvers = nil
         }
-        // A fetch cancelled or timed out (or completed after the run ended) skips the resolver's
-        // `take`, so drop any remaining resolve/reject pair here — on the JS thread — or its
-        // retained JSValues would keep the context alive (issue #47).
+        // Cancelled or late fetches never `take` their resolvers; drop them on the JS thread (issue #47).
         defer { asyncResolvers?.clearPending() }
 
         let wrappedScript: String
@@ -537,8 +493,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
             return EvaluationResult(collected: collected.value, effects: effects.value, exceptionMessage: exception.toString() ?? "JavaScript exception", asyncReturnValue: nil)
         }
 
-        // Async path: pump the JS thread's runloop until the promise settles (fetch completions and
-        // promise microtasks land here via CFRunLoopPerformBlock) or the watchdog fires.
+        // Async: pump the runloop until the promise settles or the watchdog fires.
         if request.isAsync, let promiseState {
             while !promiseState.isSettled {
                 if cancellationFlag.isCancelled {
@@ -579,8 +534,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
                     }
                 }
             }
-            // Arrays, String wrappers and Dates are objects too; only plain objects stringify to
-            // "[object Object]" and are filtered out. File objects were handled above.
+            // Plain objects stringify to "[object Object]" and are dropped.
             let resolved = promiseState.resolvedValue.flatMap { (value: JSValue) -> String? in
                 let string = value.toString() ?? ""
                 return (string.isEmpty || string == "undefined" || string == "null" || string == "[object Object]") ? nil : string
@@ -588,8 +542,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
             return EvaluationResult(collected: collected.value, effects: effects.value, exceptionMessage: nil, asyncReturnValue: resolved)
         }
 
-        // Sync path: a promise-like return cannot be awaited in legacy mode, so it is ignored
-        // rather than pasted as "[object Promise]".
+        // Legacy sync mode cannot await a promise-like return, so it is ignored.
         if let result = jsResult, !isPromiseLike(result) {
             var fileType: String?
             if result.isObject, let typeVal = result.objectForKeyedSubscript("type"), typeVal.isString {
@@ -619,10 +572,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
 
     // MARK: - Async bridge (fetch polyfill + promise settling)
 
-    /// Registers `openclip.__resolve` / `openclip.__reject` (promise settlement) and installs the
-    /// shared URLSession-backed fetch bridge (`openclip.__nativeFetch` + the `openclip.fetch`
-    /// polyfill) via `JSNativeFetch.installNativeFetch`. The global `openclip` object must already
-    /// be installed in the context before this runs.
+    /// Registers promise settlement hooks and the URLSession-backed fetch polyfill. `openclip` must already exist.
     @discardableResult
     private static func registerAsyncBridge(
         openclip: JSValue,
@@ -643,8 +593,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
         return JSNativeFetch.installNativeFetch(in: context, session: session, fetchTasks: fetchTasks)
     }
 
-    /// True when a JS result is a promise-like (has a `then` function) that cannot be awaited in
-    /// legacy synchronous mode.
+    /// True when a JS result has a `then` function.
     private static func isPromiseLike(_ value: JSValue) -> Bool {
         guard value.isObject, let then = value.objectForKeyedSubscript("then") else { return false }
         return !then.isUndefined && !then.isNull && then.isObject
@@ -652,11 +601,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
 
     // MARK: - Console shim
 
-    /// Installs a global `console` object with a `log` method that routes to `Log.js`. Without this,
-    /// `console.log(...)` throws a `ReferenceError` that the JSContext surfaces as
-    /// `.toast(.error)` and breaks the action. To prevent leaking sensitive text, clipboard, or
-    /// extension data, arguments are redacted into non-sensitive metadata (type, length, object keys)
-    /// before forwarding to `Log.js`.
+    /// Global `console.log` routed to Log.js. Arguments are redacted to type, length and keys so no clipboard or extension data is logged.
     private static func installConsoleShim(in context: JSContext, actionID: String) {
         guard let console = JSValue(newObjectIn: context) else { return }
         let logBlock: @convention(block) (String) -> Void = { message in
@@ -767,8 +712,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
         """)
     }
 
-    /// Legacy synchronous wrapper — preserved shape: define action/main inside an IIFE and dispatch
-    /// to whichever entry point the author provided (golden + option-store tests depend on this).
+    /// Legacy sync wrapper. Its shape is pinned by golden and option-store tests.
     private static func syncWrappedScript(_ scriptCode: String) -> String {
         """
         (function() {
@@ -786,9 +730,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
         """
     }
 
-    /// Async wrapper: dispatches the entry point through `__openclip_dispatch`, which settles the
-    /// bridge promise — immediately for synchronous returns, via `.then`/catch for promise returns.
-    /// A script with no entry point (top-level side effects only) still settles so it never hangs.
+    /// Async wrapper. Dispatch settles the bridge promise; a script with no entry point still settles.
     private static func asyncWrappedScript(_ scriptCode: String) -> String {
         """
         var __openclip_dispatch = function(fn, selection, options) {
@@ -828,9 +770,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
         """
     }
 
-    /// Module-mode sync wrapper. The prelude runs at wrapper top level so `module`/`require` are
-    /// visible to the entry `scriptCode`; dispatch prefers `module.exports` (function or
-    /// `.action`/`.main`) and falls back to in-scope `action`/`main` for legacy single-file scripts.
+    /// Module-mode sync wrapper: `module.exports` wins, with legacy `action`/`main` as fallback.
     private static func syncModuleWrappedScript(_ scriptCode: String, entryDirectory: String) -> String {
         """
         \(modulePrelude(entryDirectory: entryDirectory))
@@ -860,8 +800,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
         """
     }
 
-    /// Module-mode async wrapper: same prelude/dispatch as the sync variant, but routes the entry
-    /// through `__openclip_dispatch` so promise returns settle the bridge promise.
+    /// Module-mode async wrapper: same dispatch as the sync variant, settling promise returns.
     private static func asyncModuleWrappedScript(_ scriptCode: String, entryDirectory: String) -> String {
         """
         var __openclip_dispatch = function(fn, selection, options) {
@@ -910,9 +849,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
         """
     }
 
-    /// Module scaffolding: per-run cache (cache-first so cycles get partial exports) and a
-    /// per-directory `require` bound via `__require.bind(null, dir)` so nested requires resolve
-    /// relative to the requiring file (Node semantics). `__dirname` is the entry directory.
+    /// Per-run module cache (cache-first, so cycles see partial exports) and a Node-style per-directory `require`.
     private static func modulePrelude(entryDirectory: String) -> String {
         let escaped = entryDirectory
             .replacingOccurrences(of: "\\", with: "\\\\")
@@ -938,17 +875,15 @@ public final class OpenClipJSHost: @unchecked Sendable {
 
     // MARK: - Effect → ActionResult
 
-    /// Converts one completed JavaScript evaluation into the result delivered by the action.
     private static func makeActionResult(_ evaluation: EvaluationResult, request: Request) -> ActionResult {
         let collected = evaluation.collected
 
-        // JS exceptions win over any partially-collected effects (do NOT throw for JS exceptions).
+        // JS exceptions win over partial effects; they are never thrown.
         if let exceptionMessage = evaluation.exceptionMessage {
             return .toast(StatusFeedback(message: exceptionMessage, style: .error))
         }
 
-        // Deterministic resolution order: configuration > toast (coexisting with effects) > effects
-        // (in call order, sequence when >1) > function string return (.text) > success.
+        // Resolution order: configuration > toast > effects > string return > success.
         let effects = evaluation.effects
         let raw: ActionResult
         if let configuration = collected.configuration {
@@ -966,7 +901,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
             let mapped = effects.map { effectResult($0, input: input) }
             raw = mapped.count == 1 ? mapped[0] : .sequence(mapped)
         } else if let returnValue = evaluation.asyncReturnValue ?? collected.returnValue {
-            // Check if string return is a path to an existing regular file; otherwise .text(returnValue)
+            // A string naming an existing regular file becomes a file result.
             if let fileResult = ShellResultMapper.detectFileResult(from: returnValue) {
                 raw = fileResult
             } else {
@@ -979,7 +914,6 @@ public final class OpenClipJSHost: @unchecked Sendable {
         return raw
     }
 
-    /// Converts a collected JavaScript bridge effect into a domain action result.
     private static func effectResult(_ effect: Effect, input: String) -> ActionResult {
         switch effect {
         case .paste(let text): return .paste(text)
@@ -1047,13 +981,10 @@ public final class OpenClipJSHost: @unchecked Sendable {
         return values
     }
 
-    /// Builds the read-only `openclip.*` bridge object: `input` (text/matchedText/captures/app +
-    /// isSecondaryClick), a plain `options` dictionary, and the effect API installed by the caller.
+    /// Builds the read-only `openclip.*` bridge object.
     ///
-    /// JS authoring of a secondary (right-click/⇧-click) behavior: branch on
-    /// `openclip.input.isSecondaryClick` and emit an explicit effect — `openclip.paste(...)` for the
-    /// primary path, `openclip.copy(...)` for the secondary — rather than relying on a string-return
-    /// convention or a manifest `secondary` (rejected on `javascript` by ManifestValidation).
+    /// For secondary (right-click/⇧-click) behavior, branch on `openclip.input.isSecondaryClick` and emit
+    /// explicit `openclip.paste`/`copy` effects; manifest `secondary` is rejected for JavaScript.
     private static func makeOpenClipObject(
         in jsContext: JSContext,
         text: String,
@@ -1146,7 +1077,6 @@ public final class OpenClipJSHost: @unchecked Sendable {
         return ConfigurationRequest(actionID: actionID, reason: reason, missingOptionIDs: missing)
     }
 
-    /// Extracts an existing local file URL from a JavaScript string or object.
     private static func parseURLFromJS(_ value: JSValue?) -> URL? {
         guard let value else { return nil }
         if value.isString, let str = stringValue(value) {
@@ -1163,9 +1093,7 @@ public final class OpenClipJSHost: @unchecked Sendable {
         return nil
     }
 
-    /// Reads a payload's MIME type. `type` doubles as the file-object discriminator ("file",
-    /// "copyFile", "saveFile"), so it is only accepted as a MIME type when it looks like one
-    /// (`image/png`); otherwise `extensionForMimeType` would resolve "file" to `output-.bin`.
+    /// `type` is also a file-object discriminator, so only MIME-shaped values count (else "file" becomes `output-.bin`).
     private static func mimeType(from value: JSValue) -> String? {
         if let explicit = stringValue(value.objectForKeyedSubscript("mimeType")) {
             return explicit
@@ -1176,7 +1104,6 @@ public final class OpenClipJSHost: @unchecked Sendable {
         return type
     }
 
-    /// Builds a file payload from JavaScript path or base64 data and optional metadata.
     private static func parseFilePayload(_ value: JSValue, options: JSValue?) -> FileOutputPayload? {
         var pathStr: String?
         var dataStr: String?
@@ -1215,7 +1142,6 @@ public final class OpenClipJSHost: @unchecked Sendable {
         return nil
     }
 
-    /// Reads the optional normalized file action from JavaScript input or options.
     private static func parseFileAction(_ value: JSValue, options: JSValue?) -> String? {
         if value.isObject, let act = stringValue(value.objectForKeyedSubscript("action")) {
             return act.lowercased()
@@ -1226,7 +1152,6 @@ public final class OpenClipJSHost: @unchecked Sendable {
         return nil
     }
 
-    /// Maps a JS `toast` style string to a `StatusFeedback.Style`.
     private static func mapToastStyle(_ raw: String) -> StatusFeedback.Style {
         switch raw.lowercased() {
         case "success": return .success
@@ -1244,10 +1169,9 @@ public final class OpenClipJSHost: @unchecked Sendable {
                 userInfo: [NSLocalizedDescriptionKey: "Script timed out after \(Int(seconds)) seconds"])
     }
 
-    /// Bounds in-flight synchronous evaluations across the whole host (all instances).
+    /// Shared across all host instances.
     static let syncEvaluationGate = SyncEvaluationGate(capacity: Constants.maxConcurrentSyncScriptEvaluations)
 
-    /// Declared slot count for synchronous script evaluation gating.
     public static var syncEvaluationSlotCount: Int {
         syncEvaluationGate.capacity
     }

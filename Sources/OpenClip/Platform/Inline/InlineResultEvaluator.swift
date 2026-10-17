@@ -14,22 +14,18 @@ import Core
 public final class InlineResultEvaluator {
     public static let shared = InlineResultEvaluator()
 
-    /// Identity of one memoized inline result: the selection text, the action, and a fingerprint
-    /// of the action's evaluated inputs (script + resolved option values). Including the
-    /// fingerprint lets the warm cache survive across popups without serving a stale preview after
-    /// the extension's script or a configured option changed.
+    /// Memo identity: selection text, action, and a fingerprint of its inputs, so the warm cache
+    /// never serves a stale preview after the script or an option changes.
     private struct MemoKey: Hashable {
         let textHash: Int
         let actionID: String
         let fingerprint: Int
     }
 
-    /// Total memoized entries retained across popups. Bounds memory while keeping the common case
-    /// (re-selecting the same or similar text) warm instead of re-evaluating from cold every show.
+    /// Entries kept across popups: bounds memory while keeping re-selections warm.
     private static let maxMemoizedEntries = 200
 
-    /// Results longer than this are shown but never memoized, so a script returning a large string
-    /// can't pin unbounded memory in the cross-popup cache.
+    /// Longer results are shown but never memoized, so a large script result cannot pin memory.
     private static let maxMemoizedResultLength = 1024
 
     private var prewarmedResults: [String: (result: String, textHash: Int, fingerprint: Int)] = [:]
@@ -52,9 +48,8 @@ public final class InlineResultEvaluator {
         memoizedResults[key] = result
     }
 
-    /// A stable, in-process fingerprint of everything that can change an inline action's output
-    /// besides the selected text: its script source and the resolved values of its options.
-    /// Pure actions (e.g. Calculate) have no inputs and fingerprint to a constant.
+    /// Everything besides the selected text that can change an inline action's output: script source and
+    /// resolved option values. Pure actions fingerprint to a constant.
     private func fingerprint(for action: any Action) -> Int {
         guard let javaScriptAction = Self.javaScriptAction(from: action) else { return 0 }
         var hasher = Hasher()
@@ -102,10 +97,7 @@ public final class InlineResultEvaluator {
         timeout: TimeInterval
     ) async -> String? {
         do {
-            // Inline evaluation runs before the user clicks the action, so it cannot rely on
-            // the click path to populate ActionContext.match. Resolve the same match here so
-            // regex based inline actions receive their matched substring (for example `$200`
-            // inside a longer selection) instead of trying to parse the entire selection.
+            // Inline runs before the click, so resolve the match here: regex actions need their matched substring.
             let matchedContext: ActionContext
             if context.match != nil {
                 matchedContext = context
@@ -215,10 +207,7 @@ public final class InlineResultEvaluator {
         }
     }
 
-    /// Returns a prewarmed result if present and valid for the given selected text hash.
-    ///
-    /// The action-aware overload is preferred: it also validates the action's input fingerprint
-    /// (script + resolved options) so a warmed result is never served after the action changed.
+    /// Returns a prewarmed or memoized result for this text hash, checking the action's input fingerprint.
     public func prewarmedResult(for action: any Action, textHash: Int) -> String? {
         let key = memoKey(for: action, textHash: textHash)
         if let cached = prewarmedResults[action.id],
@@ -229,8 +218,7 @@ public final class InlineResultEvaluator {
         return memoizedResults[key]
     }
 
-    /// ID-only lookup retained for callers that only hold an action id. Validates the text hash but
-    /// cannot check the input fingerprint; prefer ``prewarmedResult(for:textHash:)`` where possible.
+    /// ID-only lookup for callers that hold only an id; skips the fingerprint check.
     public func prewarmedResult(for actionID: String, textHash: Int) -> String? {
         if let cached = prewarmedResults[actionID], cached.textHash == textHash {
             return cached.result
@@ -238,8 +226,7 @@ public final class InlineResultEvaluator {
         return nil
     }
 
-    /// Clears every cache and cancels all in-flight prewarm work. Full invalidation — use
-    /// ``endSession(_:)`` to end a popup while keeping the warm cache for the next selection.
+    /// Full invalidation of every cache and in-flight prewarm. `endSession` keeps the warm cache instead.
     public func clearPrewarmed() {
         for entry in prewarmedTasks.values {
             entry.task.cancel()
@@ -250,9 +237,8 @@ public final class InlineResultEvaluator {
         memoizedOrder.removeAll()
     }
 
-    /// Ends a popup session: cancels that session's in-flight evaluations and any pending prewarm
-    /// tasks, but **retains** the warm result caches. Keeping them makes the next selection render
-    /// instantly instead of paying a cold JavaScriptCore evaluation on every show.
+    /// Ends a popup session: cancels its evaluations and pending prewarms but keeps the warm caches,
+    /// so the next show renders instantly.
     public func endSession(_ sessionID: UUID) {
         cancelSession(sessionID)
         for entry in prewarmedTasks.values {
@@ -293,9 +279,7 @@ public final class InlineResultEvaluator {
                 attempts = 1
             }
 
-            // A cold-start miss or a timed-out prewarm must not permanently deny the preview:
-            // retry once with a fresh budget before giving up, so an occasional slow first
-            // evaluation does not silently drop the inline result. At most two attempts total.
+            // Retry once with a fresh budget so one slow cold evaluation does not silently drop the preview.
             while (result == nil || result?.isEmpty == true), attempts < 2 {
                 guard !Task.isCancelled else { return nil }
                 result = await self.evaluateAsync(

@@ -15,36 +15,30 @@ public struct ExtensionActionMetadata: Codable, Sendable, Equatable {
     public let type: String?
     public let scriptCode: String?
     public let requirements: ActionRequirements?
-    /// When true the JS runtime runs asynchronously: the host awaits the action's promise, provides
-    /// the `openclip.fetch(url, options)` polyfill, and enforces the execution watchdog. When false
-    /// (or absent) the legacy synchronous evaluation is used.
+    /// Awaits the action's promise and enforces the watchdog. Absent or false means legacy synchronous.
     public let isAsync: Bool?
+    /// Fetch the source selection's rich representations only when this action runs.
+    public let captureRtf: Bool?
+    public let captureHtml: Bool?
     public let options: [ExtensionOptionMetadata]?
     public let subActions: [ExtensionActionMetadata]?
     public let keyPress: String?
     public let serviceName: String?
     public let shortcutName: String?
     public let menuRelevance: String?
-    /// When true the host closes the popup immediately on click and shows a spinner toast until
-    /// the action's result lands (slow actions like an AppleScript that activates an app).
+    /// Closes the popup on click and shows a spinner until the result lands.
     public let loading: Bool?
-    /// Optional text for the loading spinner toast (shown while `loading: true`). When absent the
-    /// host falls back to its default ("Opening <title>…").
+    /// Spinner text; defaults to "Opening <title>…".
     public let loadingMessage: String?
     public let localizedLoadingMessage: LocalizedStringValue?
-    /// Declares how a secondary (right-click / option-click) activation behaves. Decoded
-    /// unconditionally — Core just carries it; the install-time validator enforces kind-scoping
-    /// (only non-scripting kinds may declare it, never `javascript`).
+    /// Carried unconditionally; the install-time validator enforces kind-scoping.
     public let secondary: ExtensionSecondaryDeclaration?
     /// Toast shown after the action completes successfully. Valid on all kinds.
     public let toast: ExtensionToastDeclaration?
-    /// Toast shown after a secondary (right-click / option-click) activation completes. Valid on
-    /// all kinds.
     public let secondaryToast: ExtensionToastDeclaration?
-    /// Search keywords for the action palette.
     public let keywords: [String]?
-    /// When true and the action is a synchronous JavaScript action, the action runs inline in the
-    /// popup bar, surfacing its return value as secondary preview text and mutating the selection on return.
+    /// Sync JavaScript only: runs inline in the popup bar; return value is preview text.
+    /// Mutates the selection on return.
     public let inline: Bool?
     /// Declares the uncommitted result kind produced by this action ("text", "file", "none", "dynamic").
     public let output: ExtensionOutputKind?
@@ -82,7 +76,9 @@ public struct ExtensionActionMetadata: Codable, Sendable, Equatable {
         localizedTitle: LocalizedStringValue? = nil,
         localizedLoadingMessage: LocalizedStringValue? = nil,
         output: ExtensionOutputKind? = nil,
-        result: ExtensionResultDelivery? = nil
+        result: ExtensionResultDelivery? = nil,
+        captureRtf: Bool? = nil,
+        captureHtml: Bool? = nil
     ) {
         self.id = id
         self.title = title ?? localizedTitle?.resolve()
@@ -95,6 +91,8 @@ public struct ExtensionActionMetadata: Codable, Sendable, Equatable {
         self.scriptCode = scriptCode
         self.requirements = requirements
         self.isAsync = isAsync
+        self.captureRtf = captureRtf
+        self.captureHtml = captureHtml
         self.options = options
         self.subActions = subActions
         self.keyPress = keyPress
@@ -154,6 +152,8 @@ public struct ExtensionActionMetadata: Codable, Sendable, Equatable {
         self.scriptCode = try container.decodeIfPresent(String.self, forKey: .scriptCode)
         self.requirements = try container.decodeIfPresent(ActionRequirements.self, forKey: .requirements)
         self.isAsync = try container.decodeIfPresent(Bool.self, forKey: .isAsync)
+        self.captureRtf = try container.decodeIfPresent(Bool.self, forKey: .captureRtf)
+        self.captureHtml = try container.decodeIfPresent(Bool.self, forKey: .captureHtml)
         self.options = try container.decodeIfPresent([ExtensionOptionMetadata].self, forKey: .options)
         self.subActions = try container.decodeIfPresent([ExtensionActionMetadata].self, forKey: .subActions)
             ?? container.decodeIfPresent([ExtensionActionMetadata].self, forKey: .subActionsDash)
@@ -207,6 +207,8 @@ public struct ExtensionActionMetadata: Codable, Sendable, Equatable {
         try container.encodeIfPresent(scriptCode, forKey: .scriptCode)
         try container.encodeIfPresent(requirements, forKey: .requirements)
         try container.encodeIfPresent(isAsync, forKey: .isAsync)
+        try container.encodeIfPresent(captureRtf, forKey: .captureRtf)
+        try container.encodeIfPresent(captureHtml, forKey: .captureHtml)
         try container.encodeIfPresent(options, forKey: .options)
         try container.encodeIfPresent(subActions, forKey: .subActions)
         try container.encodeIfPresent(keyPress, forKey: .keyPress)
@@ -245,6 +247,8 @@ public struct ExtensionActionMetadata: Codable, Sendable, Equatable {
         case scriptCode = "scriptCode"
         case requirements = "requirements"
         case isAsync = "async"
+        case captureRtf
+        case captureHtml
         case options = "options"
         case subActions = "subActions"
         case subActionsDash = "sub-actions"
@@ -409,21 +413,16 @@ public struct ExtensionMetadata: Sendable, Codable, Equatable {
     public let localizedName: LocalizedStringValue?
     public let description: String?
     public let localizedDescription: LocalizedStringValue?
-    /// Who published the package, as written in the manifest. Shown on the extension's settings
-    /// page; carried through `writeManifest` so an in-app edit does not drop it.
+    /// Preserved by `writeManifest` so in-app edits do not drop it.
     public let author: String?
     public let actions: [ExtensionActionMetadata]
     public let options: [ExtensionOptionMetadata]?
-    /// Declared package version (e.g. `"1.0.0"`). Ignored by the loader except for validation
-    /// bookkeeping (`ManifestValidationRecord.declaredVersion`).
+    /// Only used for validation bookkeeping.
     public let version: String?
-    /// Declared runtime capabilities. The host's known-capability set is **empty** on day one, so
-    /// any non-empty list rejects the manifest at load time (see `ManifestCapabilityGate`).
+    /// The host knows no capabilities yet, so any non-empty list is rejected at load.
     public let capabilities: [String]?
-    /// Minimum OpenClip app version required to run this package (e.g. `"1.5.0"`). Min-only;
-    /// an older app loads the package but marks it incompatible. Absent → compatible with all.
+    /// Min-only; an older app loads the package but marks it incompatible.
     public let minOpenClipVersion: String?
-    /// Search keywords for the extension actions.
     public let keywords: [String]?
     /// Package-level default for uncommitted result kind ("text", "file", "none", "dynamic").
     public let output: ExtensionOutputKind?

@@ -1,12 +1,9 @@
 // SettingsNavigationStack.swift
 // OpenClip
 //
-// Hosts the router's path in the detail column: the sidebar's page at the bottom, every page
-// drilled into from it on top, the topmost one visible.
-//
-// Every level stays mounted (offset out of view and faded) rather than being torn down, so a
-// page's in-progress edits survive drilling into the icon chooser and coming back. Only the top
-// level takes clicks or is exposed to accessibility.
+// Hosts the router's path in the detail column: the sidebar page at the bottom, drilled-into pages
+// stacked on top. Every level stays mounted (offset and faded) so in-progress edits survive a
+// drill-in and return; only the top level takes clicks or accessibility.
 
 import SwiftUI
 
@@ -46,27 +43,20 @@ struct SettingsNavigationStack<Content: View>: View {
 
 /// Shared metrics for the settings window's content.
 enum SettingsLayout {
-    /// Widest the content of a settings pane grows before it is centred. Editor pages, the action
-    /// editor and the icon chooser all cap to this so every pane reads at the same measure
-    /// regardless of how wide the window is.
+    /// Content cap, so every pane reads at the same measure whatever the window width.
     static let contentMaxWidth: CGFloat = 560
-    /// The Store's list is capped a little wider than the rest of the panes so its rows keep room
-    /// to breathe.
+    /// Wider than the other panes so Store rows have room.
     static let storeMaxWidth: CGFloat = 640
 }
 
 extension View {
-    /// Centres a settings pane's content at `maxWidth` while leaving the scroll view itself the
-    /// full width of the detail column, so the scroll indicator stays at the window edge instead
-    /// of moving in with the content. Pane content that manages its own width (editor pages'
-    /// pinned footer, the Customize table) does not use this.
+    /// Centres content at `maxWidth` while the scroll view stays full width, keeping the scroll indicator at the edge.
     func settingsPaneWidth(_ maxWidth: CGFloat = SettingsLayout.contentMaxWidth) -> some View {
         modifier(SettingsPaneWidth(maxWidth: maxWidth))
     }
 }
 
-/// Measures the pane and insets only its scroll *content*, via `contentMargins(for: .scrollContent)`,
-/// so the group cards read at a fixed measure but the scroll indicator remains at the pane edge.
+/// Insets only the scroll content, so cards keep a fixed measure while the indicator stays at the edge.
 private struct SettingsPaneWidth: ViewModifier {
     let maxWidth: CGFloat
 
@@ -83,12 +73,10 @@ private struct SettingsPaneWidth: ViewModifier {
     }
 }
 
-/// A page that edits something and ends with buttons: scrolling content above, a pinned footer
-/// below. The footer is where Cancel / Save live, so it never scrolls out of reach.
+/// Scrolling content above a pinned footer (Cancel / Save).
 @MainActor
 struct SettingsEditorPage<Content: View, Footer: View>: View {
-    /// Widest the content grows; the grouped `Form` panes cap to the same value so pages line up
-    /// when you move between them.
+    /// Matches the grouped `Form` panes so pages line up.
     var contentMaxWidth: CGFloat = SettingsLayout.contentMaxWidth
     @ViewBuilder let content: () -> Content
     @ViewBuilder let footer: () -> Footer
@@ -109,8 +97,7 @@ struct SettingsEditorPage<Content: View, Footer: View>: View {
     }
 }
 
-/// One line of red text with a warning glyph, for a save that could not go through. Replaces the
-/// alerts the editors used to run modal over the window.
+/// Inline save error, used in place of modal alerts.
 struct SettingsInlineError: View {
     let message: String
 
@@ -154,8 +141,7 @@ struct SettingsCardTitle: View {
     }
 }
 
-/// A list row that drills into another page: content on the left, a chevron on the right, the
-/// whole row the hit target the way a System Settings row is.
+/// A list row that drills into another page; the whole row is the hit target.
 struct SettingsDisclosureRow<Content: View>: View {
     let action: () -> Void
     @ViewBuilder let content: () -> Content

@@ -196,8 +196,7 @@ final class ExtensionManagerTests: XCTestCase {
         let actionID = try XCTUnwrap(manager.loadedActions.first?.id)
         store.set(.actionOrder, value: [actionID, "other.action"])
 
-        // Reload with the same extension still present: the ID is retained, so its .actionOrder
-        // entry must survive instead of being pruned by an unregister-then-register cycle.
+        // Same ID after reload, so its .actionOrder entry must not be pruned by unregister-then-register.
         await manager.loadExtensions(from: tempDir)
 
         XCTAssertTrue(store.get(.actionOrder).contains(actionID),
@@ -235,18 +234,14 @@ final class ExtensionManagerTests: XCTestCase {
         }
         XCTAssertTrue(installed.contains(where: { $0.id == actionID }))
         
-        // Verify file was copied to targetDir
         let expectedTarget = tempDir.appendingPathComponent("Installable.openclipext")
         XCTAssertTrue(FileManager.default.fileExists(atPath: expectedTarget.path))
         
-        // Test uninstall
         try await manager.uninstallExtension(actionID: actionID, targetDir: tempDir)
         XCTAssertFalse(manager.loadedActions.contains(where: { $0.id == actionID }))
     }
 
-    /// Regression: uninstall matched loose scripts by raw filename substring
-    /// (`actionID.contains(stem)`), so uninstalling `com.custom.alpha.sh` deleted the
-    /// unrelated `a.sh` whenever directory order listed it first.
+    /// Regression: uninstall matched scripts by filename substring (`actionID.contains(stem)`), deleting an unrelated `a.sh`.
     @MainActor
     func testUninstallStandaloneScriptDoesNotDeleteSubstringNeighbors() async throws {
         let manager = ExtensionManager.shared
@@ -271,8 +266,7 @@ final class ExtensionManagerTests: XCTestCase {
                       "surviving script must stay loaded")
     }
 
-    /// Regression: scripts declaring an `// Identifier:` header get an action id unrelated to
-    /// their filename, so the old filename-substring match never found them and uninstall 404'd.
+    /// Regression: an `// Identifier:` header gives an action id unrelated to the filename, so uninstall 404'd.
     @MainActor
     func testUninstallHeaderIdentifiedStandaloneScript() async throws {
         let manager = ExtensionManager.shared
@@ -397,8 +391,7 @@ final class ExtensionManagerTests: XCTestCase {
     func testValidateZipEntriesRejectsTraversalPaths() async throws {
         let zipPath = tempDir.appendingPathComponent("traversal.zip")
 
-        // The `zip` CLI strips `..` path components, so craft the traversal entry with python3's
-        // zipfile (python3 ships with Xcode CLT, which these tests already require for zip/unzip).
+        // The `zip` CLI strips `..`, so the entry is crafted with python3's zipfile.
         _ = try await ShellProcessRunner.run(ShellProcessRunner.Invocation(
             executableURL: URL(fileURLWithPath: "/usr/bin/python3"),
             arguments: ["-c", "import zipfile,sys; zipfile.ZipFile(sys.argv[1], 'w').writestr('../payload.txt', 'content')", zipPath.path],
@@ -418,8 +411,7 @@ final class ExtensionManagerTests: XCTestCase {
     func testValidateZipEntriesRejectsSymlinkEntries() async throws {
         let zipPath = tempDir.appendingPathComponent("symlink.zip")
 
-        // The `zip` CLI strips symlinks, so craft a symbolic-link entry (S_IFLNK | 0777 mode) plus
-        // a later entry that writes through it, with python3's zipfile.
+        // The `zip` CLI strips symlinks, so the link entry is crafted with python3's zipfile.
         _ = try await ShellProcessRunner.run(ShellProcessRunner.Invocation(
             executableURL: URL(fileURLWithPath: "/usr/bin/python3"),
             arguments: ["-c", "import zipfile,stat,sys; z=zipfile.ZipFile(sys.argv[1],'w'); zi=zipfile.ZipInfo('link'); zi.external_attr=(stat.S_IFLNK|0o777)<<16; zi.create_system=3; z.writestr(zi,'/etc/passwd'); z.writestr('link/pwned.txt','pwned'); z.close()", zipPath.path],

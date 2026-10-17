@@ -1,16 +1,14 @@
 // ShortcutRecorderPopover.swift
 // OpenClip
 //
-// A compact, minimal popover-based keyboard shortcut recorder component for macOS.
-// Displays the shortcut in a clean rectangular pill without decorations,
-// and opens a small live popover that notes pressed keys in real-time.
+// Pill-style keyboard shortcut recorder for macOS. Its popover shows pressed keys live.
 import SwiftUI
 import AppKit
 import KeyboardShortcuts
 
 // MARK: - Shortcut Component
 
-/// A clean rectangular button that displays the assigned shortcut and opens a small recorder popover.
+/// Pill showing the assigned shortcut; opens the recorder popover.
 @MainActor
 public struct Shortcut: View {
     @Environment(\.colorScheme) private var colorScheme
@@ -132,7 +130,6 @@ private struct ShortcutButtonStyle: ButtonStyle {
 
 // MARK: - Shortcut Recording Popover View
 
-/// A small, minimal popover that actively notes live modifier presses and key combinations.
 @MainActor
 public struct ShortcutRecordingPopover: View {
     public let onSave: (KeyboardShortcuts.Shortcut) -> Void
@@ -152,7 +149,6 @@ public struct ShortcutRecordingPopover: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(isSuccessFlash ? Color.green : Color.secondary)
 
-            // Minimal Live Keys Row
             HStack(spacing: 4) {
                 KeyBox("⌃", isPressed: activeModifiers.contains(.control))
                 KeyBox("⌥", isPressed: activeModifiers.contains(.option))
@@ -171,7 +167,6 @@ public struct ShortcutRecordingPopover: View {
                 }
             }
 
-            // Error or Help Footnote
             if let errorMessage {
                 Text(errorMessage)
                     .font(.system(size: 10))
@@ -207,7 +202,6 @@ public struct ShortcutRecordingPopover: View {
         }
 
         if event.type == .keyDown {
-            // Esc: Cancel
             if event.keyCode == 53 {
                 pendingSaveWorkItem?.cancel()
                 pendingSaveWorkItem = nil
@@ -215,7 +209,6 @@ public struct ShortcutRecordingPopover: View {
                 return nil
             }
 
-            // Delete / Backspace without modifiers: Clear
             let currentModifiers = event.modifierFlags.intersection([.command, .option, .shift, .control])
             if (event.keyCode == 51 || event.keyCode == 117) && currentModifiers.isEmpty {
                 pendingSaveWorkItem?.cancel()
@@ -224,8 +217,7 @@ public struct ShortcutRecordingPopover: View {
                 return nil
             }
 
-            // Must include a non-shift modifier unless it's a function key. Shift alone is not a
-            // valid hotkey modifier: registering ⇧A globally would stop the user from typing "A".
+            // Shift alone is not a valid hotkey modifier: a global ⇧A would stop the user typing "A".
             let isFKey = isFunctionKey(keyCode: Int(event.keyCode))
             let hasNonShiftModifier = !currentModifiers.subtracting(.shift).isEmpty
             guard hasNonShiftModifier || isFKey else {
@@ -270,7 +262,6 @@ public struct ShortcutRecordingPopover: View {
 
 // MARK: - Key Box
 
-/// A compact rectangular keycap showing only the key symbol.
 private struct KeyBox: View {
     @Environment(\.colorScheme) private var colorScheme
     let symbol: String

@@ -1,19 +1,15 @@
 // CoachMarkController.swift
 // OpenClip
 //
-// The one-time post-onboarding coach-mark: a small non-activating card anchored under the status
-// item. Two variants — a "select any text to see OpenClip" nudge teaching the primary gesture
-// when Accessibility is granted, and a "finish setup" card offering a Preferences shortcut when
-// the user skipped the permission. Dismissal (timeout, ✕, setup action, or the user's first real
-// selection) persists `SettingKey.hasDismissedPostOnboardingCoachMark`, so the mark shows at most
-// once per install, across launches.
+// Post-onboarding coach-mark card anchored under the status item, shown at most once per install.
+// Dismissal (timeout, ✕, setup, or the first real selection) persists
+// `SettingKey.hasDismissedPostOnboardingCoachMark`.
 import AppKit
 import SwiftUI
 import Core
 
 @MainActor
 final class CoachMarkController {
-    /// How long the card stays up if the user never interacts with it.
     static let autoDismissNanoseconds: UInt64 = 12_000_000_000
 
     private let panel = CoachPanel()
@@ -31,8 +27,7 @@ final class CoachMarkController {
         self.onSetupAction = onSetupAction
     }
 
-    /// Presents the card anchored below `anchorFrame` (the status item's frame); nil falls back to
-    /// top-center of the main screen. No-op once the seen-flag is set.
+    /// Anchored below `anchorFrame`, or top-center when nil. No-op once seen.
     func show(anchorFrame: NSRect?) {
         guard !isShowing, !settingsStore.get(.hasDismissedPostOnboardingCoachMark) else { return }
 
@@ -41,8 +36,7 @@ final class CoachMarkController {
             onSetup: { [weak self] in self?.handleSetupTapped() },
             onDismiss: { [weak self] in self?.dismiss() })
 
-        // Same frame-based sizing discipline as ToastPanelController: measure after a manual
-        // layout pass, then size the hosting view and container explicitly.
+        // Measure after a manual layout pass, as ToastPanelController does.
         let hostingView = NSHostingView(rootView: card)
         let container = NSView(frame: .zero)
         container.addSubview(hostingView)
@@ -57,7 +51,7 @@ final class CoachMarkController {
         startAutoDismissal()
     }
 
-    /// Hides the card and marks it seen, whatever the trigger (timeout, ✕, setup, first selection).
+    /// Hides the card and marks it seen.
     func dismiss() {
         guard isShowing else { return }
         autoDismissTask?.cancel()
@@ -67,14 +61,13 @@ final class CoachMarkController {
         settingsStore.set(.hasDismissedPostOnboardingCoachMark, value: true)
     }
 
-    /// The card's "Open Preferences" path: mark seen first so the nudge never returns, then hand
-    /// off to the caller's action (which activates the app and opens Preferences).
+    /// Marks seen first so the nudge never returns, then hands off to the caller's action.
     func handleSetupTapped() {
         dismiss()
         onSetupAction()
     }
 
-    /// Test hook: mirrors what the toast surface exposes for geometry assertions.
+    /// Test hook for geometry assertions.
     var panelFrame: NSRect { panel.frame }
 
     private func startAutoDismissal() {
@@ -85,8 +78,7 @@ final class CoachMarkController {
         }
     }
 
-    /// Horizontally centered below the anchor, clamped to the visible frame; no anchor falls back
-    /// to top-center of the main screen.
+    /// Centred below the anchor, clamped to the visible frame.
     private func place(at size: CGSize, anchoredTo anchorFrame: NSRect?) {
         let screen = anchorFrame.flatMap { anchor in
             NSScreen.screens.first { $0.frame.intersects(anchor) }
@@ -107,8 +99,7 @@ final class CoachMarkController {
     }
 }
 
-/// Borderless, non-activating status-level panel. Never becomes key — the two buttons track
-/// clicks without activating OpenClip, matching the popup/toast surface behavior.
+/// Non-activating panel that never becomes key, so clicks do not activate OpenClip.
 final class CoachPanel: NSPanel {
     init() {
         super.init(contentRect: .zero,

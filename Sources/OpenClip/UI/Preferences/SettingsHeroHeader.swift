@@ -1,21 +1,15 @@
 // SettingsHeroHeader.swift
 // OpenClip
 //
-// The identity block at the top of a page that is *about something* — an installed extension, AI
-// Tools, the user's custom actions. A large icon, the name, one line about what it is, centred,
-// on the window's background rather than in a card.
-//
-// It is the same shape the app's own About page uses for OpenClip, and the same shape Raycast and
-// Setapp use for an extension: the page says what it belongs to before it says anything else, so
-// the switch and the ellipsis menu in the toolbar have an obvious subject.
+// Identity block at the top of a page about an extension, AI Tools or a custom action: a centred
+// tile, name and subtitle, on the window background rather than in a card.
 
 import SwiftUI
 import Core
 
 @MainActor
 struct SettingsHeroHeader: View {
-    /// The tile at the top: a system symbol for OpenClip's own pages, an action icon for an
-    /// extension (its manifest icon, which may be a template SVG, a favicon or a text glyph).
+    /// A system symbol for OpenClip's pages, or an extension's action icon.
     enum Glyph {
         case symbol(String, tint: Color)
         case icon(ActionIcon, tint: Color)
@@ -79,10 +73,7 @@ struct SettingsHeroHeader: View {
 }
 
 extension SettingsHeroHeader {
-    /// The tile glyph for an action.
-    ///
-    /// Copy, Cut and Paste draw as *text* in the popup bar — that is their icon — and a tile can
-    /// only show a glyph, so those fall back to the symbol they carry for exactly this purpose.
+    /// Copy, Cut and Paste are text in the popup bar, which a tile cannot show, so they use their symbol.
     @MainActor
     static func glyph(for action: any Action, presented: ActionPresentationModel) -> ActionIcon {
         if case .text = presented.icon,

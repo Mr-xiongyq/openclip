@@ -60,7 +60,7 @@ Each subsystem owns a dedicated `LogChannel` property on `Log` under the `com.op
 | `coordinator`    | action coordination / enablement evaluation                 |
 | `shell`          | `ShellProcessRunner` (subprocess watchdog, timeout)         |
 | `js`             | `OpenClipJSHost` runtime                                    |
-| `selection`      | `SelectionRetrievalCoordinator` + strategies / `MacSelectionMonitor` (gate decisions, window gesture rejection, mode routing, AX + pasteboard + keyboard retrieval); `AutomaticCopyCapture` authorization skips and posted copy triggers (PID only); `PasteAvailabilityProbe` limit and time-limit results |
+| `selection`      | `SelectionRetrievalCoordinator` + strategies / `MacSelectionMonitor` (gate decisions, window gesture rejection, gesture-locality rejection, Electron `AXManualAccessibility` set results, mode routing, AX + pasteboard + keyboard retrieval); `AutomaticCopyCapture` authorization skips and posted copy triggers (PID only); `PasteAvailabilityProbe` limit and time-limit results |
 | `extensions`     | `ExtensionManager`, remote installer, extension store/onboarding install & uninstall, **manifest decode/validation rejections** |
 | `ai`             | AI providers and preset persistence                         |
 | `permissions`    | TCC / accessibility permission management                   |
@@ -165,6 +165,9 @@ Example (fields are sorted in actual output):
 `SelectionContext.traceID` carries the retrieval ID through mouse, hold, keyboard and
 fresh hotkey reads, cached selections, and context transformations. Search for `[Trace#N]`
 in `~/Library/Logs/OpenClip/openclip.log` across both `selection` and `presentation`.
+Native Copy refusals log the generation-match result and source/frontmost PIDs, never
+selection contents. Overlay refusal logs identify the same input-capable window used by
+the gate, excluding WindowServer shields that cannot receive Copy.
 Include the approximate time when reporting a trace: IDs restart with the app; presentation
 records include the process ID and popup session UUID. `Trace#0` denotes an untracked
 context (for example OCR or a standalone clipboard palette), not a retrieval trace.

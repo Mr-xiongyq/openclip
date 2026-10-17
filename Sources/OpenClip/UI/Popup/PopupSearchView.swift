@@ -1,20 +1,8 @@
 // PopupSearchView.swift
 // OpenClip
 //
-// The action-search palette: a focused text field filtering the full action catalog (enabled and
-// disabled) as you type, rendered as one surface with the popup bar. Results appear above or
-// below the field depending on popup position; up to 3 rows visible, scrollable beyond that.
-// Rows are chosen with the arrows + Return, the mouse, or ⌘1…⌘9 — the first nine rows carry a
-// shortcut (shown on the row) that runs them outright. The keys live on the focused field, so
-// they exist only while the palette is open. The palette height is set from the initial result
-// count and stays fixed while filtering, so typing never shifts the card; longer lists scroll
-// within the default maximum height.
-// A query that matches nothing is not a dead end: while AI is on, the empty state offers the
-// typed text as an AI instruction — "Ask AI" runs it once on the selection, "Save as AI tool"
-// keeps it as a custom AI preset (a searchable action from then on) and runs it. Recent
-// instructions are ordinary rows of the catalog (`RecentPromptAction`), found by typing any part
-// of them. For all of these, ⏎ / click / ⌘-digit show AI's answer in the result card (with the
-// diff) and ⇧⏎ / ⇧-click paste it over the selection (see `PaletteAIPrompt`).
+// The action-search palette: a focused field filtering the full catalog as you type, with AI rows
+// when nothing matches. Height is fixed from the initial result count so typing never shifts the card.
 import SwiftUI
 import AppKit
 import Core
@@ -30,48 +18,32 @@ public struct PopupSearchView: View {
     public let onExit: @MainActor () -> Void
     /// Reports a drag from the search header so the popup owner can move the panel.
     public let onDrag: @MainActor (ResultCardDragPhase) -> Void
-    /// Routes AI preset selections (chrome source `.ai`) to the popup's AI card flow instead of
-    /// `perform`. Passed the registered AI action id (`ai.preset.<presetID>`); nil disables the
-    /// route and falls back to `perform`.
+    /// Routes AI preset selections to the AI card flow; nil falls back to `perform`.
     public let onRunAI: @MainActor (String) -> Void
-    /// Runs an instruction on the selection (or standalone without context if includeContext is false).
-    /// The flag is true to paste the answer over the selection (⇧⏎, ⇧-click) and
-    /// false to show the result card first (⏎, click, ⌘-digit).
+    /// Runs an AI instruction on the selection. The Bool pastes the answer over it (⇧⏎) rather than showing the card first.
     public let onRunAIPrompt: @MainActor (String, Bool, Bool) -> Void
-    /// Saves the typed query as a reusable AI tool and runs it — the "Save as AI tool" row. Same
-    /// flag as `onRunAIPrompt`.
+    /// Saves the typed query as an AI tool and runs it (the "Save as AI tool" row).
     public let onSaveAIPrompt: @MainActor (String, Bool) -> Void
     /// Whether AI is switched on; off, the empty state keeps its plain "No matches" copy.
     private let isAIEnabled: Bool
-    /// When non-nil, the palette is scoped to a parent action's sub-actions: it lists only those
-    /// children and rerenders the field with the parent's icon + a "Search within ..." placeholder.
+    /// Scopes the palette to a parent's sub-actions, with the parent icon and a "Search within ..." placeholder.
     public let scope: SearchScope?
-    /// Called when the user drops the current scope (Esc with an empty query) back to the full list.
+    /// Esc with an empty query drops the scope back to the full list.
     public let onExitScope: @MainActor () -> Void
-    /// Recency counters (action ID → MRU counter) captured at palette entry; breaks ties below
-    /// match quality. Constant for the palette session. See `ActionUsageStore`.
+    /// Recency counters captured at palette entry; only breaks ties below match quality.
     public let usageRecency: [String: Int]
-    /// Called when an action is actually run, so the controller can record usage.
     public let onActionPerformed: (@MainActor (String) -> Void)?
-    /// Called right before an action performs (before `onResult` can fire), so the controller can
-    /// snapshot the action's declared delivery for the paste-vs-copy decision. The intent is
-    /// carried explicitly — the palette's secondary signal is `replace` (⇧⏎ / the ⇧⏎ badge), which
-    /// never reaches the mouse monitor's `pendingClickIntent`, so reading live state here would
-    /// deliver a keyboard secondary run as primary.
+    /// Fires before `onResult`. The intent is passed explicitly: ⇧⏎ never reaches the mouse monitor's `pendingClickIntent`.
     public let onWillPerformAction: (@MainActor (any Action, ActionResultDelivery.ClickIntent) -> Bool)?
-    /// Called when a `showsLoading` palette result is selected: the controller early-closes the
-    /// popup and runs the action via the loading toast flow instead of the inline perform path.
-    /// Carries the same explicit intent as `onWillPerformAction`.
+    /// Loading-flagged results run through the loading toast flow instead of `perform`; same explicit intent.
     public let onRunLoadingAction: (@MainActor (any Action, ActionResultDelivery.ClickIntent) -> Void)?
-    /// Returns the click intent captured at mouse-down for the current click, so the palette's
-    /// perform path can thread a force-copy click (⇧-click) into the action context.
+    /// Click intent captured at mouse-down, so a ⇧-click force-copy reaches the perform context.
     public let onClickIntent: @MainActor () -> ActionResultDelivery.ClickIntent
     @State private var query = ""
     @State private var selectedIndex = 0
     @State private var activeSelectionContext: SelectionContext
     @FocusState private var isFocused: Bool
-    /// Set by keyboard selection moves so `.onChange` auto-scrolls the list; hover-driven
-    /// selection changes leave it false so hovering the edge of a row never shifts the list.
+    /// Keyboard selection moves set this so `.onChange` auto-scrolls; hover-driven changes must not shift the list.
     @State private var scrollSelectionOnKeyboard = false
     @State private var isCommandPressed: Bool = false
     @State private var localFlagsMonitor: Any?
@@ -83,15 +55,10 @@ public struct PopupSearchView: View {
     @Setting(SettingKey.popupThemeColor) private var themeColor
     @Environment(\.colorScheme) private var colorScheme
 
-    /// Hover follows the same mechanism as the bar: the AX global-mouse location hit-tested
-    /// against registered frames (instant), with an `.onHover` fallback when global monitoring
-    /// is unavailable. This avoids SwiftUI's delayed hover for the palette's small targets.
-    /// Deliberately *not* `@ObservedObject`: `location` publishes at event-monitor rate, and
-    /// observing the whole object re-evaluates the entire palette body per mouse move. Only
-    /// `hoverState.$location` is subscribed to via `.onReceive`.
+    /// Hover uses the AX global-mouse location (instant), falling back to `.onHover`.
+    /// Not `@ObservedObject`: `location` publishes per mouse move, so observing the whole object re-renders the palette each time.
     private let hoverState = PopupHoverState.shared
-    /// Resolves user-customized action titles/icons (composition-injected, defaults to the shared
-    /// customization manager — never a hidden singleton reference inside the Action extension).
+    /// Injected rather than a singleton reference inside the Action extension.
     private let presenter: any ActionPresenting
     @State private var hoverFrames: [SearchHoverTarget: CGRect] = [:]
     @State private var hoveredTarget: SearchHoverTarget?
@@ -115,30 +82,21 @@ public struct PopupSearchView: View {
         return PopupThemeModel.classicToken(appearance: themeColor, systemIsDark: colorScheme == .dark)
     }
 
-    /// The precomputed search index for this palette session: scoped children when scoped, the
-    /// full catalog otherwise. Built once in `init` (and on scope changes via `rebuildSearchIndex`)
-    /// instead of on every body evaluation — indexing walks the whole catalog resolving titles +
-    /// keywords, so it must not re-run for every keystroke/hover.
+    /// Built once in `init` (and on scope change): indexing walks the whole catalog, so it must not run per keystroke.
     @State private var searchIndex: [ActionSearchIndex] = []
 
-    /// The ranked results for the current `query`. Stored, not computed: body evaluation reads
-    /// `results` several times per pass (count, viewport height, the row ForEach) and re-evaluates
-    /// on hover/selection moves too — a computed property would re-run the full filter+sort on
-    /// every one of those reads. Recomputed exactly once per query change (and per scope rebuild).
+    /// Stored, not computed: body reads `results` several times per pass, and a computed property would re-filter on each read.
     @State private var results: [ActionSearchIndex] = []
 
-    /// Height is captured at palette entry so filtering never moves the card. The list scrolls
-    /// when the initial result set exceeds the default maximum height.
+    /// Captured at entry so filtering never moves the card; the list scrolls past the default maximum height.
     @State private var cardHeight: CGFloat = PopupMetrics.searchPaletteMinHeight
 
-    /// Width of the search palette card. The default column is the floor — a list has a design
-    /// width, and rows only widen it when a title needs the room — capped at the default column.
+    /// Never wider than the default column; rows widen the card only when a title needs the room.
     private var cardWidth: CGFloat {
         let needed = max(PopupMetrics.searchPanelContentWidth, naturalRowWidth)
         return Self.bounded(needed, min: PopupMetrics.searchPaletteMinWidth, max: PopupMetrics.searchPanelContentWidth)
     }
 
-    /// The search header height and bottom footer height.
     static let searchHeaderHeight: CGFloat = 48.0
     static let footerHeight: CGFloat = 34.0
     private static let rowSpacing: CGFloat = 2.0
@@ -149,8 +107,7 @@ public struct PopupSearchView: View {
         PaletteAIPrompt.rows(for: query, aiEnabled: isAIEnabled, results: results.isEmpty ? .none : .actions)
     }
 
-    /// The selectable rows on screen — the results followed by the AI rows. Every keyboard, hover
-    /// and ⌘-digit path indexes against this, so the AI rows are reached exactly like results.
+    /// Selectable rows: results, then AI rows. Keyboard, hover and ⌘-digit paths all index against this.
     private var rowCount: Int {
         results.count + promptRows.count
     }
@@ -160,22 +117,20 @@ public struct PopupSearchView: View {
             + CGFloat(max(0, rows - 1)) * rowSpacing + footerHeight + listBottomPadding
     }
 
-    /// The palette's default maximum height: `searchMaxRows` rows behind the field. Internal for tests.
+    /// `searchMaxRows` rows behind the field.
     static var defaultHeight: CGFloat {
         CGFloat(PopupMetrics.searchMaxRows) * PopupMetrics.searchResultRowHeight +
         CGFloat(max(0, PopupMetrics.searchMaxRows - 1)) * rowSpacing + searchHeaderHeight + footerHeight + listBottomPadding
     }
 
-    /// The widest row among the current results — icon column, title, spacer and shortcut hint
-    /// with their paddings. Measured once per result set, never per body evaluation.
+    /// Widest row among the current results. Measured once per result set, never per body evaluation.
     @State private var naturalRowWidth: CGFloat = 0
 
     private static let titleFont = NSFont.systemFont(ofSize: 13, weight: .regular)
     private static let shortcutFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
 
     static func naturalRowWidth(for results: [ActionSearchIndex]) -> CGFloat {
-        // Row chrome: list padding 8+8, row padding 10+10, icon column 18, icon→title spacing 10,
-        // the spacer's minimum 8, and title→shortcut spacing 10 when the row carries a shortcut.
+        // Must match the row chrome: paddings, icon column, spacing and shortcut hint.
         let shortcutWidth = ceil(("⌘9" as NSString).size(withAttributes: [.font: shortcutFont]).width)
         var widest: CGFloat = 0
         for (index, item) in results.enumerated() {
@@ -252,9 +207,7 @@ public struct PopupSearchView: View {
         self.onRunLoadingAction = onRunLoadingAction
         self.onClickIntent = onClickIntent
         _activeSelectionContext = State(initialValue: context.selection)
-        // Index once at entry: the palette is recreated on every search entry (mode + scope
-        // transition together), so the current catalog/scope are captured here. If a prewarmed
-        // index matches the current catalog and recency, reuse it for instant appearance; otherwise build fresh.
+        // Index once at entry; reuse a prewarmed index when the catalog and recency still match.
         let initialIndex: [ActionSearchIndex]
         if scope == nil,
            let prewarmed = Self.prewarmedIndexCache,
@@ -548,13 +501,10 @@ public struct PopupSearchView: View {
             }
     }
 
-    /// Closes the palette by dropping the scope back to the full list (Esc with an empty scoped
-    /// query) or, when already flat, exiting search entirely.
     private func exitSearch() {
         if scope != nil { onExitScope() } else { onExit() }
     }
 
-    /// Leading field icon: the scope parent's icon when scoped, otherwise a native magnifying glass.
     private var searchIcon: some View {
         if let parent = scope?.parent {
             return AnyView(actionIcon(parent).foregroundColor(PopupThemeModel.restSecondary(for: effectiveTheme)))
@@ -567,7 +517,6 @@ public struct PopupSearchView: View {
         }
     }
 
-    /// Render an action's icon (symbol / iconify / url / local / text) at field size.
     private func actionIcon(_ action: any Action) -> some View {
         ActionIconView(icon: rowIcon(for: action), size: 16)
     }
@@ -597,8 +546,7 @@ public struct PopupSearchView: View {
                             resultRow(item: item, index: index)
                                 .id(item.id)
                         }
-                        // The AI rows follow the results (Ask + Save when nothing matched, Save
-                        // alone after recent-prompt matches).
+                        // AI rows follow the results (Ask + Save, or Save after recent-prompt matches).
                         ForEach(Array(promptRows.enumerated()), id: \.element) { offset, row in
                             promptRow(row, index: results.count + offset)
                         }
@@ -721,8 +669,7 @@ public struct PopupSearchView: View {
         }
     }
 
-    /// One AI fallback row — the same chrome as a result row (icon column, title, ⌘-digit hint,
-    /// selection/hover fills) so the empty state reads as two more things to run, not a notice.
+    /// One AI fallback row, drawn with the result-row chrome so it reads as one more runnable item.
     @ViewBuilder
     private func promptRow(_ row: PaletteAIPromptRow, index: Int) -> some View {
         let isSelected = index == selectedIndex
@@ -890,13 +837,10 @@ public struct PopupSearchView: View {
         selectedIndex = newIndex
     }
 
-    /// How many rows carry a ⌘-digit shortcut: ⌘1…⌘9. Rows past the ninth have none — ⌘0 is not
-    /// a tenth row, it is simply unhandled.
+    /// Rows past the ninth have no shortcut; ⌘0 is unhandled.
     static let maxShortcutRows = 9
 
-    /// The 1-based row a ⌘-digit event points at, or nil when the event is not one. Pure, so the
-    /// modifier rules are testable without a window: exactly Command (⌥/⇧/⌃ combinations are
-    /// somebody else's shortcut), and a single digit 1...9.
+    /// The 1-based row a ⌘-digit event points at, or nil. Only plain Command counts; ⌥/⇧/⌃ combos belong to others.
     static func commandDigitRow(for event: NSEvent) -> Int? {
         let modifiers = event.modifierFlags
             .intersection(.deviceIndependentFlagsMask)
@@ -914,9 +858,7 @@ public struct PopupSearchView: View {
         return "⌘\(index + 1)"
     }
 
-    /// Runs the row a ⌘-digit points at. Returns false when there is no such row, so the keystroke
-    /// falls through to the field (⌘5 in a three-result list types nothing and does nothing)
-    /// instead of being silently swallowed.
+    /// Returns false when there is no such row, so the keystroke falls through to the field instead of being swallowed.
     private func runRow(at index: Int) -> Bool {
         guard index >= 0, index < Self.maxShortcutRows, index < rowCount else { return false }
         selectedIndex = index
@@ -924,9 +866,7 @@ public struct PopupSearchView: View {
         return true
     }
 
-    /// Runs the highlighted row. `replace` only matters for AI rows (Ask, Save, recents): false
-    /// (⏎, click, ⌘-digit) shows the result card first, true (⇧⏎, ⇧-click) pastes the answer
-    /// over the selection.
+    /// `replace` matters only for AI rows: false shows the result card first, true (⇧⏎) pastes over the selection.
     private func runSelected(replace: Bool) {
         if selectedIndex >= results.count {
             // The AI rows: the typed query is the instruction.
@@ -944,12 +884,9 @@ public struct PopupSearchView: View {
         let action = results[selectedIndex].action
         let activeContext = activeActionContext
         guard action.isEnabled(for: activeContext) else { return }
-        // The intent is resolved once, up front, so the perform context and the delivery snapshot
-        // agree: `replace` (⇧⏎ / the ⇧⏎ badge) is the palette's own secondary signal and never
-        // reaches the mouse monitor, while `onClickIntent()` carries a ⇧/right mouse-down.
+        // Resolve the intent once so the perform context and delivery snapshot agree; ⇧⏎ never reaches the mouse monitor.
         let clickIntent: ActionResultDelivery.ClickIntent = replace ? .secondary : onClickIntent()
-        // AI preset actions render their result in the popup's AI card (same flow as the Sparkles
-        // toolbar), so route them there instead of through `perform`.
+        // AI presets render in the popup's AI card, so route them there instead of `perform`.
         if ActionIdentity.isAIPreset(action) {
             onRunAI(action.id)
             return
@@ -992,8 +929,7 @@ public struct PopupSearchView: View {
         }
         Task { @MainActor in
             do {
-                // Same match plumbing as the bar's perform path: thread the visibility match into
-                // the perform context so placeholders/env see the same match that enabled the row.
+                // Thread the visibility match into the perform context so placeholders see the match that enabled the row.
                 let match = action.matchInfo(for: activeContext)
                 let performContext = ActionContext(
                     selection: activeContext.selection,
@@ -1009,8 +945,7 @@ public struct PopupSearchView: View {
         }
     }
 
-    /// Indexes the palette's candidates (scoped children when scoped, the full catalog otherwise)
-    /// once per palette entry. Runs only when the catalog/scope inputs change, never per body eval.
+    /// Indexes the candidates once per palette entry; re-runs only when catalog or scope inputs change.
     static func buildIndex(
         catalog: [any Action],
         scope: SearchScope?,
@@ -1019,11 +954,8 @@ public struct PopupSearchView: View {
         aliases: [String: String] = ActionBindingStore.shared.aliases
     ) -> [ActionSearchIndex] {
         let candidates = scope?.children ?? catalog
-        // The unscoped palette lists leaf actions only: container rows (group rows) are hidden so
-        // the results never surface an inert row that performs `.none`. Their sub-actions are
-        // indexed directly, and each group's title/name is folded into its children's keywords
-        // (see `searchKeywords`) so typing the group name still surfaces its sub-actions. Scoped
-        // palettes receive pre-resolved children (no container rows), so they pass through.
+        // Unscoped palettes list leaf actions only: group rows would perform `.none`. Their children are indexed
+        // directly, with the group name folded into their keywords (see `searchKeywords`).
         let containerIDs = scope == nil
             ? Set(catalog.filter { $0.chrome.popupBehavior == .showSubActions }.map(\.id))
             : []
@@ -1041,9 +973,7 @@ public struct PopupSearchView: View {
             }
     }
 
-    /// Rebuilds the index when the scope changes in place. The view is normally recreated per
-    /// palette entry (init), so this is a defensive guard for scope transitions that keep
-    /// `.search` mounted. The catalog is captured at entry; the palette is ephemeral.
+    /// Defensive guard for scope changes while `.search` stays mounted; normally the view is recreated per entry.
     private func rebuildSearchIndex() {
         let index = Self.buildIndex(catalog: catalog, scope: scope, usageRecency: usageRecency, presenter: presenter)
         searchIndex = index
@@ -1060,13 +990,10 @@ public struct PopupSearchView: View {
         if case .extensionPkg(let packageID) = action.chrome.badge {
             parts.append(packageID)
         }
-        // Action-declared keywords (e.g. from manifest or custom metadata)
         parts.append(contentsOf: action.keywords)
         // Multi-lingual search synonyms dictionary (EN, ZH-Hans, ZH-Hant, FR, JA)
         parts.append(contentsOf: ActionSearchKeywords.keywords(for: action.id, actionTitle: action.title))
-        // Fold each container (group) row's title + package name + keywords into its sub-actions' keywords.
-        // The group row is filtered out of the palette, so its name must index its children to
-        // stay searchable.
+        // Fold a group row's title, package and keywords into its children, since group rows are filtered out.
         for group in catalog where group.chrome.popupBehavior == .showSubActions {
             guard group.id != action.id else { continue }
             let isMember: Bool
@@ -1086,8 +1013,7 @@ public struct PopupSearchView: View {
         return parts.joined(separator: " ")
     }
 
-    /// Rows are strictly [icon | text], so use the table presentation icon. This preserves the
-    /// underlying glyph when the popup bar has been configured to show the action title as text.
+    // Rows are [icon | text], so use the table presentation icon, even when the bar shows the title as text.
     private func rowIcon(for action: any Action) -> ActionIcon {
         presenter.tableIcon(for: action)
     }
@@ -1110,31 +1036,23 @@ public struct PopupSearchView: View {
 
     // MARK: - Hover (same location-based mechanism as the bar)
 
-    /// The hovered target is derived from the shared mouse location, hit-tested against the
-    /// frames each row registers in the popup's named coordinate space. Hovering a row
-    /// moves the keyboard selection to it so the highlight follows the mouse.
-    /// Crucially: hovering over the search bar or bottom bar NEVER shifts selection or focuses a list row!
+    /// Hit-tests the shared mouse location against row frames. Hovering the search or bottom bar never changes selection.
     private func updateHoveredTarget(for location: CGPoint?) {
         guard let point = location else {
             hoveredTarget = nil
             return
         }
 
-        // Hit-test the registered frames rather than comparing against card-relative constants:
-        // the location is in full panel-content coordinates, which include the 28 pt shadow inset
-        // that `PopupMetrics.popupShadowInset` adds before the named hover space.
+        // Hit-test registered frames: the location includes the 28 pt shadow inset added before the named hover space.
         if let header = hoverFrames[.searchBar], header.contains(point) {
             hoveredTarget = .searchBar
-            // NEVER select a list row when mouse is over the search bar
             return
         }
         if let dock = hoverFrames[.bottomDock], dock.contains(point) {
             hoveredTarget = .bottomDock
-            // NEVER select a list row when mouse is over the bottom dock
             return
         }
 
-        // 3. In the visible list zone: hit-test rows only
         let target = hoverFrames.first(where: { key, frame in
             switch key {
             case .row:
@@ -1148,8 +1066,7 @@ public struct PopupSearchView: View {
         hoveredTarget = target
     }
 
-    /// Local `.onHover` fallback used only when the AX global mouse monitor is unavailable;
-    /// otherwise the location-driven path above owns hover (instant, no SwiftUI hover delay).
+    /// `.onHover` fallback, used only when the AX global mouse monitor is unavailable.
     private func useLocalHoverFallback(for target: SearchHoverTarget, isHovering: Bool) {
         guard !hoverState.usesGlobalMouseMonitoring else { return }
         if isHovering {
@@ -1164,15 +1081,8 @@ public struct PopupSearchView: View {
 
 // MARK: - ⌘-digit Key Equivalents
 
-/// Holds the palette's ⌘1…⌘9 row runner. The handler is refreshed on every SwiftUI update, so it
-/// always runs against the current result list — which is why the runner lives in an AppKit view
-/// the controller can find (`PopupWindowController.runPaletteRow`) rather than in a closure
-/// captured out of a SwiftUI `View` struct, where the `@State` results would go stale.
-///
-/// It also answers `performKeyEquivalent`, which covers the case where OpenClip *is* the active
-/// app and AppKit runs its key-equivalent phase normally. That phase never runs for the popup's
-/// non-activating panel, which is why `PaletteRowShortcuts` exists — see that file for the
-/// routing story.
+/// Runs ⌘1…⌘9 rows from AppKit so the handler always sees current results (SwiftUI closures would hold stale `@State`).
+/// Also answers `performKeyEquivalent` when OpenClip is active; the non-activating panel uses `PaletteRowShortcuts`.
 struct CommandDigitCatcher: NSViewRepresentable {
     /// Runs the 1-based row, returning false when there is none (the event then falls through).
     let onRow: @MainActor (Int) -> Bool
@@ -1190,8 +1100,7 @@ struct CommandDigitCatcher: NSViewRepresentable {
     final class CatcherView: NSView {
         var onRow: (@MainActor (Int) -> Bool)?
 
-        /// Runs a 1-based row directly, for the global ⌘-digit hot keys — those never arrive as
-        /// events in this process, so there is no key equivalent to walk.
+        /// Runs a 1-based row directly for the global ⌘-digit hot keys, which never arrive as key equivalents.
         @MainActor
         func run(row: Int) -> Bool {
             onRow?(row) ?? false
@@ -1201,9 +1110,7 @@ struct CommandDigitCatcher: NSViewRepresentable {
             guard let row = PopupSearchView.commandDigitRow(for: event) else {
                 return super.performKeyEquivalent(with: event)
             }
-            // Claimed whether or not a row exists: while the palette is on screen ⌘1…⌘9 are its
-            // own, so ⌘5 in a three-row list quietly does nothing instead of beeping or reaching
-            // the app underneath.
+            // Claimed even with no such row: while the palette is open, ⌘1…⌘9 never reach the app underneath.
             MainActor.assumeIsolated { _ = onRow?(row) }
             return true
         }

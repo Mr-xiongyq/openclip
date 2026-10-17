@@ -8,11 +8,8 @@
 import Foundation
 
 public enum ExtensionPackageHashResolver {
-    /// SHA-256 over a framed sequence of components: the manifest first, then each referenced
-    /// script file's bytes in declaration order (recursively through sub-actions). Every component
-    /// is framed with its normalized relative path and an 8-byte big-endian length prefix for both
-    /// the path and the bytes, so the payload can never be assembled ambiguously. Unreadable
-    /// referenced scripts are skipped (as before); never nil for a readable manifest.
+    /// SHA-256 over the manifest, then each referenced script's bytes (recursively through sub-actions).
+    /// Length-prefixed framing keeps the payload unambiguous; unreadable scripts are skipped.
     public static func packageHash(manifestURL: URL, manifest: ExtensionMetadata) -> String? {
         guard let manifestData = try? Data(contentsOf: manifestURL) else { return nil }
         let directory = manifestURL.deletingLastPathComponent()
@@ -65,8 +62,7 @@ public enum ExtensionPackageHashResolver {
         return ContentFingerprint.sha256Hex(payload)
     }
 
-    /// Appends a component framed as [path byte count][path bytes][data byte count][data bytes],
-    /// with all lengths 8-byte big-endian so the framing is unambiguous regardless of contents.
+    /// Frames a component as [path length][path][data length][data], lengths 8-byte big-endian.
     private static func appendComponent(_ payload: inout Data, relativePath: String, data: Data) {
         appendLengthPrefixed(&payload, Data(normalizedRelativePath(relativePath).utf8))
         appendLengthPrefixed(&payload, data)
@@ -78,8 +74,7 @@ public enum ExtensionPackageHashResolver {
         payload.append(bytes)
     }
 
-    /// Collapses redundant separators/`.`/`..` segments and forces `/` separators, keeping the
-    /// path relative to the package directory.
+    /// Normalizes to a `/`-separated path relative to the package directory.
     private static func normalizedRelativePath(_ path: String) -> String {
         var normalized = (path as NSString).standardizingPath
         if normalized.hasPrefix("/") {
@@ -105,9 +100,7 @@ public enum ExtensionPackageHashResolver {
         return nil
     }
 
-    /// Hash of the package identified by `packageID` in `directory`, resolving it by walking the
-    /// directory exactly like the loader: manifest packages matched by identifier, standalone
-    /// scripts by their synthesized id.
+    /// Hash of the package with `packageID` in `directory`, resolved the way the loader does.
     public static func packageHash(forPackageID: String, in directory: URL) -> String? {
         guard let items = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isDirectoryKey]) else {
             return nil
@@ -125,8 +118,7 @@ public enum ExtensionPackageHashResolver {
                 if synthesized == forPackageID {
                     return fileHash(item)
                 }
-                // A standalone script may declare its package id in its header; resolve by that
-                // too, mirroring how the loader derives the action id.
+                // Standalone scripts may also declare their id in the header, as the loader does.
                 if declaredIdentifier(of: item) == forPackageID {
                     return fileHash(item)
                 }
@@ -135,10 +127,7 @@ public enum ExtensionPackageHashResolver {
         return nil
     }
 
-    /// The identifier a standalone script declares in its header (`# Identifier:`,
-    /// `// Identifier:`, or lowercase `// identifier:`), trimmed like the loader does.
-    /// Shared with uninstall matching — any code resolving a standalone script's package id
-    /// must use this, never filename substring heuristics.
+    /// The id a standalone script declares in its header. Shared with uninstall matching; never use filename heuristics.
     static func declaredIdentifier(of scriptURL: URL) -> String? {
         guard let content = try? String(contentsOf: scriptURL, encoding: .utf8) else { return nil }
         let lines = content.components(separatedBy: .newlines).prefix(Constants.maxHeaderLinesToScan)

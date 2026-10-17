@@ -1,12 +1,8 @@
 // SettingsCatalog.swift
 // OpenClip
 //
-// The list of known settings, in erased form, so code can walk every setting without knowing its
-// type (snapshot, export/import, diagnostics). Keeping the list here — referencing the existing
-// `SettingKey` declarations — means the "what settings exist" answer lives in one place.
-//
-// Dynamic per-action keys (`action.<id>.option.<id>`) are intentionally not enumerated here; they
-// are scoped to their action and are not part of the global settings snapshot.
+// Every known setting in erased form, so snapshot/export/diagnostics can walk them without knowing
+// their types. Dynamic per-action keys (`action.<id>.option.<id>`) are not enumerated here.
 import Foundation
 
 public enum SettingsCatalog {
@@ -40,6 +36,8 @@ public enum SettingsCatalog {
             SettingKey.startAtLogin.erased,
             SettingKey.completionCopyToClipboard.erased,
             SettingKey.captureTextAutoCopy.erased,
+            SettingKey.playCopySound.erased,
+            SettingKey.copySoundName.erased,
 
             // Updates
             SettingKey.automaticallyChecksForUpdates.erased,
@@ -50,7 +48,6 @@ public enum SettingsCatalog {
             // Popup presentation
             SettingKey.showSearchAllActions.erased,
             SettingKey.popupPageSize.erased,
-            SettingKey.popupFitToWidth.erased,
             SettingKey.popupBarWidth.erased,
             SettingKey.popupScale.erased,
             SettingKey.popupTheme.erased,

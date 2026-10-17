@@ -2,8 +2,7 @@ import XCTest
 @testable import Core
 @testable import OpenClip
 
-/// In-memory option store injected into the factory so the JS option override test never
-/// touches UserDefaults.standard. All access happens on the MainActor.
+/// In-memory option store so tests never touch UserDefaults.standard.
 fileprivate final class MemoryOptionStore: ActionOptionReading, ActionOptionWriting, @unchecked Sendable {
     private var values: [String: String] = [:]
 
@@ -68,7 +67,6 @@ final class GoldenExtensionPlatformTests: XCTestCase {
     
     @MainActor
     func testAllFourRuntimesLoadAndExecuteInRegistry() async throws {
-        // 1. Synthetic JS Extension
         let jsBundle = tempDir.appendingPathComponent("JSExt.openclipext")
         try FileManager.default.createDirectory(at: jsBundle, withIntermediateDirectories: true)
         let jsManifest = """
@@ -101,7 +99,6 @@ final class GoldenExtensionPlatformTests: XCTestCase {
         """
         try jsCode.write(to: jsBundle.appendingPathComponent("main.js"), atomically: true, encoding: .utf8)
         
-        // 2. Synthetic AppleScript Extension
         let asBundle = tempDir.appendingPathComponent("AppleScriptExt.openclipext")
         try FileManager.default.createDirectory(at: asBundle, withIntermediateDirectories: true)
         let asManifest = """
@@ -123,7 +120,6 @@ final class GoldenExtensionPlatformTests: XCTestCase {
         """
         try asCode.write(to: asBundle.appendingPathComponent("script.applescript"), atomically: true, encoding: .utf8)
         
-        // 3. Synthetic Shell Extension
         let shBundle = tempDir.appendingPathComponent("ShellExt.openclipext")
         try FileManager.default.createDirectory(at: shBundle, withIntermediateDirectories: true)
         let shManifest = """
@@ -148,7 +144,6 @@ final class GoldenExtensionPlatformTests: XCTestCase {
         try shCode.write(to: shScriptURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shScriptURL.path)
         
-        // 4. Synthetic URL Extension
         let urlBundle = tempDir.appendingPathComponent("URLExt.openclipext")
         try FileManager.default.createDirectory(at: urlBundle, withIntermediateDirectories: true)
         let urlManifest = """
@@ -167,7 +162,6 @@ final class GoldenExtensionPlatformTests: XCTestCase {
         """
         try urlManifest.write(to: urlBundle.appendingPathComponent("openclip.json"), atomically: true, encoding: .utf8)
         
-        // --- End-to-End Loading ---
         await ExtensionManager.shared.loadExtensions(from: tempDir)
         let loadedActions = ExtensionManager.shared.loadedActions
         
@@ -190,12 +184,10 @@ final class GoldenExtensionPlatformTests: XCTestCase {
             return
         }
         
-        // --- Options Binding Verification ---
         XCTAssertEqual(jsAction.actionOptions.count, 1)
         XCTAssertEqual(jsAction.actionOptions.first?.identifier, "prefix")
         XCTAssertEqual(jsAction.actionOptions.first?.defaultValue, "JS_DEFAULT: ")
         
-        // Test JS Default Options Execution
         let sampleContext = ActionContext(selectedText: "SampleInput")
         let defaultJSResult = try await jsAction.perform(sampleContext)
         if case .text(let text) = defaultJSResult {
@@ -215,9 +207,7 @@ final class GoldenExtensionPlatformTests: XCTestCase {
             XCTFail("Expected .text result with custom option override, got \(customJSResult)")
         }
         
-        // --- Execution Verification for Other Runtimes ---
         
-        // AppleScript Execution
         let asResult = try await asAction.perform(sampleContext)
         if case .text(let text) = asResult {
             XCTAssertEqual(text, "AS:SampleInput")
@@ -225,7 +215,6 @@ final class GoldenExtensionPlatformTests: XCTestCase {
             XCTFail("Expected .text result for AppleScript action, got \(asResult)")
         }
         
-        // Shell Execution
         let shResult = try await shAction.perform(sampleContext)
         if case .text(let text) = shResult {
             XCTAssertEqual(text.trimmingCharacters(in: .whitespacesAndNewlines), "SH:SampleInput")
@@ -233,7 +222,6 @@ final class GoldenExtensionPlatformTests: XCTestCase {
             XCTFail("Expected .text result for Shell action, got \(shResult)")
         }
         
-        // URL Execution
         let urlResult = try await urlAction.perform(sampleContext)
         if case .openURL(let targetURL) = urlResult {
             XCTAssertEqual(targetURL.absoluteString, "https://example.com/search?q=SampleInput")
@@ -241,7 +229,6 @@ final class GoldenExtensionPlatformTests: XCTestCase {
             XCTFail("Expected .openURL result for URL action, got \(urlResult)")
         }
         
-        // --- Registry Registration & Filtering Verification ---
         let registry = ActionRegistry.shared
         XCTAssertTrue(registry.actions.contains(where: { $0.id == "com.golden.js.action" }))
         XCTAssertTrue(registry.actions.contains(where: { $0.id == "com.golden.applescript.action" }))
@@ -263,8 +250,7 @@ final class GoldenExtensionPlatformTests: XCTestCase {
         XCTAssertTrue(availableNonMatching.contains(where: { $0.id == "com.golden.shell.action" }))
         XCTAssertFalse(availableNonMatching.contains(where: { $0.id == "com.golden.url.action" }), "URL action with regex should be filtered out when regex doesn't match")
         
-        // Disabled action filtering via an isolated registry + memory store (no real preferences
-        // touched): same four actions on a fresh registry, one disabled in the store.
+        // Disabled actions are filtered via an isolated registry and memory store, not real preferences.
         let disabledStore = MemorySettingsStore()
         let isolatedRegistry = ActionRegistry(settingsStore: disabledStore)
         isolatedRegistry.register(builtIns: [jsAction, asAction, shAction, urlAction])
@@ -275,9 +261,7 @@ final class GoldenExtensionPlatformTests: XCTestCase {
         XCTAssertTrue(availableWithDisabled.contains(where: { $0.id == "com.golden.shell.action" }), "Enabled actions in the same registry remain available")
     }
 
-    /// Exit criterion: the removed `openclip.showContent`/`h()` canvas bridge surfaces a JS error
-    /// through the full load → factory → host pipeline (the extension loads fine, but calling the
-    /// removed bridge fails as a normal JS exception → error status).
+    /// The removed `openclip.showContent` bridge must surface as a JS error through the full load → host pipeline.
     @MainActor
     func testJSContentBridgeRemovedSurfacesErrorThroughPipeline() async throws {
         let jsBundle = tempDir.appendingPathComponent("JSContentExt.openclipext")

@@ -81,6 +81,17 @@ The **authoritative manifest / JS-bridge spec is `Extensions/AGENTS.md`** — re
 `Extensions/raw/` sits inside the catalog clone, so scaffolded extensions are committed to
 `openclip-extensions` — never to this repository.
 
+## Comments
+
+Default to no comment. Code and names say *what*; a comment earns its place only for a *why* the code cannot show: an invariant, a race or ordering constraint, a platform quirk, a non-obvious trade-off.
+
+- No change history ("was 0.18s", "previously…", "bumped to…"). Git records it; lasting rationale goes in `docs/`.
+- No restating the name or type (`/// The settings store.` on `settingsStore`). One short line at most; skip it when the name is enough.
+- Don't copy a note across sibling declarations ("Lifecycle mirrors `x`", "Internal for tests"). Say it once on the first, or in a type-level doc comment.
+- Benchmark derivations and long rationale belong in `docs/`; leave a one-line pointer.
+- Keep `// MARK:`, file headers, and real `///` API docs on public/cross-module surface (what it does, parameters that aren't obvious, failure behavior).
+- Comment-only changes must pass `./scripts/verify_comment_only.sh` (non-comment lines identical to the base) and `./scripts/lint_comments.sh`.
+
 ## Tests
  
 - `Tests/OpenClipTests/` is one flat target. Test classes that touch app singletons call `TestIsolation.reset()` in `setUp()`; store-backed tests use `MemorySettingsStore` rather than the real preferences domain.

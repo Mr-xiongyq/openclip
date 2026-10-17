@@ -17,9 +17,13 @@ struct GeneralTab: View {
     @State private var showMenuBarIcon: Bool
     @State private var isMouseHoldEnabled: Bool
     @Setting(SettingKey.captureTextAutoCopy) private var captureTextAutoCopy
+    @Setting(SettingKey.playCopySound) private var playCopySound
+    @Setting(SettingKey.copySoundName) private var copySoundName
     @State private var fileSaveLocation: String
     @ObservedObject private var launchManager = LaunchAtLoginManager.shared
     @ObservedObject private var permissionManager = PermissionManager.shared
+    @ObservedObject private var router = SettingsRouter.shared
+    @State private var highlightedControlID: String?
 
     /// Initializes preference state from the shared settings store.
     init() {
@@ -30,17 +34,20 @@ struct GeneralTab: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 20) {
                 // Everything that decides how the popup and palette are summoned
                 SettingsCard("Selection & Mouse") {
                     SettingsToggleRow(
                         title: "Appear Automatically",
-                        subtitle: "Show the popup as soon as text is selected.",
+                        info: "Show the popup as soon as text is selected.",
                         systemImage: "cursorarrow",
                         plainIcon: true,
                         isOn: $isAppEnabled
                     )
+                    .id(GeneralSearchTarget.appearAutomatically)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.appearAutomatically))
                     .onChange(of: isAppEnabled) { _, newValue in
                         DefaultSettingsStore.shared.set(.isAppEnabled, value: newValue)
                         NotificationCenter.default.post(name: Notification.Name("OpenClipEnabledStateChanged"), object: newValue)
@@ -50,11 +57,13 @@ struct GeneralTab: View {
 
                     SettingsToggleRow(
                         title: "Hold Mouse to Trigger",
-                        subtitle: "Press and hold without moving the mouse to summon the popup.",
+                        info: "Press and hold without moving the mouse to summon the popup.",
                         systemImage: "hand.tap",
                         plainIcon: true,
                         isOn: $isMouseHoldEnabled
                     )
+                    .id(GeneralSearchTarget.holdMouseToTrigger)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.holdMouseToTrigger))
                     .onChange(of: isMouseHoldEnabled) { _, newValue in
                         DefaultSettingsStore.shared.set(.isMouseHoldEnabled, value: newValue)
                     }
@@ -66,24 +75,28 @@ struct GeneralTab: View {
                 SettingsCard("Shortcuts") {
                     SettingsRow(
                         title: "Command Palette",
-                        subtitle: "Open the search palette for selected text or clipboard.",
+                        info: "Open the search palette for selected text or clipboard.",
                         systemImage: "command",
                         plainIcon: true
                     ) {
                         Shortcut(for: .togglePopup)
                     }
+                    .id(GeneralSearchTarget.commandPalette)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.commandPalette))
 
                     SettingsDivider()
 
                     VStack(alignment: .leading, spacing: 0) {
                         SettingsRow(
                             title: "Capture Text",
-                            subtitle: "Select a screen region to extract text.",
+                            info: "Select a screen region to extract text.",
                             systemImage: "viewfinder",
                             plainIcon: true
                         ) {
                             Shortcut(for: .captureText)
                         }
+                        .id(GeneralSearchTarget.captureText)
+                        .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.captureText))
 
                         Toggle("Copy to Clipboard Automatically", isOn: $captureTextAutoCopy)
                             .toggleStyle(.checkbox)
@@ -94,6 +107,8 @@ struct GeneralTab: View {
                             .padding(.leading, SettingsDesignTokens.dividerInsetLeading + 4)
                             .padding(.trailing, SettingsDesignTokens.sectionCardPaddingH)
                             .padding(.bottom, SettingsDesignTokens.sectionCardPaddingV)
+                            .id(GeneralSearchTarget.captureTextAutoCopy)
+                            .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.captureTextAutoCopy))
                     }
                 }
 
@@ -132,15 +147,49 @@ struct GeneralTab: View {
                             .contentShape(Capsule())
                         }
                     }
+                    .id(GeneralSearchTarget.saveLocation)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.saveLocation))
                 }
 
                 SettingsCard("App") {
+                    SettingsRow(
+                        title: "Play Sound on Copy",
+                        systemImage: "speaker.wave.2",
+                        plainIcon: true
+                    ) {
+                        HStack(spacing: 10) {
+                            Picker("Sound", selection: $copySoundName) {
+                                ForEach(CopySound.allCases) { sound in
+                                    Text(LocalizedStringKey(sound.title)).tag(sound.rawValue)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .fixedSize()
+                            .disabled(!playCopySound)
+                            .onChange(of: copySoundName) { _, newValue in
+                                CopySound(stored: newValue).play()
+                            }
+
+                            Toggle("", isOn: $playCopySound)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                                .accessibilityLabel("Play Sound on Copy")
+                        }
+                    }
+                    .id(GeneralSearchTarget.playCopySound)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.playCopySound))
+
+                    SettingsDivider()
+
                     SettingsToggleRow(
                         title: "Show Menu Bar Icon",
                         systemImage: "menubar.rectangle",
                         plainIcon: true,
                         isOn: $showMenuBarIcon
                     )
+                    .id(GeneralSearchTarget.showMenuBarIcon)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.showMenuBarIcon))
                     .onChange(of: showMenuBarIcon) { _, newValue in
                         DefaultSettingsStore.shared.set(.showMenuBarIcon, value: newValue)
                         NotificationCenter.default.post(
@@ -157,12 +206,14 @@ struct GeneralTab: View {
                         plainIcon: true,
                         isOn: $launchManager.isEnabled
                     )
+                    .id(GeneralSearchTarget.startAtLogin)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.startAtLogin))
 
                     if launchManager.requiresApproval {
                         SettingsDivider()
                         SettingsRow(
                             title: "Approval Required",
-                            subtitle: "Enable OpenClip under System Settings > General > Login Items & Extensions.",
+                            info: "Enable OpenClip under System Settings > General > Login Items & Extensions.",
                             systemImage: "exclamationmark.triangle.fill",
                             plainIcon: true
                         ) {
@@ -183,7 +234,7 @@ struct GeneralTab: View {
                 SettingsCard("Permissions") {
                     SettingsRow(
                         title: "Accessibility Access",
-                        subtitle: "Required to read the selected text.",
+                        info: "Required to read the selected text.",
                         systemImage: "lock.shield",
                         plainIcon: true
                     ) {
@@ -209,17 +260,72 @@ struct GeneralTab: View {
                             .contentShape(Capsule())
                         }
                     }
+                    .id(GeneralSearchTarget.accessibilityAccess)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.accessibilityAccess))
+
+                    SettingsDivider()
+
+                    SettingsRow(
+                        title: "Screen Recording Access",
+                        info: "Required for Capture Text. Restart OpenClip after allowing it.",
+                        systemImage: "rectangle.dashed.badge.record",
+                        plainIcon: true
+                    ) {
+                        HStack(spacing: 8) {
+                            Image(systemName: permissionManager.isScreenRecordingGranted
+                                  ? "checkmark.circle.fill"
+                                  : "exclamationmark.triangle.fill")
+                                .font(.callout)
+                                .foregroundStyle(permissionManager.isScreenRecordingGranted ? Color.green : Color.orange)
+                                .accessibilityLabel(permissionManager.isScreenRecordingGranted
+                                                    ? String(localized: "Granted")
+                                                    : String(localized: "Access Required"))
+
+                            Button(String(localized: "Open Settings")) {
+                                permissionManager.requestScreenRecordingPermission()
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundStyle(SettingsDesignTokens.primaryText)
+                            .padding(.horizontal, 10)
+                            .frame(height: 24)
+                            .settingsGlassCapsule()
+                            .contentShape(Capsule())
+                        }
+                    }
+                    .id(GeneralSearchTarget.screenRecordingAccess)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.screenRecordingAccess))
                 }
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
+            .scrollIndicators(.hidden)
+            .task(id: router.generalRevealRequest?.id) {
+                guard let request = router.generalRevealRequest else { return }
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    proxy.scrollTo(request.targetID, anchor: .center)
+                }
+                highlightedControlID = request.targetID
+                do {
+                    try await Task.sleep(for: .seconds(1.5))
+                } catch {
+                    if router.generalRevealRequest?.id == request.id {
+                        highlightedControlID = nil
+                        router.clearGeneralRevealRequest(request.id)
+                    }
+                    return
+                }
+                guard !Task.isCancelled else { return }
+                highlightedControlID = nil
+                router.clearGeneralRevealRequest(request.id)
+            }
+            .onAppear {
+                permissionManager.startMonitoring()
+                launchManager.syncStatus()
+            }
+            .onDisappear { permissionManager.stopMonitoring() }
         }
-        .scrollIndicators(.hidden)
-        .onAppear {
-            permissionManager.startMonitoring()
-            launchManager.syncStatus()
-        }
-        .onDisappear { permissionManager.stopMonitoring() }
     }
 
     private var saveLocationSubtitleText: Text {
@@ -248,5 +354,24 @@ struct GeneralTab: View {
             fileSaveLocation = chosenURL.path
             DefaultSettingsStore.shared.set(.fileSaveLocation, value: chosenURL.path)
         }
+    }
+}
+
+private struct GeneralSearchHighlight: ViewModifier {
+    let isHighlighted: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                if isHighlighted {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.13))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(Color.accentColor.opacity(0.32), lineWidth: 1)
+                        }
+                }
+            }
+            .animation(.easeInOut(duration: 0.18), value: isHighlighted)
     }
 }

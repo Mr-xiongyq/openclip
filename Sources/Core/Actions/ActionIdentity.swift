@@ -1,10 +1,7 @@
 // ActionIdentity.swift
 // OpenClip
 //
-// Canonical "loaded by" classification for an action, derived from its chrome metadata. Every UI
-// surface (bar, palette, Preferences, onboarding) previously re-wrote `if case .X = action.chrome.*`
-// heuristics; this is the single home so classification can't drift between surfaces. Pure Core —
-// no AppKit/SwiftUI, no `switch action.id` string matching.
+// Canonical action classification, derived from chrome metadata so every UI surface agrees.
 import Foundation
 
 public enum ActionIdentity {
@@ -14,8 +11,7 @@ public enum ActionIdentity {
         return false
     }
 
-    /// True for actions shipped by an installed extension package (matches on either the chrome
-    /// source or the badge — both legacy carriers of the same fact).
+    /// True for actions shipped by an installed extension (chrome source or badge).
     public static func isExtension(_ action: any Action) -> Bool {
         if case .extensionPkg = action.chrome.source { return true }
         if case .extensionPkg = action.chrome.badge { return true }
@@ -40,15 +36,12 @@ public enum ActionIdentity {
         return false
     }
 
-    /// True for the inline word-completion pseudo-action. It is registered in the catalog only so
-    /// the popup can render its suggestions, and must never surface as a bar row or palette entry.
+    /// The word-completion pseudo-action exists only to feed popup suggestions; never a row or palette entry.
     public static func isCompletionPseudoAction(_ action: any Action) -> Bool {
         action.chrome.popupBehavior == .provideCompletions
     }
 
-    /// Whether an action is eligible to be placed inside a custom action group.
-    /// Ineligible actions include AI presets, AI launchers, word completion pseudo-actions,
-    /// and other action groups (no nested groups).
+    /// Ineligible: AI presets/launchers, the completion pseudo-action, and other groups (no nesting).
     public static func isEligibleForGrouping(_ action: any Action) -> Bool {
         !isAIPreset(action) &&
         !action.chrome.launchesAI &&
@@ -60,9 +53,7 @@ public enum ActionIdentity {
         !action.id.hasPrefix("vgroup.")
     }
 
-    /// Whether a user can assign an alias and a per-action hotkey. Only leaf actions that
-    /// actually run: groups, the AI Tools launcher, and the word-completion pseudo-action
-    /// are containers or non-palette rows.
+    /// Leaf actions that actually run; containers and the AI Tools launcher are excluded.
     public static func isBindable(_ action: any Action) -> Bool {
         !action.chrome.launchesAI &&
         !isCompletionPseudoAction(action) &&
@@ -70,9 +61,7 @@ public enum ActionIdentity {
         action.chrome.rowStyle != .actionGroup
     }
 
-    /// Whether an action can be duplicated by the user.
-    /// Custom actions and installed extension actions can be duplicated.
-    /// Builtins, AI presets, AI launchers, and word completion pseudo-actions cannot.
+    /// Custom and extension actions can be duplicated; builtins and AI/completion entries cannot.
     public static func canDuplicate(_ action: any Action) -> Bool {
         if isAIPreset(action) || action.chrome.launchesAI || isCompletionPseudoAction(action) {
             return false

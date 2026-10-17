@@ -1,21 +1,14 @@
 // PreferencesView.swift
 // OpenClip
 //
-// The Settings window: a modern Liquid Glass window layout:
-// - Near-black window background with native traffic lights top-left over the sidebar.
-// - Fixed-width sidebar sitting directly on the window background (no card/border/shadow).
-// - Capsule search field below traffic lights.
-// - Colored rounded-square icon tiles for all pages.
-// - Subtle translucent row selection highlight (not accent color).
-// - Inset rounded detail card with back/forward glass capsule, page title, and trailing pill actions.
+// The Settings window: Liquid Glass layout with a fixed-width sidebar on the window background and an inset rounded detail card.
 
 import SwiftUI
 import Combine
 import Core
 import KeyboardShortcuts
 
-/// The public vocabulary for opening the window on a page (the status item, the notification
-/// other parts of the app post). Maps onto the router's sidebar pages.
+/// Opens the window on a page; maps onto the router's sidebar pages.
 public enum PreferenceTab: String, CaseIterable, Hashable, Sendable {
     case general = "General"
     case customize = "Customize"
@@ -31,12 +24,10 @@ public enum PreferenceTab: String, CaseIterable, Hashable, Sendable {
         LocalizedStringKey(rawValue)
     }
 
-    /// The window's title for this pane.
     public var windowTitle: String {
         page.staticTitle ?? String(localized: String.LocalizationValue(rawValue))
     }
 
-    /// The sidebar page this tab names.
     public var page: SettingsPage {
         switch self {
         case .general: return .general
@@ -52,28 +43,23 @@ public enum PreferenceTab: String, CaseIterable, Hashable, Sendable {
 
 @MainActor
 public struct PreferencesView: View {
-    /// The Actions list measure.
     private static let customizeListMaxWidth: CGFloat = SettingsLayout.contentMaxWidth
 
     @Setting(SettingKey.disabledActionIDs) private var disabledActionIDs
     @Setting(SettingKey.disabledPackages) private var disabledPackages
-    /// The Customize list's selection, kept here so the toolbar's New Group can seed a group with it.
+    /// Lets the toolbar's New Group seed a group with the selection.
     @State private var selectedRowIDs: Set<String> = []
-    /// The Customize list's search text.
     @State private var customizeQuery = ""
-    @State private var sidebarQuery = ""
-    /// The folder, manifest and README of the extension whose page is on screen.
     @State private var packageDetails: ExtensionPackageDetails?
-    /// Bumped when extensions change.
     @State private var packageReloadToken = 0
-    /// Bumped when system settings change.
     @State private var systemColorsToken = 0
-    @State private var isStoreSearchExpanded = false
-    @FocusState private var isStoreSearchFocused: Bool
+    @State private var isSearchExpanded = false
+    @FocusState private var isSearchFocused: Bool
     @StateObject private var storeViewModel = ExtensionsStoreViewModel()
     @ObservedObject private var coordinator = ActionCoordinator.shared
     @ObservedObject private var customizationManager = ActionCustomizationManager.shared
     @ObservedObject private var aiManager = AIServiceManager.shared
+    @ObservedObject private var bindingStore = ActionBindingStore.shared
     @ObservedObject private var router = SettingsRouter.shared
     @ObservedObject private var toolbarModel: PreferencesToolbarModel
 
@@ -179,6 +165,8 @@ public struct PreferencesView: View {
         }
         .onChange(of: customizeQuery) { _, query in
             guard toolbarModel.page == .customize || toolbarModel.page == .shortcuts else { return }
+            // Filtered-out rows must not stay in a new group's selection.
+            selectedRowIDs.removeAll()
             toolbarModel.searchQuery = query
         }
         .onChange(of: storeViewModel.selectedSort) { _, sort in
@@ -398,70 +386,158 @@ public struct PreferencesView: View {
         SettingsPage.systemPages.map { SettingsSidebarRow(systemPage: $0) }
     }
 
-    private var secondGroupRows: [SettingsSidebarRow] {
-        var rows: [SettingsSidebarRow] = [
-            SettingsSidebarRow(
-                page: .ai,
-                title: SettingsPage.ai.staticTitle ?? "AI",
-                keywords: SettingsPage.ai.searchKeywords,
-                tile: .bare(.symbol(SettingsPage.ai.systemImage)),
-                isDisabled: !aiManager.isAIEnabled
+    private var preferencesSearchEntries: [PreferencesSearchEntry] {
+        var entries = SettingsPage.systemPages.map { page in
+            PreferencesSearchEntry.page(
+                id: "page:\(page.id)",
+                title: page.staticTitle ?? page.id,
+                breadcrumb: String(localized: "Settings"),
+                aliases: [englishTitle(for: page)],
+                path: [page]
             )
+        }
+
+        let generalControls: [(String, String)] = [
+            (GeneralSearchTarget.appearAutomatically, "Appear Automatically"),
+            (GeneralSearchTarget.holdMouseToTrigger, "Hold Mouse to Trigger"),
+            (GeneralSearchTarget.commandPalette, "Command Palette"),
+            (GeneralSearchTarget.captureText, "Capture Text"),
+            (GeneralSearchTarget.captureTextAutoCopy, "Copy to Clipboard Automatically"),
+            (GeneralSearchTarget.saveLocation, "Save Location"),
+            (GeneralSearchTarget.playCopySound, "Play Sound on Copy"),
+            (GeneralSearchTarget.showMenuBarIcon, "Show Menu Bar Icon"),
+            (GeneralSearchTarget.startAtLogin, "Start at Login"),
+            (GeneralSearchTarget.accessibilityAccess, "Accessibility Access"),
+            (GeneralSearchTarget.screenRecordingAccess, "Screen Recording Access")
         ]
+        entries.append(contentsOf: generalControls.map { control in
+            .generalControl(
+                id: control.0,
+                title: String(localized: String.LocalizationValue(control.1)),
+                aliases: [control.1]
+            )
+        })
 
-        for action in coordinator.actions where ActionIdentity.isBuiltin(action)
-            && !action.chrome.launchesAI
-            && action.chrome.rowStyle != .actionGroup {
-            let presentation = customizationManager.presented(action, surface: .table)
-            let isActionDisabled = disabledActionIDs.contains(action.id)
-            rows.append(SettingsSidebarRow(
-                page: .builtinAction(id: action.id),
-                title: presentation.title,
-                keywords: action.keywords + [action.id],
-                tile: .bare(SettingsHeroHeader.glyph(for: action, presented: presentation)),
-                isDisabled: isActionDisabled
+        let actions = coordinator.actions
+        let packageInfos = InstalledExtensionInfo.all(from: actions)
+        let packageNames = Dictionary(uniqueKeysWithValues: packageInfos.map { ($0.packageID, $0.name) })
+        let groupIDs = Set(coordinator.actionGroupDefs.map(\.id))
+        var seenPresetIDs = Set<String>()
+
+        for action in actions {
+            if ActionIdentity.isAIPreset(action) {
+                if let preset = aiManager.preset(forActionID: action.id) {
+                    seenPresetIDs.insert(preset.id)
+                    appendPreset(preset, to: &entries)
+                }
+                continue
+            }
+            if action.chrome.launchesAI { continue }
+            if groupIDs.contains(action.id), let group = coordinator.actionGroupDefs.first(where: { $0.id == action.id }) {
+                let alias = bindingStore.alias(for: action.id)
+                entries.append(.page(
+                    id: "custom-group:\(group.id)",
+                    title: customizationManager.presented(action, surface: .table).title,
+                    breadcrumb: String(localized: "Actions"),
+                    aliases: [alias].compactMap { $0 },
+                    path: [.customize, .action(id: action.id)],
+                    section: .actions
+                ))
+                continue
+            }
+
+            let packageID = ActionIdentity.extensionPackageID(of: action)
+            let packageName = packageID.flatMap { packageNames[$0] }
+            if case .extensionPkg = action.chrome.source,
+               action.chrome.popupBehavior == .showSubActions {
+                guard let packageID else { continue }
+                entries.append(.page(
+                    id: "extension-package:\(packageID)",
+                    title: packageName ?? action.title,
+                    breadcrumb: String(localized: "Extensions"),
+                    aliases: [bindingStore.alias(for: action.id)].compactMap { $0 },
+                    path: SettingsDestination.path(forPackage: packageID),
+                    section: .actions
+                ))
+                continue
+            }
+            if action is GatedExtensionAction, let packageID {
+                entries.append(.page(
+                    id: "extension-package:\(packageID)",
+                    title: packageName ?? action.title,
+                    breadcrumb: String(localized: "Extensions"),
+                    aliases: [bindingStore.alias(for: action.id)].compactMap { $0 },
+                    path: SettingsDestination.path(forPackage: packageID),
+                    section: .actions
+                ))
+                continue
+            }
+
+            let presentedTitle = customizationManager.presented(action, surface: .table).title
+            let alias = bindingStore.alias(for: action.id)
+            entries.append(.page(
+                id: "action:\(action.id)",
+                title: presentedTitle,
+                breadcrumb: packageName.map { "\(String(localized: "Extensions")) › \($0)" }
+                    ?? String(localized: "Actions"),
+                aliases: [alias].compactMap { $0 },
+                path: SettingsDestination.path(for: action),
+                section: .actions
             ))
         }
 
-        for info in InstalledExtensionInfo.all(from: coordinator.actions) {
-            var keywords = info.commands.map { customizationManager.presented($0, surface: .table).title }
-            keywords.append(contentsOf: info.commands.flatMap(\.keywords))
-            keywords.append(info.packageID)
-            let isPkgDisabled = disabledPackages.contains(info.packageID)
-                || info.gatedReason != nil
-                || (!info.commands.isEmpty && info.commands.allSatisfy { disabledActionIDs.contains($0.id) })
-            rows.append(SettingsSidebarRow(
-                page: .extensionPackage(id: info.packageID),
-                title: info.name,
-                keywords: keywords,
-                tile: .bare(Self.plainGlyph(info.icon)),
-                isDisabled: isPkgDisabled
-            ))
+        for preset in aiManager.presets where !seenPresetIDs.contains(preset.id) {
+            appendPreset(preset, to: &entries)
         }
-
-        let customTitles = coordinator.actions
-            .filter { SettingsDestination.isCustomAction($0) }
-            .map { customizationManager.presented($0, surface: .table).title }
-        rows.append(SettingsSidebarRow(
-            page: .customActions,
-            title: SettingsPage.customActions.staticTitle ?? "",
-            keywords: SettingsPage.customActions.searchKeywords + customTitles,
-            tile: .bare(.symbol(SettingsPage.customActions.systemImage))
-        ))
-
-        return SettingsSidebarOrder.sorted(rows)
+        return entries
     }
 
-    private static func plainGlyph(_ icon: ActionIcon) -> ActionIcon {
-        if case .text(let text) = icon, text.count > 2 {
-            return .symbol("puzzlepiece.extension")
+    private func appendPreset(_ preset: AIActionPreset, to entries: inout [PreferencesSearchEntry]) {
+        let actionID = "ai.preset.\(preset.id)"
+        entries.append(.page(
+            id: "ai-preset:\(preset.id)",
+            title: customizationManager.displayTitle(for: AIAction(presetID: preset.id, title: preset.title)),
+            breadcrumb: String(localized: "AI"),
+            aliases: [bindingStore.alias(for: actionID)].compactMap { $0 },
+            path: [.ai, .aiPreset(id: preset.id)],
+            section: .actions
+        ))
+    }
+
+    private func englishTitle(for page: SettingsPage) -> String {
+        switch page {
+        case .general: return "General"
+        case .appearance: return "Customize"
+        case .customize: return "Actions"
+        case .ai: return "AI"
+        case .appRules: return "App Rules"
+        case .store: return "Store"
+        case .about: return "About"
+        default: return page.id
         }
-        return icon
     }
 
     private var sidebarSelection: Binding<SettingsPage?> {
         Binding(
-            get: { router.sidebarPage },
+            get: {
+                switch router.sidebarPage {
+                case .general:
+                    return .general
+                case .appearance:
+                    return .appearance
+                case .customize, .shortcuts, .extensionPackage, .builtinAction, .customActions,
+                     .action, .newCustomAction, .newGroup, .iconPicker:
+                    return .customize
+                case .ai, .aiPreset, .aiNewPreset:
+                    return .ai
+                case .appRules, .addApplication:
+                    return .appRules
+                case .store:
+                    return .store
+                case .about:
+                    return .about
+                }
+            },
             set: { newValue in
                 if let newValue { router.select(newValue) }
             }
@@ -471,11 +547,23 @@ public struct PreferencesView: View {
     private var sidebar: some View {
         SettingsSidebar(
             selection: sidebarSelection,
-            query: $sidebarQuery,
             systemRows: systemRows,
-            extensionRows: secondGroupRows
+            searchEntries: preferencesSearchEntries,
+            onOpenSearchResult: openSearchResult,
+            onSearchStore: { query in
+                storeViewModel.searchQuery = query
+                router.select(.store)
+                storeViewModel.queryDidChange()
+            }
         )
         .id(systemColorsToken)
+    }
+
+    private func openSearchResult(_ result: PreferencesSearchEntry) {
+        switch result.target {
+        case .page(let path): router.show(path: path)
+        case .generalControl(let id): router.revealGeneralControl(id)
+        }
     }
 
     // MARK: - Detail Card
@@ -516,7 +604,6 @@ public struct PreferencesView: View {
 
     private var detailTopBar: some View {
         HStack(spacing: 12) {
-            // Glass capsule with < | >
             HStack(spacing: 0) {
                 Button {
                     router.goBack()
@@ -550,7 +637,6 @@ public struct PreferencesView: View {
             }
             .settingsGlassCapsule()
 
-            // Current sub-page title next to chevrons when drilled in
             if router.path.count > 1 {
                 Text(title(for: router.currentPage))
                     .font(.system(size: 15, weight: .semibold))
@@ -637,7 +723,17 @@ public struct PreferencesView: View {
             }
 
             if router.currentPage == .store {
-                storeSearchField
+                searchField(
+                    text: $storeViewModel.searchQuery,
+                    isLoading: storeViewModel.isLoading,
+                    placeholder: String(localized: "Search extensions..."),
+                    help: String(localized: "Search Extensions"),
+                    onSubmit: {
+                        Task {
+                            await storeViewModel.loadAll(limit: Constants.storeFullCatalogLimit, keepPrevious: true)
+                        }
+                    }
+                )
 
                 Button {
                     Task { await storeViewModel.refreshCatalog() }
@@ -680,6 +776,14 @@ public struct PreferencesView: View {
                 .buttonStyle(.plain)
             }
 
+            if router.currentPage == .customize || router.currentPage == .shortcuts {
+                searchField(
+                    text: $customizeQuery,
+                    placeholder: String(localized: "Search actions..."),
+                    help: String(localized: "Search Actions")
+                )
+            }
+
             if !toolbarModel.pageMenuItems.isEmpty {
                 Menu {
                     ForEach(toolbarModel.pageMenuItems) { item in
@@ -711,10 +815,16 @@ public struct PreferencesView: View {
     }
 
     @ViewBuilder
-    private var storeSearchField: some View {
-        if isStoreSearchExpanded || !storeViewModel.searchQuery.isEmpty {
+    private func searchField(
+        text: Binding<String>,
+        isLoading: Bool = false,
+        placeholder: String,
+        help: String,
+        onSubmit: (() -> Void)? = nil
+    ) -> some View {
+        if isSearchExpanded || !text.wrappedValue.isEmpty {
             HStack(spacing: 6) {
-                if storeViewModel.isLoading && !storeViewModel.searchQuery.isEmpty {
+                if isLoading && !text.wrappedValue.isEmpty {
                     ProgressView()
                         .controlSize(.mini)
                         .padding(.leading, 8)
@@ -725,32 +835,28 @@ public struct PreferencesView: View {
                         .padding(.leading, 8)
                 }
 
-                TextField(String(localized: "Search extensions..."), text: $storeViewModel.searchQuery)
+                TextField(placeholder, text: text)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
                     .foregroundStyle(SettingsDesignTokens.primaryText)
-                    .focused($isStoreSearchFocused)
-                    .onSubmit {
-                        Task {
-                            await storeViewModel.loadAll(limit: Constants.storeFullCatalogLimit, keepPrevious: true)
-                        }
-                    }
+                    .focused($isSearchFocused)
+                    .onSubmit { onSubmit?() }
                     .onKeyPress(.escape) {
-                        if !storeViewModel.searchQuery.isEmpty {
-                            storeViewModel.searchQuery = ""
+                        if !text.wrappedValue.isEmpty {
+                            text.wrappedValue = ""
                             return .handled
                         } else {
                             withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
-                                isStoreSearchExpanded = false
-                                isStoreSearchFocused = false
+                                isSearchExpanded = false
+                                isSearchFocused = false
                             }
                             return .handled
                         }
                     }
 
-                if !storeViewModel.searchQuery.isEmpty {
+                if !text.wrappedValue.isEmpty {
                     Button {
-                        storeViewModel.searchQuery = ""
+                        text.wrappedValue = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 11))
@@ -761,8 +867,8 @@ public struct PreferencesView: View {
                 } else {
                     Button {
                         withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
-                            isStoreSearchExpanded = false
-                            isStoreSearchFocused = false
+                            isSearchExpanded = false
+                            isSearchFocused = false
                         }
                     } label: {
                         Image(systemName: "xmark")
@@ -775,17 +881,16 @@ public struct PreferencesView: View {
             }
             .frame(width: 180, height: 28)
             .settingsGlassCapsule(interactive: false)
-            // The TextField only exists once this branch renders, so the expand button cannot
-            // focus it in the same transaction — take focus here instead.
+            // TextField only exists once this branch renders, so focus it here, not in the expand button.
             .onAppear {
-                if isStoreSearchExpanded {
-                    isStoreSearchFocused = true
+                if isSearchExpanded {
+                    isSearchFocused = true
                 }
             }
-            .onChange(of: isStoreSearchFocused) { _, focused in
-                if !focused && storeViewModel.searchQuery.isEmpty {
+            .onChange(of: isSearchFocused) { _, focused in
+                if !focused && text.wrappedValue.isEmpty {
                     withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
-                        isStoreSearchExpanded = false
+                        isSearchExpanded = false
                     }
                 }
             }
@@ -796,7 +901,7 @@ public struct PreferencesView: View {
         } else {
             Button {
                 withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
-                    isStoreSearchExpanded = true
+                    isSearchExpanded = true
                 }
             } label: {
                 Image(systemName: "magnifyingglass")
@@ -807,7 +912,7 @@ public struct PreferencesView: View {
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .help(String(localized: "Search Extensions"))
+            .help(help)
             .transition(.opacity)
         }
     }
@@ -866,7 +971,7 @@ public struct PreferencesView: View {
                let singleAction = info.commands.first {
                 ActionEditorPage(
                     action: singleAction,
-                    isSidebarPage: true,
+                    isSidebarPage: false,
                     disabledActionIDs: $disabledActionIDs,
                     disabledPackages: $disabledPackages
                 )
@@ -883,7 +988,7 @@ public struct PreferencesView: View {
             if let action = coordinator.actions.first(where: { $0.id == id }) {
                 ActionEditorPage(
                     action: action,
-                    isSidebarPage: true,
+                    isSidebarPage: false,
                     disabledActionIDs: $disabledActionIDs,
                     disabledPackages: $disabledPackages
                 )

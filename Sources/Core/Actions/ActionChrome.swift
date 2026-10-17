@@ -1,8 +1,7 @@
 // ActionChrome.swift
 // OpenClip
 //
-// Defines UI policy metadata structures through the Chrome Door, including badge types, row styles, popup behaviors, and action sources.
-// Enables data-driven UI views to inspect action presentation rules without runtime type checking or string matching.
+// UI policy metadata for actions (badge, row style, popup behavior, source), so views read presentation rules without type checks or string matching.
 import Foundation
 
 public struct ActionChrome: Codable, Sendable, Equatable {
@@ -99,9 +98,7 @@ public struct ActionChrome: Codable, Sendable, Equatable {
         case builtin
         case custom
         case extensionPkg(packageID: String)
-        /// AI preset action (a row in AIServiceManager's preset list). Reachable through the
-        /// action-search palette and Preferences → Actions, never through the popup bar
-        /// (the reorderable `builtin.aiTools` action is the bar's entry point to AI).
+        /// AI preset row. Reachable from the search palette and Preferences, never the popup bar (`builtin.aiTools` is its entry point).
         case ai
 
         private enum CodingKeys: String, CodingKey {
@@ -181,22 +178,16 @@ public struct ActionChrome: Codable, Sendable, Equatable {
     /// True when the action reads or mutates the real text selection (e.g. Copy/Cut) and is
     /// therefore unsafe when the text came from the clipboard rather than a live selection.
     public let requiresLiveSelection: Bool
-    /// True when the action is an AI-mode launcher (the "AI Tools" bar entry). The popup bar
-    /// routes its click into AI mode instead of `perform`, and the search palette excludes it
-    /// (AI presets are already searchable there).
+    /// AI-mode launcher: clicks enter AI mode instead of `perform`, and the search palette excludes it.
     public let launchesAI: Bool
-    /// True when the action is slow (e.g. an AppleScript that activates an app) and the popup
-    /// should close immediately on click with a spinner toast until the result lands.
+    /// Slow action: the popup closes on click and a spinner toast shows until the result lands.
     public let showsLoading: Bool
-    /// The loading toast's text when `showsLoading` (e.g. "Connecting to Music…"). When nil the
-    /// presentation layer falls back to its default ("Opening <title>…").
+    /// Loading toast text when `showsLoading`; nil falls back to "Opening <title>…".
     public let loadingMessage: String?
-    /// True when the action produces an inline result preview directly in the popup bar (e.g. Calculate
-    /// or synchronous JavaScript inline extensions) rather than performing on click.
+    /// Shows an inline result preview in the popup bar instead of performing on click.
     public let isInlineResult: Bool
-    /// The kind of uncommitted result the action produces (.text, .file, .none, .dynamic).
     public let outputKind: ActionOutputKind
-    /// The author-recommended delivery for uncommitted results (.preview, .paste, .copy, .pasteOrCopy, .open, .save).
+    /// Author-recommended delivery for uncommitted results.
     public let recommendedResult: ActionResultDeliveryMode?
 
     public init(

@@ -2,16 +2,12 @@
 // OpenClip
 //
 // Where an action's settings live in the Settings window, as a router path. Every surface that
-// points at an action — a double-click on the Customize list, a command on an extension's page,
-// a name in the Shortcuts table, a configure request from the popup — asks here, so the answer
-// is the same everywhere and the sidebar always highlights the page an action belongs to.
+// points at an action asks here, so the answer is the same everywhere.
 
 import Core
 
 enum SettingsDestination {
-    /// True for the user's own actions: the ones created in Settings (Open URL, Text Snippet,
-    /// Shell Script), whether they load from the settings store or from the single-action manifest
-    /// package the app writes for them.
+    /// True for user-created actions (Open URL, Text Snippet, Shell Script).
     static func isCustomAction(_ action: any Action) -> Bool {
         guard action.chrome.rowStyle != .actionGroup else { return false }
         if case .custom = action.chrome.source { return true }
@@ -23,13 +19,8 @@ enum SettingsDestination {
     }
 
     /// The path that shows `action`'s settings.
-    ///
-    /// - AI Tools is the AI page; one of its prompts is that prompt's page under AI.
-    /// - An extension's group row, or the placeholder the trust gate registers for it, is the
-    ///   extension's page; one of its commands is that command's editor under the extension's page.
-    /// - A custom group is the group editor under Customize, where groups are made.
-    /// - A custom action is its editor under Custom Actions.
-    /// - A built-in action has a sidebar row of its own.
+    /// AI prompts live under AI; extension commands under their extension's page; custom groups
+    /// and custom actions under Customize and Custom Actions; built-ins have their own row.
     @MainActor
     static func path(for action: any Action) -> [SettingsPage] {
         if action.chrome.launchesAI {
@@ -69,7 +60,6 @@ enum SettingsDestination {
         return [.customize, .action(id: action.id)]
     }
 
-    /// The path for a package header row in the Customize list.
     static func path(forPackage packageID: String) -> [SettingsPage] {
         [.extensionPackage(id: packageID)]
     }

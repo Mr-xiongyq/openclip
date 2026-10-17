@@ -9,9 +9,7 @@ import Core
 #if canImport(FoundationModels)
 import FoundationModels
 
-/// Guided-generation shape for the Apple on-device model. Declaring the fields lets the framework
-/// constrain the model's output to this structure, so the result no longer has to be scraped out of
-/// free-form `<result>`/`<title>` tags that the model may or may not emit correctly.
+/// Guided-generation shape for the on-device model; constrains output so no tag scraping is needed.
 @available(macOS 26.0, *)
 @Generable
 struct AppleIntelligenceResponse {
@@ -35,8 +33,7 @@ public final class AppleIntelligenceProvider: AIProvider {
         self.customGuidelines = customGuidelines
     }
 
-    /// Selections shorter than this skip token counting: the extra round-trip is only worth paying
-    /// when the input could plausibly overflow the on-device context window.
+    /// Shorter inputs skip token counting; the extra round-trip only pays off near the context limit.
     private static let tokenBudgetCheckThreshold = 2_000
 
     public func processStream(prompt: String, text: String) -> AsyncThrowingStream<String, Error> {
@@ -52,8 +49,7 @@ public final class AppleIntelligenceProvider: AIProvider {
             // 1. FoundationModels native Apple Intelligence model session API
             #if canImport(FoundationModels)
             if #available(macOS 26.0, *) {
-                // Refuse early with the specific cause (wrong Mac / feature off / model still
-                // downloading) instead of failing mid-generation with a generic error.
+                // Fail early with the specific cause rather than a generic mid-generation error.
                 guard AppleIntelligenceAvailability.isAvailable else {
                     continuation.finish(throwing: AIError.providerUnavailable(AppleIntelligenceAvailability.unavailableExplanation))
                     return
@@ -71,16 +67,13 @@ public final class AppleIntelligenceProvider: AIProvider {
                         let response = try await session.respond(to: userContent, generating: AppleIntelligenceResponse.self)
                         try Task.checkCancellation()
 
-                        // An empty guided result means the model produced no usable text. `extractResultText`
-                        // falls back to returning the raw `<result></result>` wrapper, so it cannot detect
-                        // this — check the typed field directly before re-emitting tags.
+                        // extractResultText would pass an empty <result></result> wrapper through, so check the typed field.
                         guard !response.content.result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                             continuation.finish(throwing: AIError.invalidResponse)
                             return
                         }
 
-                        // Re-emit the typed fields as the tag contract the rest of the AI pipeline
-                        // (palette, result card, save-as-tool) already parses.
+                        // Re-emit as the tag format the rest of the AI pipeline parses.
                         let tagged = AIRequestSupport.taggedResponse(
                             result: response.content.result,
                             title: response.content.title
@@ -129,9 +122,8 @@ public final class AppleIntelligenceProvider: AIProvider {
     }
 
     #if canImport(FoundationModels)
-    /// Fails fast with `requestTooLarge` when instructions plus input exceed the on-device model's
-    /// context window, rather than paying for a generation round-trip that returns the same error.
-    /// Skipped on macOS 26.0–26.3, which has `contextSize` but not `tokenCount`.
+    /// Throws `requestTooLarge` before generating if input exceeds the context window.
+    /// Skipped on macOS 26.0–26.3, which lacks `tokenCount`.
     @available(macOS 26.0, *)
     private static func ensureWithinContext(instructions: String, userContent: String) async throws {
         guard #available(macOS 26.4, *) else { return }

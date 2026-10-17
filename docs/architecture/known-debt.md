@@ -58,6 +58,26 @@ areas; stale debt notes are worse than none.
   restores the original activation policy once no regular windows remain visible; a Settings window
   opened during the check keeps its own lease.
 
+## Preferences Search
+
+- The sidebar keeps its seven static rows when the query is blank. A nonblank query searches the
+  local settings-page index, concrete General controls, registered actions/extensions, and AI
+  presets by displayed name and explicit alias only. English settings labels remain alternate
+  names for localized settings. Broad action keywords, internal ids, breadcrumbs, package metadata,
+  preference values, secrets and the Store catalog are excluded from matching. Store search is an
+  explicit handoff row that applies the captured query only after activation. Action entries are
+  rebuilt from the coordinator, customization, binding aliases, and AI manager so installed and
+  disabled actions remain discoverable without enabling them. General control results use stable
+  row ids to scroll into view and briefly highlight the control. Search results use flat text-only
+  rows, a neutral selected/hover state and just a title and location. One/two-character queries
+  require a name/alias prefix; longer queries match tokens within a name/alias. At most six ranked
+  local results are shown, with no expansion control. Up/down arrows move selection through those
+  results and the separated Store row;
+  Return opens the selected destination. Store is never implicitly selected for zero local results.
+  Query state stays in the sidebar so typing does not invalidate the full preferences/detail view.
+  The catalog is normalized only when entries change; results and ids are cached once
+  per query, rather than filtering the full catalog from each row’s selection/hover rendering.
+
 ## Settings Migration (UserDefaults → SettingsStore)
 
 - The typed settings abstraction is `SettingsStore` + `SettingKey<T>` (see `Sources/Core/Settings/`).
@@ -357,6 +377,16 @@ areas; stale debt notes are worse than none.
   `ActionIcon` cases render through the shared `ActionIconView` (`Sources/OpenClip/UI/Icons/ActionIconView.swift`),
   including Iconify-format symbols (`prefix:name`). The popup bar keeps its own `iconView(for:)`
   (`PopupView.swift`) because text icons there need natural width + horizontal padding, not a fixed frame.
+- **Iconify SVGs load through `IconifySVGLoader`** (`IconPickerView.swift`): at most 6 requests at once,
+  an 8 s timeout, 3 attempts with 0.4 s / 0.8 s backoff on network errors, 408, 429 and 5xx, and a muted
+  `questionmark.square` instead of an endless placeholder (#156). Successes are cached for the session;
+  failures are skipped for 30 s, then refetched when the view reappears. There is no tap-to-retry, because
+  the tile sits inside the picker's selection button and the popup's action buttons. Search results drop
+  multicolor sets, since the API returns them despite `palette=false`: `IconifyPaletteCatalog` asks the
+  `/collections` endpoint for each prefix's `palette` flag once and falls back to
+  `IconifyFetchPolicy.multicolorPrefixes` when that call fails. Only timeouts, lost connections and DNS or
+  connect failures are retried; offline, cancelled and bad-URL errors give up at once.
+  Fetches are one request per icon, not batched through `/{prefix}.json`.
 - **Popup sizing constants live in the App target.** `PopupMetrics`
   (`Sources/OpenClip/UI/Popup/PopupMetrics.swift`) holds the UI-only values — `searchMaxRows`
   (5), `searchResultRowHeight` (32), `searchPeekRowFraction` (0.5), `popupMaxHeight` (300, the
@@ -541,6 +571,55 @@ replace a newer popup.
 
 ## Selection Retrieval
 
+- **Extension rich input is captured on demand.** Per-action manifest flags `captureRtf`
+  and `captureHtml` ask `RichInputAction` to prepare missing representations before the
+  runtime executes, shared by bar/search/hotkey/loading entry points. The app's injected
+  generation validator and source PID are rechecked after clipboard acquisition.
+  `PasteboardCopyEngine` accepts a user-action lease and an awaited menu trigger, then
+  restores the user's clipboard before returning captured input. Existing representations
+  skip the extra copy; clipboard/OCR contexts never copy from another app. No unavailable
+  source representation is guaranteed (HTML/RTF conversions remain the engine's fallback).
+  Inline previews cannot request rich capture, preventing clipboard operations on hover.
+  Explicit action-time Copy/capture ignores floating System UI recording panels after source
+  activation, but still refuses full-screen screenshot pickers; a picker refusal has its
+  own feedback instead of being mislabeled as a changed source.
+
+- **Built-in Copy uses the source application's native command for live selections.**
+  `CopyAction` returns the typed `copySelection` effect; the platform handler validates the
+  captured PID and selection generation again after acquiring the clipboard lease and
+  activating the source. OpenSelection's `NativeCopyOperation` holds user-action ownership
+  through the bounded response window and leaves the app's clipboard items, private formats,
+  and lazy data providers intact. Menu-copy policies use bounded AX menu workers. Cancellation
+  after posting drains the response window; no plain-text fallback or restoration overwrites
+  a successful/native or external copy. Clipboard change count confirms an observed update,
+  not its provenance; external apps cannot be locked and late writes beyond the response
+  window remain a platform limitation. OCR and explicit text/rich-payload results retain
+  their supplied-output behavior. Cut still reconstructs plain text and is separate work.
+  The project consumes the released OpenSelection package at `v2.16.0`; for local package development, switch `project.yml` back to `path: openselection`.
+
+- **Mouse gesture checks precede retrieval.** A bounded AX hit-test of the original press rejects
+  identifiable toolbar/titlebar chrome, including unchanged fullscreen windows, while
+  allowing embedded text controls and web content. Unknown AX hierarchies fail open; generic
+  document groups are not treated as chrome merely because they have a window ancestor, and
+  neither is a bare `AXWindow` hit — apps with flat or lazily built AX trees (terminals, canvas
+  editors, Electron before its tree exists) report their whole content area that way. Each
+  rejection logs `monitor: skipped press on window chrome`. The hit-test never sets a messaging
+  timeout on the system-wide element (that would change the process-wide AX default); its
+  deadline race bounds it instead, as in `SelectionEditabilityProbe`.
+  Multi-clicks also recheck window geometry after their settle delay for delayed zoom/resize updates.
+- **Mouse-gesture results must be where the gesture was.** AX reports the document's selection,
+  not the gesture's: Chromium's double-click selects the closest word even over a video, so a
+  player with `opacity: 0` controls yields an invisible selection far from the click (issue #162),
+  and a stale selection elsewhere looks the same. `SelectionGestureLocality` rejects a
+  double-click result whose AX bounds miss the click point, or a drag result whose bounds miss
+  the press-to-release rectangle (both padded 12 pt). Nil, empty, sub-2 pt, or off-screen bounds
+  fail open. Triple-clicks are not checked: Chromium reports paragraph ranges as a 1×1 rect or
+  offset by a line. Keyboard, hold, and hotkey reads are not checked either.
+- **Double-click reads wait out a possible third press.** A double-click read starts only after
+  `min(NSEvent.doubleClickInterval, 220 ms)`, so a triple-click's third press cancels it instead
+  of flashing a word popup that the paragraph selection immediately replaces. Triple and later
+  clicks keep the 50 ms geometry settle.
+  Mouse-up Paste availability inspection begins only after a valid text result is accepted.
 - **Clipboard operations share ownership.** OpenSelection's pasteboard coordinator reserves
   the clipboard through preparation, activation, and the bounded delivery window. Posted
   captures drain independently of caller cancellation; permanent OpenClip copies queue behind
@@ -549,7 +628,10 @@ replace a newer popup.
   the configured capture/delivery window, or between an OS clipboard check and write, remains
   a platform limitation.
 - **Automatic copy is authorized separately from AX evidence.** Weak evidence consults the
-  Command-C menu state; only a confirmed disabled command refuses capture. Strong evidence
+  Command-C menu state; evidence-required automatic capture needs a confirmed enabled command.
+  Unknown or disabled commands refuse weak-evidence capture before clipboard mutation.
+  Opaque media/item surfaces no longer waive the evidence requirement. Explicit hotkey and
+  legacy opt-out callers retain their permissive fallback. Strong evidence
   bypasses the menu walk. Probes run off the main actor with independent caller deadlines and
   a cap held until workers exit. Capture checks cancellation, source PID, and overlays before
   posting. All hotkey retrieval paths bind authorization to their captured source PID.
@@ -561,6 +643,28 @@ replace a newer popup.
   and hotkey/monitor paths. Clipboard fallback retains the original retrieval reason.
   Reports add an optional `readStatus` so older report JSON remains readable; outcome logs
   contain codes, never selected text or clipboard payloads.
+- **Mouse drags retain press-time text context.** When a genuine drag begins with an I-beam,
+  `MacSelectionMonitor` carries that weak cursor evidence into retrieval even if release happens
+  over whitespace with an arrow/custom cursor. It does not waive the selection-evidence gate:
+  unknown/disabled Copy commands and non-text object roles still block automatic Copy. The cursor
+  snapshot is consumed on release and cleared on cancellation/app switches; popup positioning
+  continues to use the actual release point.
+- **A completed drag or multi-click is itself weak Copy evidence.** Electron pages often show an
+  arrow or custom cursor over selectable text, and with no AX tree (Claude before the step below)
+  the target has no role at all, so neither the cursor nor the role could justify Copy and every
+  arrow-to-arrow drag was refused. `dragEnd`/`doubleClick`/`mouseUp` triggers now yield
+  `selection-gesture:<trigger>` weak evidence, so Copy still needs a confirmed enabled Edit ▸ Copy
+  (AppKit apps disable it with nothing selected). It never applies to hold, keyboard, or
+  programmatic triggers, to image/item surfaces, or when AX exposes a web area that reports no
+  selection (a Figma canvas object drag). A Chromium Copy command that reads stale or disabled
+  still blocks; the menu-gate refusal now logs at debug with `menuState` and `evidence`.
+- **Electron apps get their AX tree on demand.** Electron builds no web-content AX tree until a
+  client sets `AXManualAccessibility`. `ElectronAccessibilityEnabler` sets it once per process
+  (keyed by pid and launch date) for apps bundling `Electron Framework.framework`, off the main
+  actor, on monitor start, app activation, and mouse-down; a failed set is retried on the next
+  request. Chrome ignores the attribute and is not touched; enabling `AXEnhancedUserInterface`
+  there is known to disturb window animations and window managers. The first gesture after
+  activation can still race the tree build and fall back to Copy.
 - **Selection logging is summarized and correlated.** Each retrieval emits one completion
   event with configured/winning strategies, reason, timings, retry counts and observed
   clipboard restoration. Poll-level details are trace-only. Task-local correlation follows
@@ -574,8 +678,9 @@ replace a newer popup.
   switches; programmatic focus changes without an observed gesture are not detected.
   It is not an AX focused-element identity guarantee, and arbitrary extension keystrokes
   remain outside this paste-result check.
-- **OpenSelection is published and pinned to 2.15.3.** `project.yml` resolves the remote
-  tag at `a421effaebe473eb121fe0ebc469117a1de325e0`; the local checkout is optional.
+- **OpenSelection 2.15.4 contains the issue #159 automatic-Copy fix.** `project.yml` resolves
+  the remote exact version; the release points to `7bad227`. The package repository remains
+  separate from OpenClip.
   Inspect and menu budgets use monotonic clocks. Inspect deliberately leaves the initial
   system-wide focused-app lookup at the process-default timeout to avoid mutating the
   process-global AX timeout. That call remains residual exposure; subsequent element
@@ -718,8 +823,7 @@ independently of the global hover index, including when the contextual island is
 
 ## Actions per page ([#148](https://github.com/ganeshmshetty/openclip/issues/148))
 
-Appearance uses a Liquid Glass count stepper (2–24) with native press-and-hold repetition
-and a separate Fit to width toggle.
-Fit to width defaults off and preserves the saved manual count (default 6); both main and
-group bars pass an unlimited count to the existing width-budget layout when enabled.
+Appearance uses a Liquid Glass count stepper (2–24, default 6) with native press-and-hold
+repetition. The former Fit to width toggle (`popupFitToWidth`) was removed; a stale stored value
+is simply ignored.
 Actual capacity depends on the popup display, scale, controls, and rendered action widths.

@@ -100,7 +100,6 @@ public protocol Action: Sendable {
     /// nil (derive secondary from the primary result); see `ActionDelivery`.
     var delivery: ActionDelivery? { get }
 
-    /// Search keywords for the action palette.
     var keywords: [String] { get }
 }
 
@@ -115,29 +114,24 @@ public extension Action {
     @MainActor
     func matchInfo(for context: ActionContext) -> ActionMatchInfo? { nil }
 
-    /// Resolves the user-customized display title through an explicit presenter. The presenter is a
-    /// parameter (never a hidden process-wide singleton) so display resolution is decoupled from the
-    /// customization singleton and injectable in tests and previews.
+    /// Display title via an explicit presenter rather than a hidden singleton, so it stays injectable in tests.
     @MainActor
     func displayTitle(using presenter: any ActionPresenting) -> String {
         presenter.displayTitle(for: self)
     }
 
-    /// Resolves the user-customized display icon through an explicit presenter (see above).
     @MainActor
     func displayIcon(using presenter: any ActionPresenting) -> ActionIcon {
         presenter.popupIcon(for: self)
     }
 }
 
-/// Resolves the display title/icon of an action as surfaced in UI, honoring any user overrides.
-/// `ActionCustomizationManager` is the production conformer; callers pass the presenter explicitly
-/// rather than letting the `Action` protocol extension reach for a singleton.
+/// Display title/icon as surfaced in UI, honoring user overrides. Callers pass the presenter explicitly
+/// rather than reaching for a singleton.
 @MainActor
 public protocol ActionPresenting: Sendable {
     func displayTitle(for action: any Action) -> String
     func popupIcon(for action: any Action) -> ActionIcon
-    /// The icon for rows that always reserve an icon slot, such as settings and search results.
-    /// This preserves the action's underlying icon when the popup bar is configured to show text.
+    /// Icon for rows that always reserve an icon slot; keeps the underlying icon when the bar shows text.
     func tableIcon(for action: any Action) -> ActionIcon
 }

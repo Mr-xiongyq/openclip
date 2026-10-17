@@ -478,7 +478,6 @@ public struct AICustomActionBuilderCard: View {
                 .padding(.vertical, 4)
             } else {
                 VStack(alignment: .leading, spacing: 10) {
-                    // Multiline Text Area (at least 3 lines)
                     ZStack(alignment: .topTrailing) {
                         TextField(
                             "",
@@ -629,7 +628,6 @@ public struct AICustomActionBuilderCard: View {
     @ViewBuilder
     private var resultCardView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Header: Icon + Title + Engine Badge
             HStack(spacing: 10) {
                 SettingsIconTile(
                     systemImage: synthesis.iconSymbol,
@@ -659,7 +657,6 @@ public struct AICustomActionBuilderCard: View {
 
                 Spacer()
 
-                // Engine Pill
                 Text(engineLabel(for: synthesis.kind))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(SettingsDesignTokens.secondaryText)
@@ -670,7 +667,6 @@ public struct AICustomActionBuilderCard: View {
                     )
             }
 
-            // Inferred Behavior Pills (One-tap switcher)
             VStack(alignment: .leading, spacing: 4) {
                 Text(String(localized: "BEHAVIOR"))
                     .font(.system(size: 9, weight: .bold))
@@ -701,7 +697,6 @@ public struct AICustomActionBuilderCard: View {
                 }
             }
 
-            // Mini Code Peek (2-3 lines styled preview or expanded editor)
             if !synthesis.payloadContent.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
@@ -764,7 +759,6 @@ public struct AICustomActionBuilderCard: View {
             Divider()
                 .padding(.vertical, 2)
 
-            // Actions Bar
             HStack(spacing: 8) {
                 Button(String(localized: "Discard")) {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -946,8 +940,7 @@ public struct AICustomActionBuilderCard: View {
         ActionCoordinator.shared.saveCustomAction(newAction)
         _ = try? CustomActionManifestWriter.write(action: newAction)
 
-        // Persist the chosen Behavior for this action id; without it Copy and Show save the same
-        // action (the manifest only carries `replaceSelection`) and the choice is lost.
+        // Persist the Behavior per action id: Copy and Show share a manifest (only `replaceSelection`), so the choice would be lost.
         let deliveryPreference: ResultDeliveryPreference?
         switch currentSynthesis.delivery {
         case .replace: deliveryPreference = nil

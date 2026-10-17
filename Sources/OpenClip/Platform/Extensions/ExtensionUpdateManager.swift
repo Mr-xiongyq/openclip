@@ -14,8 +14,7 @@ public final class ExtensionUpdateManager: ObservableObject {
 
     @Published public private(set) var updatablePackageIDs: [String] = []
     @Published public private(set) var isChecking = false
-    /// Outcome of the most recent updateAll batch; nil until the first batch runs. UI can observe
-    /// this to surface a summary toast (X succeeded, Y failed).
+    /// Result of the latest `updateAll` batch; nil until one runs.
     @Published public private(set) var lastBatchResult: ExtensionUpdateBatchResult?
 
     private let settings: any SettingsStore
@@ -70,8 +69,7 @@ public final class ExtensionUpdateManager: ObservableObject {
         }
     }
 
-    /// Gathers installed store-package versions and asks the store for each page, then computes
-    /// the updatable set. Idempotent; safe to call from the Reload button and Store tab.
+    /// Idempotent; safe to call from the Reload button and Store tab.
     public func checkForUpdates() async {
         guard !isChecking else { return }
         isChecking = true
@@ -79,7 +77,6 @@ public final class ExtensionUpdateManager: ObservableObject {
 
         let sources = settings.get(.extensionSources)
 
-        // Check all extensions present in the extensions directory + known store sources
         let fm = FileManager.default
         let items = (try? fm.contentsOfDirectory(at: Constants.extensionsDirectory, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
         var candidateIDs = Set<String>()
@@ -107,25 +104,20 @@ public final class ExtensionUpdateManager: ObservableObject {
         var page = 1
         var totalPages = 1
         while page <= totalPages {
-            // Finite bound so a pathological server-reported totalPages can't spin forever; normal
-            // pagination still follows the server's totalPages.
+            // Bounds the loop against a pathological server-reported totalPages.
             guard page <= maxPages,
                   let response = try? await ExtensionsAPIClient.shared.fetchExtensions(page: page, limit: 50) else { break }
             allItems.append(contentsOf: response.extensions)
             totalPages = response.totalPages
             page += 1
         }
-        // Only reached past the last server page if every required page (and the bound) succeeded;
-        // otherwise keep the previously published updatable set instead of computing on partial data.
+        // Keep the previous updatable set rather than computing from partial data.
         guard page > totalPages else { return }
         updatablePackageIDs = ExtensionUpdatePlanner.updatablePackageIDs(storeItems: allItems, installed: installed)
     }
 
-    /// Updates one package: marks its source as store (already true) and re-installs from the
-    /// store download URL. The gate no longer blanket-re-trusts store packages, so update
-    /// explicitly re-trusts (and re-records the hash) after the reinstall unless the package was
-    /// revoked — a revoked package stays revoked. If the reinstall fails, the pre-update trust
-    /// state and recorded hash are restored so the package isn't left in the intermediate seen state.
+    /// Re-installs from the store URL and re-trusts the package, except a revoked package stays revoked.
+    /// Restores the prior trust state and hash if the install fails.
     public func update(packageID: String) async throws {
         guard updatingPackageIDs.insert(packageID).inserted else {
             throw NSError(domain: "ExtensionUpdateManager", code: 409,
@@ -140,8 +132,7 @@ public final class ExtensionUpdateManager: ObservableObject {
         let originalTrust = settings.get(.extensionTrust)[packageID]
         let originalHash = settings.get(.extensionTrustHashes)[packageID]
         if !wasRevoked {
-            // Pre-mark seen and drop the recorded hash so the intermediate load inside the
-            // install doesn't fire a spurious tamper event for a legitimate update.
+            // Mark seen and drop the hash so the intermediate load doesn't raise a tamper event.
             var trust = settings.get(.extensionTrust)
             trust[packageID] = ExtensionTrustState.seen.rawValue
             settings.set(.extensionTrust, value: trust)
@@ -173,8 +164,7 @@ public final class ExtensionUpdateManager: ObservableObject {
         await checkForUpdates()
     }
 
-    /// Updates every package in `updatablePackageIDs`. Individual failures are logged and collected
-    /// into the returned result rather than aborting the batch or being silently swallowed by `try?`.
+    /// Failures are logged and collected, not allowed to abort the batch.
     @discardableResult
     public func updateAll() async -> ExtensionUpdateBatchResult {
         var succeeded: [String] = []

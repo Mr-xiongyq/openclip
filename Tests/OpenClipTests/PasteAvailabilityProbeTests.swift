@@ -3,9 +3,8 @@ import AppKit
 @testable import Core
 @testable import OpenClip
 
-/// Tests the menu-item classification used by `PasteAvailabilityProbe`. The probe's decision
-/// logic is exercised with plain AX attribute values so a non-English menu can be covered
-/// without spawning a live AX session.
+/// Menu-item classification for `PasteAvailabilityProbe`, driven by plain AX values so non-English
+/// menus are covered without a live AX session.
 final class PasteAvailabilityProbeTests: XCTestCase {
 
     func testPasteMatchByNonEnglishTitle_WhenNoCommandEquivalent() {
@@ -80,11 +79,8 @@ final class PasteAvailabilityProbeTests: XCTestCase {
     }
 }
 
-/// This class covers issue #37. A blocked lookup must not stop later probes.
-/// Tests replace the lookup with a semaphore. They do not need Accessibility.
-///
-/// `probeGate` is shared in the process. Each test releases its held workers.
-/// Permits are released after the wait ends. Assertions allow 0.1 s for that delay.
+/// Issue #37: a blocked lookup must not stop later probes. Lookups are replaced with a semaphore, so no
+/// Accessibility is needed. Each test releases its held workers before the next one starts.
 final class PasteAvailabilityProbeGateTests: XCTestCase {
 
     private static let shortTimeout: TimeInterval = 0.1
@@ -126,8 +122,7 @@ final class PasteAvailabilityProbeGateTests: XCTestCase {
                           "a fresh probe must not queue behind the abandoned worker")
     }
 
-    /// When the gate is full, a new probe must fail immediately.
-    /// After the time limit, the gate must work again while the workers stay blocked.
+    /// A full gate fails new probes at once; permits come back only when the parked workers exit.
     func testSaturatedGateRecoversOnlyAfterWorkersExit() async {
         let limit = Constants.pasteProbeMaxConcurrent
         let started = expectation(description: "cap-filling lookups started")

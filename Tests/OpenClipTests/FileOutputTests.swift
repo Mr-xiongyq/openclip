@@ -10,7 +10,6 @@ final class FileOutputTests: XCTestCase {
     private var tempDir: URL!
     private var isolatedSettings: MemorySettingsStore!
 
-    /// Resets shared state and creates an isolated directory and settings store for each test.
     override func setUp() async throws {
         try await super.setUp()
         await MainActor.run { TestIsolation.reset() }
@@ -19,7 +18,6 @@ final class FileOutputTests: XCTestCase {
         isolatedSettings = MemorySettingsStore()
     }
 
-    /// Removes the isolated test directory after each test.
     override func tearDown() async throws {
         if let tempDir {
             try? FileManager.default.removeItem(at: tempDir)
@@ -29,7 +27,6 @@ final class FileOutputTests: XCTestCase {
 
     // MARK: - FileOutputPayload Tests
 
-    /// Verifies that a payload derives its display name, extension, and image status from its URL.
     func testFileOutputPayloadDisplayNameAndExtension() {
         let fileURL = tempDir.appendingPathComponent("document.pdf")
         let payload = FileOutputPayload(url: fileURL)
@@ -39,7 +36,6 @@ final class FileOutputTests: XCTestCase {
         XCTAssertFalse(payload.isImage)
     }
 
-    /// Verifies that an explicit display filename controls extension and image detection.
     func testFileOutputPayloadExplicitFilename() {
         let fileURL = tempDir.appendingPathComponent("random-temp-1234")
         let payload = FileOutputPayload(url: fileURL, filename: "my-photo.PNG")
@@ -49,7 +45,6 @@ final class FileOutputTests: XCTestCase {
         XCTAssertTrue(payload.isImage)
     }
 
-    /// Verifies the supported image-extension allowlist and representative non-image extensions.
     func testFileOutputPayloadImageExtensions() {
         let imageExtensions = ["png", "jpg", "jpeg", "gif", "webp", "svg", "icns", "bmp", "tiff", "heic"]
         for ext in imageExtensions {
@@ -66,7 +61,6 @@ final class FileOutputTests: XCTestCase {
 
     // MARK: - ActionResult Properties
 
-    /// Verifies dismissal and toast properties for preview, copy, and save file results.
     func testActionResultFileDismissAndToastProperties() {
         let fileURL = tempDir.appendingPathComponent("sample.txt")
         let fileResult = ActionResult.file(FileOutputPayload(url: fileURL))
@@ -82,12 +76,10 @@ final class FileOutputTests: XCTestCase {
 
     // MARK: - ActionResultDelivery Resolution
 
-    /// Verifies that secondary-click delivery converts a file preview into a copy operation.
     func testActionResultDeliveryFileResolvesToCopyOnSecondaryClick() {
         let fileURL = tempDir.appendingPathComponent("sample.txt")
         let payload = FileOutputPayload(url: fileURL)
 
-        // Primary click keeps .file
         let (primaryResolved, primaryToast) = ActionResultDelivery.resolve(
             raw: .file(payload),
             clickIntent: .primary,
@@ -101,7 +93,6 @@ final class FileOutputTests: XCTestCase {
         }
         XCTAssertNil(primaryToast)
 
-        // Secondary click resolves to .copyFile
         let (secondaryResolved, secondaryToast) = ActionResultDelivery.resolve(
             raw: .file(payload),
             clickIntent: .secondary,
@@ -116,7 +107,6 @@ final class FileOutputTests: XCTestCase {
         XCTAssertEqual(secondaryToast?.message, "Copied File")
     }
 
-    /// Verifies the companion toasts emitted for explicit copy and save delivery.
     func testActionResultDeliveryToastsForCopyFileAndSaveFile() {
         let fileURL = tempDir.appendingPathComponent("sample.txt")
 
@@ -139,12 +129,10 @@ final class FileOutputTests: XCTestCase {
 
     // MARK: - ShellResultMapper File Detection & JSON Parsing
 
-    /// Verifies plain-text file detection for paths, file URLs, missing files, and ordinary output.
     func testDetectFileResultExistingFile() throws {
         let testFile = tempDir.appendingPathComponent("test_output.txt")
         try "Hello File".write(to: testFile, atomically: true, encoding: .utf8)
 
-        // Absolute path
         let detected = ShellResultMapper.detectFileResult(from: testFile.path)
         XCTAssertNotNil(detected)
         if case .file(let payload) = detected {
@@ -154,25 +142,20 @@ final class FileOutputTests: XCTestCase {
             XCTFail("Expected .file result")
         }
 
-        // File URL format
         let detectedURL = ShellResultMapper.detectFileResult(from: "file://" + testFile.path)
         XCTAssertNotNil(detectedURL)
 
-        // Non-existent path returns nil
         let nonExistent = ShellResultMapper.detectFileResult(from: "/tmp/non_existent_openclip_\(UUID().uuidString).txt")
         XCTAssertNil(nonExistent)
 
-        // Arbitrary stdout text returns nil
         let arbitraryText = ShellResultMapper.detectFileResult(from: "This is just ordinary output text")
         XCTAssertNil(arbitraryText)
     }
 
-    /// Verifies structured shell output mapping for preview, copy, and save file actions.
     func testShellResultMapperFileJSON() throws {
         let testFile = tempDir.appendingPathComponent("report.pdf")
         try "dummy pdf".write(to: testFile, atomically: true, encoding: .utf8)
 
-        // File effect preview
         let jsonPreview = """
         {"type": "file", "path": "\(testFile.path)"}
         """
@@ -183,7 +166,6 @@ final class FileOutputTests: XCTestCase {
             XCTFail("Expected .file result from JSON")
         }
 
-        // File effect copy
         let jsonCopy = """
         {"type": "copyFile", "path": "\(testFile.path)"}
         """
@@ -194,7 +176,6 @@ final class FileOutputTests: XCTestCase {
             XCTFail("Expected .copyFile result from JSON")
         }
 
-        // File effect save
         let jsonSave = """
         {"type": "saveFile", "path": "\(testFile.path)"}
         """
@@ -206,7 +187,6 @@ final class FileOutputTests: XCTestCase {
         }
     }
 
-    /// Verifies that base64 file output is decoded, cached, and mapped to its requested action.
     func testShellResultMapperBase64FileData() throws {
         let rawContent = "Base64 encoded file content"
         let base64 = rawContent.data(using: .utf8)!.base64EncodedString()
@@ -219,7 +199,6 @@ final class FileOutputTests: XCTestCase {
             XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
             let readBack = try String(contentsOf: url, encoding: .utf8)
             XCTAssertEqual(readBack, rawContent)
-            // Cleanup
             try? FileManager.default.removeItem(at: url)
         } else {
             XCTFail("Expected .saveFile result for base64 file data with action save")
@@ -228,7 +207,6 @@ final class FileOutputTests: XCTestCase {
 
     // MARK: - ActionResultHandler Tests
 
-    /// Verifies that copying a file writes a file URL to the configured pasteboard.
     @MainActor
     func testActionResultHandlerCopyFileWritesToPasteboard() async throws {
         let isolatedPasteboard = NSPasteboard(name: NSPasteboard.Name("OpenClipTest-File-\(UUID().uuidString)"))
@@ -239,20 +217,17 @@ final class FileOutputTests: XCTestCase {
 
         try await handler.handle(ActionResult.copyFile(testFile), in: nil)
 
-        // Check pasteboard item
         guard let items = isolatedPasteboard.pasteboardItems, let first = items.first else {
             XCTFail("Pasteboard items must not be empty")
             return
         }
 
-        // NSPasteboard writes fileURL as file-url string type
         let fileURLType = NSPasteboard.PasteboardType("public.file-url")
         let urlString = first.string(forType: fileURLType)
         XCTAssertNotNil(urlString)
         XCTAssertTrue(urlString?.contains("copy_test.png") == true)
     }
 
-    /// Verifies that saving a file uses the configured destination directory.
     @MainActor
     func testActionResultHandlerSaveFileSavesToConfiguredDirectory() async throws {
         let customSaveDir = tempDir.appendingPathComponent("CustomSaves")
@@ -273,14 +248,12 @@ final class FileOutputTests: XCTestCase {
         XCTAssertEqual(content, "important data")
     }
 
-    /// Verifies that saving preserves an existing file and creates a collision-safe destination.
     @MainActor
     func testActionResultHandlerSaveFileHandlesNameCollisions() async throws {
         let customSaveDir = tempDir.appendingPathComponent("CollisionSaves")
         try FileManager.default.createDirectory(at: customSaveDir, withIntermediateDirectories: true)
         isolatedSettings.set(.fileSaveLocation, value: customSaveDir.path)
 
-        // Pre-create file with same name
         let existingFile = customSaveDir.appendingPathComponent("report.txt")
         try "version 1".write(to: existingFile, atomically: true, encoding: .utf8)
 
@@ -292,18 +265,15 @@ final class FileOutputTests: XCTestCase {
 
         try await handler.handle(ActionResult.saveFile(sourceFile), in: nil)
 
-        // Original report.txt should still exist with "version 1"
         let origContent = try String(contentsOf: existingFile, encoding: .utf8)
         XCTAssertEqual(origContent, "version 1")
 
-        // New file should be saved as report (1).txt
         let collisionFile = customSaveDir.appendingPathComponent("report (1).txt")
         XCTAssertTrue(FileManager.default.fileExists(atPath: collisionFile.path), "Collision file should be renamed to 'report (1).txt'")
         let newContent = try String(contentsOf: collisionFile, encoding: .utf8)
         XCTAssertEqual(newContent, "version 2")
     }
 
-    /// Verifies MIME-based image detection and extension fallback behavior.
     func testFileOutputPayloadMimeTypeImageDetection() {
         let pdfFile = tempDir.appendingPathComponent("image.bin")
         let pngMimePayload = FileOutputPayload(url: pdfFile, mimeType: "image/png")
@@ -322,7 +292,6 @@ final class FileOutputTests: XCTestCase {
         XCTAssertFalse(pdfPayload.isImage, "application/pdf should not be recognized as image")
     }
 
-    /// Verifies that embedded output filenames cannot escape the managed output directory.
     func testShellResultMapperRejectsPathTraversalInFilename() throws {
         let b64 = Data("hello content".utf8).base64EncodedString()
         let jsonTraversal = """
@@ -332,13 +301,11 @@ final class FileOutputTests: XCTestCase {
         guard case .file(let payload) = result else {
             return XCTFail("Expected .file result")
         }
-        // Filename should be sanitized to traversal.txt, not escaping temp directory
         XCTAssertEqual(payload.displayName, "traversal.txt")
         XCTAssertEqual(payload.url.deletingLastPathComponent().standardizedFileURL.path, Constants.outputsDirectory.standardizedFileURL.path)
         XCTAssertFalse(payload.url.path.contains(".."))
     }
 
-    /// Verifies that missing file references produce an error result.
     func testShellResultMapperRejectsNonExistentFiles() {
         let missingPath = "/tmp/does_not_exist_\(UUID().uuidString).pdf"
 
@@ -363,7 +330,6 @@ final class FileOutputTests: XCTestCase {
         XCTAssertEqual(feedback2.style, .error)
     }
 
-    /// Verifies that replacement actions preserve returned paths as text rather than file previews.
     func testCustomActionDoesNotInterceptFilePathWhenReplaceSelectionIsTrue() async throws {
         let testFile = tempDir.appendingPathComponent("output_path.txt")
         try "file content".write(to: testFile, atomically: true, encoding: .utf8)
@@ -385,15 +351,13 @@ final class FileOutputTests: XCTestCase {
         let context = ActionContext(selection: selection)
 
         let result = try await actionReplace.perform(context)
-        // Since replaceSelection is true, the action wants to replace the selection with the output path string,
-        // so it must NOT be hijacked into a .file result card!
+        // A replaceSelection result must not be hijacked into a .file card.
         guard case .paste(let pastedText) = result else {
             return XCTFail("Expected .paste when replaceSelection is true, got \(result)")
         }
         XCTAssertEqual(pastedText.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines), testFile.path)
     }
 
-    /// Verifies JavaScript object returns for file preview, save, and missing-file errors.
     func testJSHostFileReturnActions() async throws {
         let testFile = tempDir.appendingPathComponent("js_output.txt")
         try "JS file content".write(to: testFile, atomically: true, encoding: .utf8)
@@ -409,7 +373,6 @@ final class FileOutputTests: XCTestCase {
         let context = ActionContext(selection: selection)
         let optionStore = SecretActionOptionStore()
 
-        // 1. Returning { type: "file", path: ... }
         let script1 = "function action(text) { return { type: 'file', path: '\(testFile.path)' }; }"
         let req1 = OpenClipJSHost.Request(
             actionID: "test.js.file",
@@ -425,7 +388,6 @@ final class FileOutputTests: XCTestCase {
         }
         XCTAssertEqual(payload.url.path, testFile.path)
 
-        // 2. Returning { type: "file", action: "save", path: ... }
         let script2 = "function action(text) { return { type: 'file', action: 'save', path: '\(testFile.path)' }; }"
         let req2 = OpenClipJSHost.Request(
             actionID: "test.js.save",
@@ -441,7 +403,6 @@ final class FileOutputTests: XCTestCase {
         }
         XCTAssertEqual(savedURL.path, testFile.path)
 
-        // 3. Returning non-existent path
         let script3 = "function action(text) { return { type: 'file', path: '/tmp/non_existent_\(UUID().uuidString).txt' }; }"
         let req3 = OpenClipJSHost.Request(
             actionID: "test.js.missing",
@@ -461,7 +422,6 @@ final class FileOutputTests: XCTestCase {
 
     // MARK: - Image Output UX & Sizing Tests
 
-    /// Verifies that copying a real image file writes both NSURL and rich image representations (PNG and TIFF).
     @MainActor
     func testActionResultHandlerCopyImageFileWritesDualFormatPasteboard() async throws {
         let isolatedPasteboard = NSPasteboard(name: NSPasteboard.Name("OpenClipTest-DualImage-\(UUID().uuidString)"))
@@ -485,20 +445,18 @@ final class FileOutputTests: XCTestCase {
 
         try await handler.handle(ActionResult.copyFile(testFile), in: nil)
 
-        // Verify URL is present on pasteboard
         let fileURLType = NSPasteboard.PasteboardType("public.file-url")
         let urlString = isolatedPasteboard.string(forType: fileURLType)
         XCTAssertNotNil(urlString)
         XCTAssertTrue(urlString?.contains("image_copy_test.png") == true)
 
-        // Verify PNG and TIFF are also available on pasteboard for web/rich-text paste destinations
+        // Web and rich-text paste destinations read PNG/TIFF, not just the file URL.
         let pasteboardPNG = isolatedPasteboard.data(forType: .png)
         let pasteboardTIFF = isolatedPasteboard.data(forType: .tiff)
         XCTAssertNotNil(pasteboardPNG, "Pasteboard should have PNG data for image file copy")
         XCTAssertNotNil(pasteboardTIFF, "Pasteboard should have TIFF data for image file copy")
     }
 
-    /// Verifies that imageCardSize computes balanced dimensions for small, portrait, landscape, and square images.
     func testResultCardImageCardSizeAspectRatios() {
         // Fallback for nil image
         let fallback = ResultCardView.imageCardSize(imageSize: nil, userSize: nil, isUserSized: false)
@@ -529,7 +487,7 @@ final class FileOutputTests: XCTestCase {
         XCTAssertEqual(userSized, customUser)
     }
 
-    /// Verifies PDF page sizing uses the crop box and swaps width/height for rotated pages.
+    /// Uses the crop box and swaps width/height for rotated pages.
     func testPDFDisplayPageSizeHonorsRotation() {
         let portrait = CGSize(width: 612, height: 792)
         XCTAssertEqual(ResultCardView.displayPageSize(cropBox: portrait, rotation: 0), portrait)

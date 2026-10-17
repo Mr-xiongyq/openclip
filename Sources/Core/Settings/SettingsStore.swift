@@ -9,24 +9,20 @@ public protocol SettingsStore: AnyObject, Sendable {
     func get<T>(_ key: SettingKey<T>) -> T
     func set<T>(_ key: SettingKey<T>, value: T)
     func publisher<T>(for key: SettingKey<T>) -> AnyPublisher<T, Never>
-    /// Change-tracking info for a key, or `nil` if it was never written through this store
-    /// (e.g. data written before metadata existed).
+    /// Change-tracking info, or `nil` if never written through this store.
     func metadata<T>(for key: SettingKey<T>) -> SettingMetadata?
-    /// Raw stored value, bypassing typed decoding. Escape hatch for storage owned by a third-party
-    /// component (e.g. a keyboard-shortcut library that mixes String and Bool encodings under one
-    /// key); prefer typed `get`/`set` for everything else.
+    /// Raw stored value, bypassing typed decoding. Escape hatch for third-party-owned keys only;
+    /// prefer typed `get`/`set`.
     func rawObject(forKey name: String) -> Any?
-    /// Writes a raw value (or removes the key when `nil`). Counterpart to `rawObject(forKey:)`.
+    /// Writes a raw value, or removes the key when `nil`.
     func setRawObject(_ value: Any?, forKey name: String)
 }
 
 public final class DefaultSettingsStore: SettingsStore, @unchecked Sendable {
     public static let shared = DefaultSettingsStore(backend: UserDefaultsBackend())
     private let backend: SettingsBackend
-    // Combine's PassthroughSubject is not thread-safe: `set` may be called from any thread, so all
-    // sends are serialized under `lock`. The backend is thread-safe, so `get`/`set` reads
-    // and writes stay unlocked. Using a recursive lock allows subscribers to call `set` during
-    // notification dispatch without deadlocking.
+    // PassthroughSubject is not thread-safe, so sends are serialized under a recursive `lock`
+    // (subscribers may call `set` during dispatch). The backend is thread-safe and stays unlocked.
     private let lock = NSRecursiveLock()
     private let subject = PassthroughSubject<String, Never>()
 
@@ -39,9 +35,7 @@ public final class DefaultSettingsStore: SettingsStore, @unchecked Sendable {
     }
 
     public func get<T>(_ key: SettingKey<T>) -> T {
-        // All branches use conditional casts and fall back to key.defaultValue: stored
-        // preferences can be missing, corrupted, or hold an unexpected type, and setting
-        // retrieval must never crash the host process.
+        // Conditional casts with defaultValue fallback: stored prefs may be corrupt; never crash.
         if T.self == Set<String>.self {
             let array = backend.stringArray(forKey: key.name) ?? []
             return (Set(array) as? T) ?? key.defaultValue

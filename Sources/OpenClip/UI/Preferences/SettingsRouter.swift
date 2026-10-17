@@ -1,40 +1,30 @@
 // SettingsRouter.swift
 // OpenClip
 //
-// One object owns what the Settings window shows: a path of pages (the sidebar's selection first,
-// any drilled-into pages after it) and the history of paths visited, so the toolbar's back and
-// forward arrows work the way System Settings' do.
+// One object owns what the Settings window shows: a path of pages and the history of paths visited,
+// so the toolbar's back and forward arrows work like System Settings'. Popovers and sheets are pages
+// in this path too; depth is a route the window's chrome can see and undo.
 //
-// Everything that used to float — the `.applicationDefined` popover on an action row, the icon
-// picker popover on top of it, the sheet on top of that — is a page in this path now. Depth is a
-// route, and the only way in or out is a navigation that the window's chrome can see and undo.
-//
-// A shared object rather than view state because the rows that navigate are hosted in an
-// `NSOutlineView`, which rebuilds its cell views on every model change: a row cannot own the
-// route it points at.
+// A shared object because the navigating rows live in an `NSOutlineView`, which rebuilds its cell
+// views on every model change, so a row cannot own the route it points at.
 
 import SwiftUI
 import Combine
 import Core
 
-/// Everything the Settings window can show.
-///
-/// The first group are sidebar rows. The second are pages reached from a sidebar page and shown in
-/// the same column with the toolbar's back arrow as the way out.
+/// Everything the Settings window can show. Pages after the sidebar group are reached from a sidebar page.
 public enum SettingsPage: Hashable, Identifiable, Sendable {
     // Sidebar — OpenClip
     case general
     case appearance
-    /// The popup bar's layout: the order of everything on it, and custom groups. Nothing else —
-    /// every action's own settings live on the action's page.
+    /// The popup bar's layout: order and custom groups. Each action's own settings live on its page.
     case customize
     case shortcuts
     case appRules
     case store
     case about
 
-    // Sidebar — the second group. AI first, then every built-in action, every installed
-    /// extension and the user's custom actions, one row each, by name.
+    // Sidebar — the second group: AI, built-in actions, extensions, then custom actions.
     case ai
     case extensionPackage(id: String)
     /// A built-in action's settings (Copy, Search, Calculate, …), as its own sidebar row.
@@ -47,8 +37,7 @@ public enum SettingsPage: Hashable, Identifiable, Sendable {
     case action(id: String)
     case newCustomAction(kind: String? = nil)
     case newGroup(memberIDs: [String])
-    /// The icon chooser. It writes to the binding held in `SettingsRouter.iconTarget`; the token
-    /// only keeps two consecutive choosers distinct in the path.
+    /// The icon chooser; writes to `SettingsRouter.iconTarget`. The token keeps consecutive choosers distinct.
     case iconPicker(token: Int)
     case aiPreset(id: String)
     case aiNewPreset
@@ -79,16 +68,16 @@ public enum SettingsPage: Hashable, Identifiable, Sendable {
 
     /// The sidebar's first group, in order.
     public static let systemPages: [SettingsPage] = [
-        .general, .appearance, .customize, .appRules, .store, .about
+        .general, .appearance, .customize, .ai, .appRules, .store, .about
     ]
 
     /// True for pages the sidebar lists; false for pages reached from one of them.
     public var isSidebarPage: Bool {
         switch self {
-        case .general, .appearance, .customize, .shortcuts, .appRules, .store, .about, .ai, .extensionPackage,
-             .builtinAction, .customActions:
+        case .general, .appearance, .customize, .shortcuts, .ai, .appRules, .store, .about:
             return true
-        case .action, .newCustomAction, .newGroup, .iconPicker, .aiPreset, .aiNewPreset, .addApplication:
+        case .extensionPackage, .builtinAction, .customActions,
+             .action, .newCustomAction, .newGroup, .iconPicker, .aiPreset, .aiNewPreset, .addApplication:
             return false
         }
     }
@@ -115,7 +104,6 @@ public enum SettingsPage: Hashable, Identifiable, Sendable {
         }
     }
 
-    /// Sidebar glyph for the system pages.
     var systemImage: String {
         switch self {
         case .general: return "gearshape.fill"
@@ -138,8 +126,7 @@ public enum SettingsPage: Hashable, Identifiable, Sendable {
         }
     }
 
-    /// Sidebar tile colour. The app's own settings each wear a fixed, recognisable colour; a page
-    /// that belongs to an action or an extension is drawn as a plain glyph instead. See `SettingsTint`.
+    /// Fixed tile colour for app settings pages; action and extension pages use a plain glyph.
     var tint: Color {
         SettingsDesignTokens.iconTileColor(for: self)
     }
@@ -168,11 +155,8 @@ public enum SettingsPage: Hashable, Identifiable, Sendable {
     }
 }
 
-/// An inline message the window shows instead of an alert: a failed removal, a failed export, or
-/// the question an alert used to ask before something destructive ("Uninstall JWT?").
-///
-/// A confirmation carries the work it would do, so the page that asked keeps owning it — the
-/// banner only draws the question and the button.
+/// An inline message the window shows instead of an alert. A confirmation carries the work it would do,
+/// so the page that asked keeps owning it; the banner only draws the question and button.
 @MainActor
 public struct SettingsNotice: Identifiable {
     public enum Style: Sendable, Equatable {
@@ -214,31 +198,29 @@ public struct SettingsNotice: Identifiable {
 public final class SettingsRouter: ObservableObject {
     public static let shared = SettingsRouter()
 
-    /// What the detail column shows: the sidebar's page first, then every page drilled into from
-    /// it. Never empty.
+    /// What the detail column shows: the sidebar page, then pages drilled into from it. Never empty.
     @Published public private(set) var path: [SettingsPage] = [.general]
 
-    /// Every path visited, oldest first, and where in it the window is. Back and forward move
-    /// `historyIndex`; any other navigation drops the forward entries and appends, the way a web
-    /// browser's history does.
+    /// Visited paths, oldest first, and the current index. Any non-history navigation drops forward entries.
     @Published public private(set) var history: [[SettingsPage]] = [[.general]]
     @Published public private(set) var historyIndex: Int = 0
 
-    /// The notice the detail column is showing, if any.
+    struct GeneralRevealRequest: Identifiable, Equatable {
+        let id: UUID
+        let targetID: String
+    }
+    @Published private(set) var generalRevealRequest: GeneralRevealRequest?
+
     @Published public var notice: SettingsNotice?
 
-    /// Where the icon chooser writes. Held here, outside the page, because a `Binding` is not
-    /// `Hashable` and the page whose draft it edits stays mounted underneath the chooser.
+    /// Held here, not in the page: a `Binding` is not `Hashable`, and the edited page stays mounted under the chooser.
     public private(set) var iconTarget: Binding<String>?
     private var iconPickerToken = 0
 
-    /// Requests to configure an action that arrived from outside the window (the popup found an
-    /// action with missing required options). The action's page reads and shows them.
+    /// Configuration requests from outside the window (e.g. missing required options), read by the action's page.
     private var configurationRequests: [String: ConfigurationRequest] = [:]
 
-    /// Picks from the toolbar's ellipsis menu, delivered to whichever page put them there. The
-    /// page owns the work (a draft to reset, an editor to leave), so the window forwards rather
-    /// than acting: see `SettingsToolbarCommand` for the ids.
+    /// Toolbar menu picks, delivered to the page that owns the work; the window only forwards them.
     public let pageCommands = PassthroughSubject<String, Never>()
 
     static let historyLimit = 100
@@ -248,10 +230,8 @@ public final class SettingsRouter: ObservableObject {
 
     // MARK: - Where the window is
 
-    /// The sidebar's selection.
     public var sidebarPage: SettingsPage { path[0] }
 
-    /// The page on screen.
     public var currentPage: SettingsPage { path[path.count - 1] }
 
     public var canGoBack: Bool { historyIndex > 0 }
@@ -259,14 +239,22 @@ public final class SettingsRouter: ObservableObject {
 
     // MARK: - Navigation
 
-    /// Shows a sidebar page, dropping whatever was drilled into from the previous one. Switching
-    /// sidebar tabs is instant — a cross-fade between two panes reads as lag, not navigation.
+    /// Shows a sidebar page, dropping drilled-into pages. Instant: a cross-fade reads as lag.
     public func select(_ page: SettingsPage) {
         show(path: [page], animated: false)
     }
 
-    /// Drills into `page` from the current one. Drilling into a page that is already in the path
-    /// returns to it instead of stacking a second copy.
+    func revealGeneralControl(_ targetID: String) {
+        generalRevealRequest = GeneralRevealRequest(id: UUID(), targetID: targetID)
+        select(.general)
+    }
+
+    func clearGeneralRevealRequest(_ id: UUID) {
+        guard generalRevealRequest?.id == id else { return }
+        generalRevealRequest = nil
+    }
+
+    /// Drills into a page from the current one; a page already in the path is returned to instead.
     public func push(_ page: SettingsPage) {
         if let index = path.firstIndex(of: page) {
             show(path: Array(path[...index]))
@@ -333,8 +321,7 @@ public final class SettingsRouter: ObservableObject {
 
     // MARK: - Configuration requests
 
-    /// Opens an action's page because something outside the window asked for it, keeping the
-    /// request so the page can explain why and highlight what is missing.
+    /// Opens an action's page for an outside request, keeping the request so the page can say what is missing.
     public func openConfiguration(for action: any Action, request: ConfigurationRequest?) {
         if let request, !action.chrome.launchesAI {
             configurationRequests[action.id] = request

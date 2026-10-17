@@ -1,12 +1,9 @@
 // PaletteAIPrompt.swift
 // OpenClip
 //
-// The action-search palette's AI fallback. When a typed query matches no action, the query itself
-// is offered as an instruction for the configured AI provider: run it once on the selection
-// ("Rewrite Selection"), or save it as a reusable AI tool — an `AIActionPreset`, which from then on is a
-// searchable palette action and a row in Preferences → AI → Actions — and run it. Pure
-// presentation model kept out of the view so the rules (when the rows appear, how a prompt is
-// turned into a tool title) are unit-testable without hosting SwiftUI.
+// The action-search palette's AI fallback: when a query matches nothing, offer it as an AI
+// instruction (run on the selection, or saved as a reusable AI tool). Pure presentation model so
+// the rules are unit-testable without SwiftUI.
 import Foundation
 import Core
 
@@ -32,8 +29,7 @@ enum PaletteAIPrompt {
         case actions
     }
 
-    /// The rows offered under the results for `query`: both when nothing matched, none when
-    /// actions matched — and none for a blank query or with AI switched off (the plain "No matches" copy stays).
+    /// AI rows appear only when nothing matched, and never for a blank query or with AI off.
     static func rows(for query: String, aiEnabled: Bool, results: Results) -> [PaletteAIPromptRow] {
         guard aiEnabled, !instruction(from: query).isEmpty else { return [] }
         switch results {
@@ -59,9 +55,7 @@ enum PaletteAIPrompt {
         return "⏎ show · ⇧⏎ \(secondary)"
     }
 
-    /// The instruction handed to the provider: the query with surrounding whitespace trimmed and
-    /// interior runs of whitespace collapsed to one space, so an accidental double space never
-    /// changes the prompt.
+    /// The query with whitespace trimmed and collapsed, so stray spaces never change the prompt.
     static func instruction(from query: String) -> String {
         query
             .split(whereSeparator: { $0.isWhitespace || $0.isNewline })
@@ -93,8 +87,7 @@ enum PaletteAIPrompt {
     }
 
     /// Prompt instruction wrapped with format requirements to generate a clean reusable tool name.
-    /// The name travels in the same `<title>` tag as the task-heading flows — it is one concept
-    /// ("the short name for this work"), and only the wording of what to name differs per flow.
+    /// Shares the `<title>` tag with the task-heading flows.
     static func saveToolTaskPrompt(for query: String) -> String {
         let task = instruction(from: query)
         return """
@@ -106,11 +99,8 @@ enum PaletteAIPrompt {
         """
     }
 
-    /// A tool title for a prompt: the collapsed instruction with its first letter capitalised,
-    /// cut back to `maxToolTitleLength` characters — at the last word boundary when there is one
-    /// in the second half, so "Rewrite this in a friendly, casual tone for…" rather than a word
-    /// chopped mid-way — and finished with an ellipsis when anything was dropped. Also the result
-    /// card's header for a one-off run. Empty only for a blank prompt.
+    /// Tool title: the capitalised instruction cut at a word boundary to `maxToolTitleLength`, with
+    /// an ellipsis when trimmed. Empty for a blank prompt.
     static func toolTitle(for prompt: String) -> String {
         let collapsed = instruction(from: prompt)
         guard let first = collapsed.first else { return "" }
@@ -126,7 +116,6 @@ enum PaletteAIPrompt {
         return cut.trimmingCharacters(in: .whitespaces) + "…"
     }
 
-    /// The row's display title.
     static func rowTitle(_ row: PaletteAIPromptRow, query: String = "") -> String {
         switch row {
         case .apply:
@@ -138,8 +127,7 @@ enum PaletteAIPrompt {
         }
     }
 
-    /// The row's SF Symbol. `sparkle` (singular) is the app's AI mark — the same glyph the AI Tools
-    /// launcher and every AI preset wear — so all three palette AI rows read as one family.
+    /// SF Symbol; `sparkle` is the app's AI mark, shared by all AI rows.
     static func rowSymbol(_ row: PaletteAIPromptRow) -> String {
         Constants.defaultAIIconSymbol
     }

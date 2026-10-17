@@ -1,33 +1,22 @@
 // ManifestValidation.swift
 // OpenClip
 //
-// Validation pass for extension manifests. The loader (`ExtensionManager`) runs this before any
-// action is created: unknown/unsupported action kinds are rejected instead of silently routing
-// elsewhere, required fields are checked, and the schema/api version and a fingerprint of the
-// manifest are recorded for observability. The capability gate is generic with an intentionally
-// **empty** known set on day one, so any declared capability rejects the manifest.
+// Validation pass for extension manifests, run by the loader before any action is created.
+// Unknown kinds are rejected rather than silently routed; the capability set starts empty.
 //
 // Pure Core — no AppKit/SwiftUI.
 import Foundation
 
-/// A single reason a manifest fails validation, with an index path into the manifest
-/// (e.g. `"actions[0]"` or `"actions[0].subActions[2]"`) for grouping into a readable log line.
+/// A reason a manifest fails validation, with an index path such as `"actions[0].subActions[2]"`.
 public struct ManifestValidationIssue: Sendable, Equatable {
     public enum Kind: Sendable, Equatable {
-        /// The action's `type` string is not a recognized action kind.
         case unknownActionKind(String)
-        /// The action is missing a field its kind requires.
         case missingRequiredField(String)
-        /// The manifest declares a capability outside the host's known set.
         case unknownCapability(String)
-        /// An action's option identifier is defined more than once.
         case duplicateOptionIdentifier(String)
-        /// A `javascript` action declares `secondary`, which is reserved for non-scripting kinds;
         /// JS authors branch on `openclip.input.isSecondaryClick` instead.
         case secondaryOnJavaScriptAction
-        /// An action declares a script path that escapes the package directory or uses an absolute path.
         case unsafeScriptPath(String)
-        /// An action declares `inline: true` but is not a synchronous JavaScript action.
         case invalidInlineAction
     }
 
@@ -56,12 +45,11 @@ extension ManifestValidationIssue: CustomStringConvertible {
         case .unsafeScriptPath(let script):
             return "\(path): script path escapes extension directory \"\(script)\""
         case .invalidInlineAction:
-            return "\(path): `inline: true` is only supported on synchronous javascript actions (kind \"js\"/\"javascript\" without \"async: true\")"
+            return "\(path): `inline: true` is only supported on synchronous javascript actions (kind \"js\"/\"javascript\" without \"async: true\", captureRtf, or captureHtml)"
         }
     }
 }
 
-/// A non-fatal warning generated during manifest validation (e.g. incompatible output and result declarations).
 public struct ManifestValidationWarning: Sendable, Equatable, CustomStringConvertible {
     public enum Kind: Sendable, Equatable {
         case incompatibleOutputResult(output: ExtensionOutputKind, result: ExtensionResultDelivery)
@@ -84,15 +72,11 @@ public struct ManifestValidationWarning: Sendable, Equatable, CustomStringConver
     }
 }
 
-/// The outcome of validating one manifest: the host's supported schema version, the manifest's
-/// declared version when present, a content fingerprint of the manifest data, and any issues.
+/// The outcome of validating one manifest.
 public struct ManifestValidationRecord: Sendable, Equatable {
-    /// The manifest schema/api version this host supports.
     public let schemaVersion: String
-    /// The manifest's own `version` field when present.
     public let declaredVersion: String?
-    /// SHA-256 (hex) of the raw manifest data — a stable content fingerprint for the exact bytes
-    /// that were loaded.
+    /// SHA-256 (hex) of the raw manifest bytes.
     public let fingerprint: String
     public let issues: [ManifestValidationIssue]
     public let warnings: [ManifestValidationWarning]
@@ -114,10 +98,7 @@ public struct ManifestValidationRecord: Sendable, Equatable {
     }
 }
 
-/// Validates a manifest's declared capabilities against the host's known set. The known set is
-/// intentionally **empty** on day one: any declared capability is unknown and rejects the manifest.
-/// The mechanism is generic — add a capability by seeding `knownCapabilities` — without reserving
-/// any not-yet-real slots.
+/// Rejects any declared capability not in `knownCapabilities`, which starts empty.
 public struct ManifestCapabilityGate: Sendable {
     public let knownCapabilities: Set<String>
 
@@ -135,8 +116,7 @@ public struct ManifestCapabilityGate: Sendable {
     }
 }
 
-/// Pure, side-effect-free validation of an `ExtensionMetadata` manifest. Used by the loader before
-/// any action is materialized.
+/// Pure validation of an `ExtensionMetadata` manifest.
 public struct ManifestValidator: Sendable {
     public static let shared = ManifestValidator()
 
@@ -157,7 +137,6 @@ public struct ManifestValidator: Sendable {
         shared.validateWarnings(manifest)
     }
 
-    /// Validates `manifest`, returning every issue found (empty when it passes).
     public func validate(_ manifest: ExtensionMetadata) -> [ManifestValidationIssue] {
         var issues = capabilityGate.validate(manifest)
         if let options = manifest.options {
@@ -169,7 +148,6 @@ public struct ManifestValidator: Sendable {
         return issues
     }
 
-    /// Validates `manifest` for non-fatal warnings (such as incompatible output and result declarations).
     public func validateWarnings(_ manifest: ExtensionMetadata) -> [ManifestValidationWarning] {
         var warnings: [ManifestValidationWarning] = []
         if let output = manifest.output, let result = manifest.result {
@@ -199,8 +177,6 @@ public struct ManifestValidator: Sendable {
         return warnings
     }
 
-    /// Validates `manifest` against the manifest data, producing a record with the schema version,
-    /// declared version, content fingerprint, and issues.
     public func validate(_ manifest: ExtensionMetadata, data: Data?) -> ManifestValidationRecord {
         let issues = validate(manifest)
         let warnings = validateWarnings(manifest)
@@ -236,12 +212,10 @@ public struct ManifestValidator: Sendable {
                 issues.append(ManifestValidationIssue(kind: .missingRequiredField("shortcutName"), path: path))
             }
         case .service:
-            // `serviceName` is optional; it identifies a sharing service (or service-menu name) to
-            // invoke. Nothing is required.
+            // `serviceName` is optional; nothing is required.
             break
         default:
-            // Every other runnable kind needs at least one executable payload. Without any, the
-            // factory deterministically drops the action — a schema error, so reject the manifest.
+            // Without a payload the factory drops the action, so reject the manifest here.
             if !hasExecutablePayload([action.url, action.script, action.scriptCode]) {
                 issues.append(ManifestValidationIssue(kind: .missingRequiredField("url/script/scriptCode"), path: path))
             }
@@ -250,7 +224,7 @@ public struct ManifestValidator: Sendable {
             issues.append(ManifestValidationIssue(kind: .secondaryOnJavaScriptAction, path: path))
         }
         if action.inline == true {
-            if action.kind != .js || action.isAsync == true {
+            if action.kind != .js || action.isAsync == true || action.captureRtf == true || action.captureHtml == true {
                 issues.append(ManifestValidationIssue(
                     kind: .invalidInlineAction,
                     path: path
@@ -298,9 +272,7 @@ public struct ManifestValidator: Sendable {
         value?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true
     }
 
-    /// Whether at least one candidate payload field carries non-blank content. Kinds that run from
-    /// a payload (inline `scriptCode`, `script` file, `url`) reject a manifest only when *all* of
-    /// their candidate fields are blank.
+    /// Rejects only when *all* candidate payload fields are blank.
     private func hasExecutablePayload(_ fields: [String?]) -> Bool {
         !fields.allSatisfy(isBlank)
     }

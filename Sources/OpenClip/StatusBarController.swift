@@ -1,16 +1,13 @@
 // StatusBarController.swift
 // OpenClip
 //
-// Manages the menu bar status item, dropdown menu actions, and preferences window presentation for OpenClip.
-// Formatted according to native macOS status menu conventions with consistent text alignment,
-// clean sectional dividers, and standard keyboard shortcuts.
+// Menu bar status item, its dropdown menu, and Preferences presentation.
 import AppKit
 import SwiftUI
 import Combine
 import Core
 import KeyboardShortcuts
 
-/// Manages the menu bar status icon for OpenClip.
 @MainActor
 class StatusBarController: NSObject, NSMenuDelegate, NSMenuItemValidation {
     private let settingsStore: any SettingsStore
@@ -44,7 +41,6 @@ class StatusBarController: NSObject, NSMenuDelegate, NSMenuItemValidation {
     private let rulesSaveURL: URL
     private var pauseTask: Task<Void, Never>?
 
-    /// Initializes a new status bar controller.
     init(
         settingsStore: any SettingsStore = DefaultSettingsStore.shared,
         notificationCenter: NotificationCenter = .default,
@@ -121,13 +117,11 @@ class StatusBarController: NSObject, NSMenuDelegate, NSMenuItemValidation {
         NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
     
-    /// Sets up the menu for the status bar item following standard macOS menu hierarchy.
     private func setupMenu() {
         let menu = NSMenu()
         menu.delegate = self
         self.rootMenu = menu
 
-        // Resume item (prominent when paused)
         let resume = NSMenuItem(
             title: String(localized: "Resume OpenClip"),
             action: #selector(resumeFromPause),
@@ -138,7 +132,6 @@ class StatusBarController: NSObject, NSMenuDelegate, NSMenuItemValidation {
         menu.addItem(resume)
         self.resumeItem = resume
         
-        // Section 1: Core State & Trigger Modes
         let isEnabled = settingsStore.get(.isAppEnabled)
 
         let toggleItem = NSMenuItem(
@@ -151,10 +144,8 @@ class StatusBarController: NSObject, NSMenuDelegate, NSMenuItemValidation {
         menu.addItem(toggleItem)
         self.toggleEnabledItem = toggleItem
 
-        // Pause Submenu (App-specific & Snooze)
         let pauseMenu = NSMenu(title: String(localized: "Pause"))
 
-        // Dynamic Pause in <Current App>
         let pauseApp = NSMenuItem(
             title: String(localized: "Pause in App"),
             action: #selector(toggleCurrentAppPause),
@@ -185,7 +176,6 @@ class StatusBarController: NSObject, NSMenuDelegate, NSMenuItemValidation {
         
         menu.addItem(NSMenuItem.separator())
 
-        // Section 2: Core App Navigation
         let captureItem = menuItem(title: String(localized: "Capture Text"), action: #selector(captureText))
         captureItem.setShortcut(for: .captureText)
         self.captureTextMenuItem = captureItem
@@ -205,7 +195,6 @@ class StatusBarController: NSObject, NSMenuDelegate, NSMenuItemValidation {
         menu.addItem(prefsItem)
         menu.addItem(NSMenuItem.separator())
 
-        // Section 3: Updates & Support
         let updateItem = menuItem(title: String(localized: "Check for Updates…"), action: #selector(checkForUpdates))
         menu.addItem(updateItem)
         self.updateMenuItem = updateItem
@@ -215,7 +204,6 @@ class StatusBarController: NSObject, NSMenuDelegate, NSMenuItemValidation {
 
         menu.addItem(NSMenuItem.separator())
         
-        // Section 4: Lifecycle
         let quitItem = NSMenuItem(title: String(localized: "Quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quitItem.target = NSApp
         menu.addItem(quitItem)
@@ -251,7 +239,7 @@ class StatusBarController: NSObject, NSMenuDelegate, NSMenuItemValidation {
         return img
     }
 
-    /// Builds a menu item targeted at self (status-item menus don't resolve actions through the responder chain).
+    /// Targets self explicitly: status-item menus don't resolve actions via the responder chain.
     private func menuItem(title: String, action: Selector, keyEquivalent: String = "", iconName: String? = nil) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
         item.target = self
@@ -305,7 +293,7 @@ class StatusBarController: NSObject, NSMenuDelegate, NSMenuItemValidation {
         guard menu === actionsSubmenu else { return }
         menu.removeAllItems()
 
-        // Top pinned action: immediately accessible with zero scrolling
+        // Pinned at top, reachable without scrolling.
         let manageItem = NSMenuItem(
             title: String(localized: "Manage Actions…"),
             action: #selector(openActionsTab),
@@ -579,9 +567,7 @@ class StatusBarController: NSObject, NSMenuDelegate, NSMenuItemValidation {
         AppUpdateManager.shared.checkForUpdates()
     }
     
-    /// Decision 8 config-open path: an action requested its configuration. The popup has already
-    /// hidden; open Preferences and hand the request to the coordinator so PreferencesView can
-    /// present the matching ActionEditorPage (the window may not have existed yet).
+    /// An action asked to be configured: open Preferences, which presents its editor.
     @objc private func handleOpenConfiguration(_ notification: Notification) {
         showPreferences()
     }
@@ -591,8 +577,7 @@ class StatusBarController: NSObject, NSMenuDelegate, NSMenuItemValidation {
         updateStatusIcon(isEnabled: isEnabled)
     }
 
-    /// Screen frame of the status item's button, for anchoring surfaces (e.g. the post-onboarding
-    /// coach mark) below it. Nil until the button has joined a window.
+    /// Screen frame of the status item button; nil until it has joined a window.
     var statusItemButtonFrame: NSRect? {
         statusItem?.button?.window?.frame
     }
@@ -609,7 +594,7 @@ class StatusBarController: NSObject, NSMenuDelegate, NSMenuItemValidation {
             button.imagePosition = .imageLeft
             button.toolTip = hasReminder ? String(localized: "OpenClip Update Available") : "OpenClip"
             button.alphaValue = effectiveEnabled ? 1.0 : 0.45
-            // The enabled state must be legible beyond the purely visual alpha dimming.
+            // Don't convey enabled state by alpha alone (accessibility).
             button.setAccessibilityLabel(hasReminder ? String(localized: "OpenClip Update Available") : "OpenClip")
             if isPaused {
                 button.setAccessibilityValue(String(localized: "OpenClip is paused"))
@@ -638,15 +623,12 @@ class StatusBarController: NSObject, NSMenuDelegate, NSMenuItemValidation {
         }
     }
     
-    /// Opens Settings on whatever pane (and drill-down) was last shown. The menu item and the
-    /// Dock reopen use this: a reused window already holds the router's last path, and resetting
-    /// to General here is what used to throw the user back to the top on every reopen.
+    /// Opens Settings on the last-shown pane and drill-down; resetting here would lose the router path.
     @objc public func showPreferences() {
         presentPreferences(tab: nil)
     }
 
-    /// Opens Settings on a named pane, overriding wherever the window was — how a deep link
-    /// (the status menu's Actions item, an action asking to be configured) should behave.
+    /// Opens Settings on a named pane, overriding the last-shown one.
     public func showPreferences(tab: PreferenceTab) {
         presentPreferences(tab: tab)
     }

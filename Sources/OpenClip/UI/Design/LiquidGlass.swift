@@ -10,7 +10,6 @@
 import SwiftUI
 import AppKit
 
-/// Chooses which Liquid Glass variant a surface uses.
 public enum LiquidGlassVariant {
     /// Adaptive glass that maintains legibility over any content. Default.
     case regular
@@ -93,7 +92,7 @@ public struct LayeredGlassBorder: View {
 
 @MainActor
 public extension View {
-    /// Renders a layered frosted glass surface with backing scrim, liquid glass material, specular rim, and depth shadows.
+    /// Frosted glass surface: scrim, Liquid Glass material, specular rim, and depth shadows.
     func layeredGlassSurface(
         cornerRadius: CGFloat = 14,
         colorScheme: ColorScheme
@@ -131,7 +130,7 @@ public extension View {
             )
     }
 
-    /// Renders the view as a glass surface using Liquid Glass on macOS 26+ or thin material for a frosted look, or solid background when Reduce Transparency is enabled.
+    /// Liquid Glass on macOS 26+, thin material on 14-15; solid background under Reduce Transparency.
     @ViewBuilder
     func glassSurface(
         _ variant: LiquidGlassVariant = .regular,
@@ -155,7 +154,7 @@ public extension View {
     }
 }
 
-/// A SwiftUI wrapper around AppKit's `NSVisualEffectView` for behind-window frosted glass, falling back to solid window background under Reduce Transparency.
+/// Wraps `NSVisualEffectView` for behind-window frosted glass; solid background under Reduce Transparency.
 @MainActor
 public struct VisualEffectView: NSViewRepresentable {
     public var material: NSVisualEffectView.Material

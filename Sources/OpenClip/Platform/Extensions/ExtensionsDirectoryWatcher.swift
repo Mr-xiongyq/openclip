@@ -1,14 +1,9 @@
 // ExtensionsDirectoryWatcher.swift
 // OpenClip
 //
-// Watches ~/.openclip/extensions for add/remove/edit changes and hot-reloads the loaded
-// extension actions (new installs, uninstalls, and manifest edits appear without relaunch).
-//
-// Uses a lightweight poll-snapshot diff instead of FSEvents: each tick builds a recursive
-// fingerprint of the tree (relative file path -> content mtime), compares it to the previous
-// state, and calls the reload callback only once two consecutive ticks agree that the tree
-// settled. The settle window keeps a reload from firing mid-copy when a package is still
-// being written. Pure Foundation — no CoreServices, no FSEventStream.
+// Hot-reloads extension actions when ~/.openclip/extensions changes. Polls and diffs a recursive
+// snapshot instead of using FSEvents, and reloads only after two consecutive ticks agree, so a
+// package still being copied in is not picked up half-written.
 import Foundation
 import Core
 
@@ -17,10 +12,8 @@ struct ExtensionsSnapshot: Equatable {
     /// Relative file path (from the watched root) -> content modification date.
     let files: [String: Date]
 
-    /// Recursively fingerprints every non-hidden file under `root`.
-    /// Returns `nil` if the directory does not exist or is unreadable.
-    /// Hidden items are skipped, matching `uninstallExtension`'s convention of ignoring
-    /// `.install_staging_*` dirs and dotfiles .DS_Store left behind by installs.
+    /// Recursively fingerprints non-hidden files under `root`; nil if missing or unreadable.
+    /// Hidden items (`.install_staging_*`, .DS_Store) are skipped.
     static func build(from root: URL) -> ExtensionsSnapshot? {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: root.path, isDirectory: &isDirectory), isDirectory.boolValue,
@@ -45,17 +38,14 @@ struct ExtensionsSnapshot: Equatable {
     }
 }
 
-/// Polls a directory, diffs `ExtensionsSnapshot`s, and fires a reload after a change settles.
-/// The timer runs on a private queue; the reload closure is invoked on the MainActor.
+/// Polls a directory and fires a reload after a change settles.
 final class ExtensionsDirectoryWatcher: @unchecked Sendable {
-    /// Poll interval. The settle window is two consecutive agreeing ticks, so a change shows
-    /// up within ~2× this interval.
+    /// A change settles within ~2× this interval (two agreeing ticks).
     static let defaultPollInterval: TimeInterval = 1.0
 
     private let queue = DispatchQueue(label: "com.openclip.extensions.watch")
     private var timer: DispatchSourceTimer?
 
-    /// Invoked on the MainActor when the directory tree settles into a new state.
     private let reload: @MainActor () async -> Void
 
     // State below is confined to `queue`.
@@ -95,8 +85,7 @@ final class ExtensionsDirectoryWatcher: @unchecked Sendable {
         }
     }
 
-    /// Runs a single poll tick synchronously on the watch queue. Exposed so tests can drive
-    /// the settle logic without waiting on the live timer.
+    /// One synchronous poll tick, so tests can drive the settle logic without the timer.
     func pollOnce() {
         queue.sync { [weak self] in
             self?.poll()
@@ -107,8 +96,7 @@ final class ExtensionsDirectoryWatcher: @unchecked Sendable {
     private func poll() {
         guard let root else { return }
         guard let current = ExtensionsSnapshot.build(from: root) else {
-            // Directory missing or unreadable: don't reload. A transient state (e.g. a package
-            // deleted mid-replacement) shouldn't wipe the registry.
+            // Missing or unreadable (e.g. a package mid-replacement): skip, so the registry is kept.
             return
         }
         if current == lastSeen {
@@ -125,13 +113,10 @@ final class ExtensionsDirectoryWatcher: @unchecked Sendable {
             self.pending = current
             return
         }
-        // Two consecutive ticks agree on the changed tree → settled.
         lastSeen = current
         self.pending = nil
         guard !reloadInFlight else {
-            // A reload is already running; remember that another is needed and run it once
-            // the in-flight one completes (see reloadCompleted). This keeps concurrent
-            // loadExtensions runs from racing the registry's register/unregister.
+            // Defer until the in-flight reload completes, so loadExtensions never races the registry.
             needsReload = true
             return
         }
@@ -148,8 +133,7 @@ final class ExtensionsDirectoryWatcher: @unchecked Sendable {
         }
     }
 
-    /// Runs on the MainActor (after `reload`). Hops back to `queue` to clear the in-flight flag
-    /// and fire the deferred reload, if any change settled while the previous one was running.
+    /// Runs on the MainActor after `reload`; hops back to `queue` to clear the in-flight flag.
     private func reloadCompleted() {
         queue.async { [weak self] in
             guard let self else { return }

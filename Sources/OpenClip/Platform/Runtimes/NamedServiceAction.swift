@@ -1,14 +1,9 @@
 // NamedServiceAction.swift
 // OpenClip
 //
-// Implements the `service` extension runtime (Phase 8). When `serviceName` is set it first tries a
-// native sharing service by identifier (`NSSharingService(named:)` — e.g. the Notes inline popup via
-// `com.apple.Notes.SharingExtension`), falling back to a service-menu service via `NSPerformService`
-// (through an injectable `performService` seam) against an isolated pasteboard so the user's global
-// clipboard is untouched. Without `serviceName` it maps to the generic macOS share picker
-// (`.showServices(text)`). Enablement and match resolution
-// delegate to the shared ActionVisibility evaluator when rules are attached; otherwise the
-// default requires a non-blank selection.
+// Implements the `service` extension runtime. With `serviceName`, tries a native sharing service
+// by identifier, then falls back to `NSPerformService` on an isolated pasteboard so the global
+// clipboard is untouched. Without it, shows the generic share picker (`.showServices`).
 import Foundation
 import AppKit
 import Core
@@ -58,16 +53,12 @@ public struct NamedServiceAction: ConfigurableAction, ActionWithRules {
     public func perform(_ context: ActionContext) async throws -> ActionResult {
         let text = context.selection.text
         if let serviceName = serviceName, !serviceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            // Prefer a native sharing service by identifier (e.g. `com.apple.Notes.SharingExtension`),
-            // which hosts its own UI (e.g. the Notes inline popup). When the name isn't a registered
-            // sharing service, fall back to a service-menu service via the `performService` seam
-            // (NSPerformService) so legacy service-menu names still work.
+            // Native sharing services host their own UI; legacy service-menu names fall back to `performService`.
             if let service = NSSharingService(named: NSSharingService.Name(serviceName)) {
                 service.perform(withItems: [text])
                 return .none
             }
-            // Use an isolated named pasteboard so invoking the service never overwrites the
-            // user's global clipboard contents with the selected text.
+            // Isolated pasteboard so the global clipboard is not overwritten.
             let pboard = NSPasteboard(name: NSPasteboard.Name("com.openclip.namedService.\(UUID().uuidString)"))
             pboard.clearContents()
             pboard.setString(text, forType: .string)

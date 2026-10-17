@@ -33,14 +33,12 @@ final class ActionGroupIntegrationTests: XCTestCase {
         // Simulating reload / reinstall unregister of canonical ID
         coordinator.unregister(actionID: "com.custom.ext1")
 
-        // Group definitions persist intact
         XCTAssertEqual(coordinator.actionGroupDefs.count, 1)
         XCTAssertEqual(coordinator.actionGroupDefs[0].memberActionIDs, ["com.custom.ext1", "com.custom.ext2"])
 
         // Simulating re-registration upon reinstallation
         coordinator.register(action: extAction1)
 
-        // Re-registered action is restored inside the group
         let groupID = coordinator.actionGroupDefs[0].id
         XCTAssertEqual(coordinator.actions.first?.id, groupID)
         XCTAssertEqual(Set(coordinator.actions.dropFirst().map(\.id)), Set(["com.custom.ext1", "com.custom.ext2"]))
@@ -144,7 +142,6 @@ final class ActionGroupIntegrationTests: XCTestCase {
         XCTAssertEqual(coordinator.actions.map(\.id), [groupID, "action.3", "action.1", "action.2"])
         XCTAssertEqual(coordinator.actionGroupDefs[0].memberActionIDs, ["action.3", "action.1", "action.2"])
 
-        // Verify persisted setting in SettingsStore
         let persistedData = settingsStore.get(.actionGroups)
         let decoded = try ActionGroupDef.decode(from: XCTUnwrap(persistedData))
         XCTAssertEqual(decoded.first?.memberActionIDs, ["action.3", "action.1", "action.2"])
@@ -171,8 +168,7 @@ final class ActionGroupIntegrationTests: XCTestCase {
         XCTAssertEqual(decoded.first?.memberActionIDs, ["action.1", "action.2", "action.3"])
     }
 
-    /// A group made with nothing in it is a folder awaiting actions and is kept; a group that loses
-    /// its last member through a removal is not.
+    /// A group lasts exactly as long as it holds something; a removal that empties it dissolves it.
     func testAGroupLastsExactlyAsLongAsItHoldsSomething() throws {
         let a1 = DummyAction(id: "action.1", title: "Action 1")
         let a2 = DummyAction(id: "action.2", title: "Action 2")
@@ -436,7 +432,6 @@ final class ActionGroupIntegrationTests: XCTestCase {
 
         XCTAssertEqual(coordinator.memberActionIDs(for: groupID), ["\(groupID).s1", "\(groupID).s2", "\(groupID).s3"])
 
-        // Reorder via coordinator
         coordinator.setExtensionGroupMemberOrder(groupID: groupID, memberIDs: ["\(groupID).s3", "\(groupID).s1", "\(groupID).s2"])
 
         XCTAssertEqual(coordinator.memberActionIDs(for: groupID), ["\(groupID).s3", "\(groupID).s1", "\(groupID).s2"])
@@ -1035,10 +1030,8 @@ final class ActionsOutlineDropTests: XCTestCase {
         XCTAssertTrue(disabledActionIDs.contains("action.3"))
         XCTAssertTrue(disabledActionIDs.contains("action.4"))
 
-        // Action 1 is now enabled
         XCTAssertTrue(binding1.wrappedValue)
 
-        // Now turn action 1 off
         binding1.wrappedValue = false
         XCTAssertTrue(disabledActionIDs.contains("action.1"))
         XCTAssertFalse(binding1.wrappedValue)
@@ -1151,9 +1144,7 @@ final class ActionsOutlineDropTests: XCTestCase {
         XCTAssertFalse(groupBinding.wrappedValue)
         groupBinding.wrappedValue = true
 
-        // Package un-disabled
         XCTAssertFalse(disabledPackages.contains("com.pkg.leafy"))
-        // Group container un-disabled
         XCTAssertFalse(disabledActionIDs.contains("com.pkg.leafy.g1"))
         // Group children must NOT be disabled
         XCTAssertFalse(disabledActionIDs.contains("com.pkg.leafy.g1.c1"))

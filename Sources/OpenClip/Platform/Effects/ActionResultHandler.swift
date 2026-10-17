@@ -20,9 +20,18 @@ public protocol ActionResultHandler: Sendable {
     func handle(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication?) async throws
     @MainActor
     func handleWithoutDismissal(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication?) async
+
+    @MainActor
+    func handle(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication?,
+                isSelectionCurrent: @escaping @MainActor (SelectionContext) -> Bool) async throws
 }
 
 extension ActionResultHandler {
+    @MainActor
+    public func handle(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication?,
+                       isSelectionCurrent: @escaping @MainActor (SelectionContext) -> Bool) async throws {
+        try await handle(result, in: view, targetApp: targetApp)
+    }
     @MainActor
     public func handle(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication?) async throws {
         try await handle(result, in: view)
@@ -34,17 +43,13 @@ extension ActionResultHandler {
     }
 }
 
-/// Physical-key posting seam (Task 15): `DefaultActionResultHandler` posts keystrokes through an
-/// injected `KeyboardEventPosting` (production default `SessionEventTapPoster` emits the real
-/// `CGEvent`), so tests can assert `deliverKeyboardEffect`'s resign→activate→post→restore ordering
-/// with a recording poster instead of a real key.
+/// Seam for posting keystrokes, so tests can record key order without real events.
 public protocol KeyboardEventPosting: Sendable {
     @MainActor
     func postKey(keyCode: CGKeyCode, flags: CGEventFlags)
 }
 
-/// The production poster: posts a synthetic key (down + up) to the session event tap — the same
-/// `CGEvent` sequence the effect handler always emitted.
+/// Production poster: synthetic key down and up to the session event tap.
 @MainActor
 public struct SessionEventTapPoster: KeyboardEventPosting {
     public init() {}
@@ -68,8 +73,7 @@ public struct SessionEventTapPoster: KeyboardEventPosting {
 
 @MainActor
 public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
-    /// Resolves a word to its dictionary definition (headless DictionaryServices lookup). Injectable
-    /// so tests can stub the lookup instead of hitting the real system dictionaries.
+    /// Injectable so tests can stub the dictionary lookup.
     public typealias DictionaryLookup = @Sendable (String) -> String?
 
     public typealias AppActivator = @MainActor @Sendable (NSRunningApplication) -> Void
@@ -85,6 +89,9 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
     private let openURLInApp: @MainActor @Sendable (URL, String) async -> Void
     private let appActivator: AppActivator
     private let targetActiveChecker: TargetActiveChecker
+    private let frontmostPID: @MainActor () -> pid_t?
+    private let copyOverlayPresent: @MainActor () -> Bool
+    private let copySoundPlayer: @MainActor (CopySound) -> Void
 
     public init(settingsStore: SettingsStore = DefaultSettingsStore.shared,
                 keyboardPoster: KeyboardEventPosting = SessionEventTapPoster(),
@@ -104,6 +111,11 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         }
         self.appActivator = appActivator
         self.targetActiveChecker = targetActiveChecker
+        self.frontmostPID = { NSWorkspace.shared.frontmostApplication?.processIdentifier }
+        self.copyOverlayPresent = {
+            CopyTriggerGate.isForeignOverlayPresent(at: NSEvent.mouseLocation, intent: .explicitUserCopy)
+        }
+        self.copySoundPlayer = { $0.play() }
     }
 
     public init(settingsStore: SettingsStore = DefaultSettingsStore.shared,
@@ -117,7 +129,12 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
                     await BrowserTabOpener().open(url, inApp: bundleID)
                 },
                 appActivator: @escaping AppActivator = { $0.activate() },
-                targetActiveChecker: @escaping TargetActiveChecker = SelectionReplacer.defaultTargetActiveChecker) {
+                targetActiveChecker: @escaping TargetActiveChecker = SelectionReplacer.defaultTargetActiveChecker,
+                frontmostPID: @escaping @MainActor () -> pid_t? = { NSWorkspace.shared.frontmostApplication?.processIdentifier },
+                copyOverlayPresent: @escaping @MainActor () -> Bool = {
+                    CopyTriggerGate.isForeignOverlayPresent(at: NSEvent.mouseLocation, intent: .explicitUserCopy)
+                },
+                copySoundPlayer: @escaping @MainActor (CopySound) -> Void = { $0.play() }) {
         self.settingsStore = settingsStore
         self.keyboardPoster = keyboardPoster
         self.pasteboard = pasteboard
@@ -128,6 +145,15 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         self.openURLInApp = openURLInApp
         self.appActivator = appActivator
         self.targetActiveChecker = targetActiveChecker
+        self.frontmostPID = frontmostPID
+        self.copyOverlayPresent = copyOverlayPresent
+        self.copySoundPlayer = copySoundPlayer
+    }
+
+    /// Plays the copy sound when the user enabled it. Call only after the clipboard write succeeded.
+    private func playCopySoundIfEnabled() {
+        guard settingsStore.get(.playCopySound) else { return }
+        copySoundPlayer(CopySound(stored: settingsStore.get(.copySoundName)))
     }
 
 
@@ -147,6 +173,11 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         try await execute(result, in: view, targetApp: targetApp)
     }
 
+    public func handle(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication?,
+                       isSelectionCurrent: @escaping @MainActor (SelectionContext) -> Bool) async throws {
+        try await execute(result, in: view, targetApp: targetApp, isSelectionCurrent: isSelectionCurrent)
+    }
+
     public func handleWithoutDismissal(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication?) async {
         do {
             try await execute(result, in: view, targetApp: targetApp)
@@ -164,13 +195,29 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         guard isCurrent() else { return false }
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+        playCopySoundIfEnabled()
         return true
     }
 
-    /// The single side-effect body shared by `handle` (throws) and `handleWithoutDismissal`
-    /// (swallows). Deliberately no dismissal step — hiding is decided by the presenter, never here.
-    private func execute(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication? = nil) async throws {
+    /// Shared by `handle` and `handleWithoutDismissal`. Never dismisses; the presenter decides.
+    private func execute(_ result: ActionResult, in view: NSView?, targetApp: NSRunningApplication? = nil,
+                         isSelectionCurrent: @escaping @MainActor (SelectionContext) -> Bool = { _ in true }) async throws {
         switch result {
+        case .copySelection(let selection):
+            do {
+                try await copySelection(selection, targetApp: targetApp, isSelectionCurrent: isSelectionCurrent)
+            } catch let failure as NativeCopyOperation.Failure {
+                let message: String
+                switch failure {
+                case .targetChanged: message = String(localized: "The source selection is no longer available.")
+                case .commandUnavailable: message = String(localized: "The application's Copy command is unavailable.")
+                case .timedOut: message = String(localized: "The application did not confirm Copy in time.")
+                case .copyBlocked: message = String(localized: "Finish the screen capture before copying.")
+                }
+                throw NSError(domain: Constants.actionErrorDomain, code: Int(Constants.actionErrorCode),
+                              userInfo: [NSLocalizedDescriptionKey: message])
+            }
+            playCopySoundIfEnabled()
         case .copy(let text):
             try await copyText(text)
 
@@ -180,6 +227,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
             let pasteboard = self.pasteboard
             pasteboard.clearContents()
             writePayload(payload, to: pasteboard)
+            playCopySoundIfEnabled()
 
         case .copyDefinition(let word):
             guard let definition = dictionaryLookup(word), !definition.isEmpty else {
@@ -194,6 +242,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
             let pasteboard = self.pasteboard
             pasteboard.clearContents()
             pasteboard.setString(definition, forType: .string)
+            playCopySoundIfEnabled()
 
         case .cut(let text):
             let clipboardSession = try await OpenSelection.ClipboardCoordinator.shared.acquireSession(priority: .userAction, pasteboard: self.pasteboard)
@@ -264,8 +313,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
             }
 
         case .showDefinition(let word):
-            // Ask the system dictionaries to render the standard Look Up popover, anchored to the
-            // popup panel's content view. No-op when there is no view to anchor to.
+            // Standard Look Up popover, anchored to the panel content view.
             if let view {
                 view.showDefinition(
                     for: NSAttributedString(string: word),
@@ -342,13 +390,11 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
             let deliveryWindow = Task { try? await Task.sleep(nanoseconds: UInt64(self.pasteboardRestoreDelay * 1_000_000_000)) }
             _ = await deliveryWindow.value
 
-        // Presentation/flow results are presenter-owned (PopupWindowController). The handler treats
-        // them as no-ops so the switch stays exhaustive without crashing when one is routed here.
+        // Presenter-owned results: no-ops here, which keeps the switch exhaustive.
         case .toast, .openConfiguration, .sequence, .text, .file:
             break
 
-        // Keyboard execution: keyPress posts a synthetic keystroke; runShortcut launches the
-        // shortcuts CLI under the shared subprocess watchdog (thrown errors surface as a status).
+        // keyPress posts a synthetic keystroke; runShortcut runs under the subprocess watchdog.
         case .keyPress(let spec):
             try await activateTarget(targetApp)
             postKeyPress(spec)
@@ -365,11 +411,8 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
 
     // MARK: - Temporary .ics cleanup
 
-    /// Temporary `.ics` files handed to the Calendar app (via `.openURL`) are deleted after a short
-    /// deferred delay so they don't accumulate in the temp directory. Only files that match the
-    /// producer's exact convention (`Constants.icsFilenamePrefix`, `.ics` extension, inside the temp
-    /// directory, and a regular file) are touched — directories, arbitrary `.ics` files, and non-temp
-    /// paths are left alone.
+    /// Deletes temp `.ics` files handed to Calendar after a delay. Only regular files matching
+    /// `Constants.icsFilenamePrefix` inside the temp directory are touched.
     private func scheduleICSFileCleanupIfNeeded(for url: URL) {
         guard Self.isCleanableTemporaryICSFile(url) else { return }
 
@@ -388,9 +431,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         }
     }
 
-    /// Removes stale `OpenClipEvent-*.ics` files left in the temp directory by a previous session
-    /// that exited before the deferred cleanup ran (crash, quit during the delay window, etc.).
-    /// Called once at app launch.
+    /// Removes `.ics` files left by a session that quit before the deferred cleanup ran.
     public static func purgeStaleCalendarTempFiles() {
         let tempDir = FileManager.default.temporaryDirectory
         guard let items = try? FileManager.default.contentsOfDirectory(
@@ -426,9 +467,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         return filePath == tempPath || filePath.hasPrefix(tempPath + "/")
     }
 
-    /// Posts a user notification via `UNUserNotificationCenter`. Requests authorization if status is
-    /// `.notDetermined` (first `notify` effect). If authorization is denied or fails, throws an error
-    /// so the presenter surfaces the denial via status feedback.
+    /// Requests authorization on first use; throws when denied so the presenter shows the error.
     private func postNotification(title: String, body: String) async throws {
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
@@ -455,6 +494,47 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         try await center.add(request)
     }
 
+    private func copySelection(_ selection: SelectionContext, targetApp: NSRunningApplication?,
+                               isSelectionCurrent: @escaping @MainActor (SelectionContext) -> Bool) async throws {
+        guard selection.source == .selection,
+              let pid = selection.sourceApp.processIdentifier, pid > 0,
+              let sourceApp = targetApp ?? NSRunningApplication(processIdentifier: pid),
+              sourceApp.processIdentifier == pid else {
+            throw NativeCopyOperation.Failure.targetChanged
+        }
+        let sourceIsCurrent: @MainActor () -> Bool = {
+            let generationMatches = isSelectionCurrent(selection)
+            let frontmost = self.frontmostPID()
+            let matches = generationMatches && (frontmost == pid || frontmost == ProcessInfo.processInfo.processIdentifier)
+            if !matches {
+                Log.selection.debug("[Trace#\(selection.traceID ?? 0, privacy: .public)] native Copy refused: generationCurrent=\(generationMatches, privacy: .public) sourcePID=\(pid, privacy: .public) frontmostPID=\(frontmost ?? -1, privacy: .public)")
+            }
+            return matches
+        }
+        guard sourceIsCurrent() else { throw NativeCopyOperation.Failure.targetChanged }
+        let timeout = PasteboardCopyEngine.pollingTimeout(for: selection.sourceApp.bundleIdentifier)
+        try await NativeCopyOperation().perform(pasteboard: pasteboard, timeout: timeout,
+                                               isAuthorized: sourceIsCurrent) {
+            guard sourceIsCurrent() else { throw NativeCopyOperation.Failure.targetChanged }
+            self.appActivator(sourceApp)
+            let active = await self.targetActiveChecker(sourceApp)
+            guard active, isSelectionCurrent(selection),
+                  self.frontmostPID() == pid else { throw NativeCopyOperation.Failure.targetChanged }
+            let canPost: @MainActor () -> Bool = {
+                isSelectionCurrent(selection) && self.frontmostPID() == pid && !Task.isCancelled
+            }
+            guard canPost() else { throw NativeCopyOperation.Failure.targetChanged }
+            guard !self.copyOverlayPresent() else {
+                throw NativeCopyOperation.Failure.copyBlocked
+            }
+            if selection.appPolicy.useMenuCopy || selection.appPolicy.retrievalMode == .menuCopy {
+                try await NativeCopyOperation.pressMenuCopy(processIdentifier: pid, timeout: 0.5, isAuthorized: canPost)
+            } else {
+                self.postKey(keyCode: Constants.copyVirtualKey, flags: .maskCommand)
+            }
+        }
+    }
+
     private func activateTarget(_ targetApp: NSRunningApplication?) async throws {
         guard let targetApp else { try Task.checkCancellation(); return }
         appActivator(targetApp)
@@ -465,9 +545,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
 
     private func writePayload(_ payload: RichPasteboardPayload, to pasteboard: NSPasteboard) {
         if !payload.flavors.isEmpty {
-            // Write captured representations verbatim (matches clipboard managers like Maccy):
-            // app-private types must survive unchanged, and `setData` avoids `writeObjects`
-            // duplicating rich items on paste.
+            // Write flavors verbatim, as clipboard managers do; `setData` avoids duplicate rich items.
             for flavor in payload.flavors {
                 pasteboard.setData(flavor.data, forType: NSPasteboard.PasteboardType(flavor.type))
             }
@@ -486,8 +564,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         }
     }
 
-    /// Posts a synthetic key press (key + modifiers from a `KeyPressSpec`) to the frontmost app.
-    /// Unknown key names are skipped best-effort (no-op) rather than throwing.
+    /// Unknown key names are a silent no-op.
     private func postKeyPress(_ spec: KeyPressSpec) {
         guard let keyCode = Self.keyCode(for: spec.key) else { return }
         var flags: CGEventFlags = []
@@ -506,10 +583,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         keyboardPoster.postKey(keyCode: keyCode, flags: flags)
     }
 
-    /// Runs a registered Shortcuts.app shortcut via the `shortcuts` CLI. The process runs through
-    /// `ShellProcessRunner`, which supplies the 30s timeout watchdog and the throw-on-non-zero-exit
-    /// policy (surfaced by the presenter as a `.toast(.error)`). Input is passed via `-i` with a
-    /// temp file; output is intentionally discarded.
+    /// Runs via `ShellProcessRunner` (watchdog, throw on non-zero exit). Input goes through a temp file.
     private func runShortcut(name: String, input: String?) async throws {
         let binary = URL(fileURLWithPath: Constants.shortcutsBinaryPath)
         guard FileManager.default.isExecutableFile(atPath: binary.path) else {
@@ -536,9 +610,7 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
         ))
     }
 
-    /// Maps a `KeyPressSpec` key name to a QWERTY virtual key code. Letters/digits use the ANSI
-    /// layout values; unknown names return nil and the press is skipped. Known limitation: a
-    /// non-QWERTY physical layout may remap letter/digit keys.
+    /// QWERTY ANSI virtual key codes; other layouts may remap letters and digits.
     private static func keyCode(for keyName: String) -> CGKeyCode? {
         let lower = keyName.lowercased()
         let named: [String: CGKeyCode] = [
@@ -582,7 +654,6 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
             ?? FileManager.default.homeDirectoryForCurrentUser
     }
 
-    /// Returns an available destination URL by appending a numeric suffix when needed.
     public nonisolated static func uniqueFileURL(for filename: String, in directory: URL) -> URL {
         let fileManager = FileManager.default
         var targetURL = directory.appendingPathComponent(filename)
@@ -605,12 +676,9 @@ public final class DefaultActionResultHandler: ActionResultHandler, Sendable {
     }
 }
 
-/// The production dictionary lookup for the `.copyDefinition` effect: a headless
-/// `DCSCopyTextDefinition` call that never launches the Dictionary app. The pasteboard write happens
-/// in `DefaultActionResultHandler`; this only resolves a word to its definition text.
+/// Headless `DCSCopyTextDefinition` lookup; never launches Dictionary.app.
 public enum DictionaryLookupFactory {
-    /// Looks up `word` via `DCSCopyTextDefinition` (default system dictionary). Returns nil when the
-    /// word has no definition in the active dictionary or the lookup fails.
+    /// Returns nil when the word has no definition.
     public static let systemLookup: @Sendable (String) -> String? = { word in
         let cfWord = word as CFString
         let range = CFRange(location: 0, length: CFStringGetLength(cfWord))

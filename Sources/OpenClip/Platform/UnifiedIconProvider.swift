@@ -72,7 +72,6 @@ public final class UnifiedIconProvider: ObservableObject, Sendable {
         guard trimmed != lastQuery else { return }
         lastQuery = trimmed
 
-        // Cancel any in-flight search
         searchTask?.cancel()
 
         if trimmed.isEmpty {
@@ -89,11 +88,9 @@ public final class UnifiedIconProvider: ObservableObject, Sendable {
 
             let lower = trimmed.lowercased()
 
-            // SF Symbol matches (local, instant)
             let sfMatches = sfSymbols.filter { $0.id.contains(lower) }.prefix(30)
 
-            // Iconify search API — palette=false gives only monochrome icons. The network call +
-            // JSON parse run off the main actor (nonisolated helper); results merge back below.
+        // palette=false keeps only monochrome icons. The network call runs off the main actor; results merge back below.
             let iconifyMatches = await Self.fetchIconifySearchResults(query: trimmed)
 
             guard !Task.isCancelled else { return }
@@ -105,20 +102,17 @@ public final class UnifiedIconProvider: ObservableObject, Sendable {
         }
     }
 
-    /// Default icons shown when search is empty (first 160 SF Symbols)
     public var defaultIcons: [IconEntry] {
         Array(sfSymbols.prefix(160))
     }
 
     /// Queries the Iconify search API off the main actor and returns flat "prefix:name" entries.
-    /// `nonisolated` runs on the cooperative thread pool, so the network I/O and JSON parse never
-    /// block the UI — the caller merges results back via `MainActor.run`. `[IconEntry]` is Sendable,
-    /// so it crosses the actor boundary without a box.
+    /// `nonisolated` keeps network I/O and JSON parsing off the main actor; the caller merges results via `MainActor.run`.
     private nonisolated static func fetchIconifySearchResults(query: String) async -> [IconEntry] {
         var components = URLComponents(string: "https://api.iconify.design/search")
         components?.queryItems = [
             URLQueryItem(name: "query", value: query),
-            URLQueryItem(name: "limit", value: "80"),
+            URLQueryItem(name: "limit", value: "120"),
             URLQueryItem(name: "palette", value: "false")
         ]
         guard let url = components?.url else {
@@ -131,11 +125,121 @@ public final class UnifiedIconProvider: ObservableObject, Sendable {
             Log.icons.warning("Iconify search for '\(query)' returned no usable results")
             return []
         }
-        // icons are in "prefix:name" format — perfect, use directly
-        return icons.map { iconId in
+        let prefixes = icons.compactMap { $0.split(separator: ":", maxSplits: 1).first.map(String.init) }
+        let multicolor = await IconifyPaletteCatalog.shared.multicolorPrefixes(among: prefixes)
+        let usable = icons.filter { iconId in
+            iconId.split(separator: ":", maxSplits: 1).first.map { !multicolor.contains(String($0)) } ?? true
+        }
+        return usable.prefix(80).map { iconId in
             let parts = iconId.split(separator: ":", maxSplits: 1)
             let label = parts.count == 2 ? String(parts[1]).replacingOccurrences(of: "-", with: " ").capitalized : iconId
             return IconEntry(id: iconId, name: label, library: "Iconify")
         }
+    }
+}
+
+// MARK: - Iconify fetch policy
+
+/// Timeout, retry, and filtering rules for Iconify requests, kept pure so tests can pin them.
+enum IconifyFetchPolicy {
+    static let maxConcurrentRequests = 6
+    static let requestTimeout: TimeInterval = 8
+    static let maxAttempts = 3
+    /// A failed icon is not refetched inside this window, so a scrolling grid cannot hammer the API.
+    static let failureCooldown: TimeInterval = 30
+
+    /// Fallback for when the collections endpoint is unreachable. The search API returns multicolor sets
+    /// despite `palette=false`, and as template images they collapse into solid shapes.
+    static let multicolorPrefixes: Set<String> = [
+        "selfhst", "thesvg-color", "token-branded", "logos", "devicon", "material-icon-theme",
+        "vscode-icons", "skill-icons", "flat-color-icons", "twemoji", "openmoji", "noto",
+        "fluent-emoji", "fluent-emoji-flat", "emojione", "fxemoji", "streamline-emojis"
+    ]
+
+    enum StatusOutcome: Equatable {
+        case success
+        case retry
+        case giveUp
+    }
+
+    static func outcome(forStatusCode status: Int) -> StatusOutcome {
+        switch status {
+        case 200..<300:
+            return .success
+        case 408, 429, 500...599:
+            return .retry
+        default:
+            return .giveUp
+        }
+    }
+
+    /// Exponential backoff before a retry: 0.4 s, then 0.8 s. The first attempt never waits.
+    static func backoffNanoseconds(beforeAttempt attempt: Int) -> UInt64 {
+        guard attempt > 0 else { return 0 }
+        let base: UInt64 = 400_000_000
+        return base << UInt64(min(attempt - 1, 4))
+    }
+
+    /// Only transient failures are worth another attempt; offline, bad URL or cancelled never improve.
+    static func shouldRetry(urlErrorCode code: URLError.Code?) -> Bool {
+        switch code {
+        case .timedOut, .networkConnectionLost, .cannotConnectToHost, .dnsLookupFailed:
+            return true
+        default:
+            return false
+        }
+    }
+
+    static func collectionsURL(for prefixes: Set<String>) -> URL? {
+        guard !prefixes.isEmpty else { return nil }
+        return URL(string: "https://api.iconify.design/collections?prefixes=\(prefixes.sorted().joined(separator: ","))")
+    }
+
+    /// `palette: true` in the collections response marks a set that carries its own colors.
+    static func paletteFlags(fromCollectionsJSON data: Data) -> [String: Bool] {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
+        var flags: [String: Bool] = [:]
+        for (prefix, info) in json {
+            if let palette = (info as? [String: Any])?["palette"] as? Bool { flags[prefix] = palette }
+        }
+        return flags
+    }
+
+    static func isCoolingDown(failedAt: Date, now: Date) -> Bool {
+        now.timeIntervalSince(failedAt) < failureCooldown
+    }
+
+    static func svgURL(for iconId: String) -> URL? {
+        let parts = iconId.split(separator: ":", maxSplits: 1)
+        guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else { return nil }
+        return URL(string: "https://api.iconify.design/\(parts[0])/\(parts[1]).svg")
+    }
+
+    static func isMulticolor(iconId: String) -> Bool {
+        let parts = iconId.split(separator: ":", maxSplits: 1)
+        guard parts.count == 2 else { return false }
+        return multicolorPrefixes.contains(String(parts[0]))
+    }
+}
+
+/// Which Iconify sets are multicolor, asked of the collections endpoint once per prefix.
+actor IconifyPaletteCatalog {
+    static let shared = IconifyPaletteCatalog()
+
+    private var flags: [String: Bool] = [:]
+    private let fetch: @Sendable (URL) async -> Data?
+
+    init(fetch: @escaping @Sendable (URL) async -> Data? = { url in
+        try? await URLSession.shared.data(from: url).0
+    }) {
+        self.fetch = fetch
+    }
+
+    func multicolorPrefixes(among prefixes: [String]) async -> Set<String> {
+        let unknown = Set(prefixes.filter { flags[$0] == nil })
+        if let url = IconifyFetchPolicy.collectionsURL(for: unknown), let data = await fetch(url) {
+            flags.merge(IconifyFetchPolicy.paletteFlags(fromCollectionsJSON: data)) { _, new in new }
+        }
+        return Set(prefixes.filter { flags[$0] ?? IconifyFetchPolicy.multicolorPrefixes.contains($0) })
     }
 }

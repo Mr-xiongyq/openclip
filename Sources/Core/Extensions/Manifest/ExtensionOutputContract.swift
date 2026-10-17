@@ -5,7 +5,6 @@
 // recommendations (`result`).
 import Foundation
 
-/// The kind of uncommitted result an action produces.
 public enum ExtensionOutputKind: String, Sendable, Codable, Equatable, CaseIterable {
     case text
     case file
@@ -15,7 +14,6 @@ public enum ExtensionOutputKind: String, Sendable, Codable, Equatable, CaseItera
 
 public typealias ActionOutputKind = ExtensionOutputKind
 
-/// The recommended delivery mechanism for an action's uncommitted result.
 public enum ExtensionResultDelivery: String, Sendable, Codable, Equatable, CaseIterable {
     case preview
     case paste
@@ -28,7 +26,6 @@ public enum ExtensionResultDelivery: String, Sendable, Codable, Equatable, CaseI
 public typealias ActionResultDeliveryMode = ExtensionResultDelivery
 
 public enum ExtensionOutputContract {
-    /// Checks whether a given result delivery mode is compatible with the specified output kind.
     public static func isCompatible(output: ExtensionOutputKind, result: ExtensionResultDelivery) -> Bool {
         switch output {
         case .text:
@@ -42,7 +39,7 @@ public enum ExtensionOutputContract {
         }
     }
 
-    /// Returns the default result delivery for a given output kind when `result` is omitted.
+    /// Used when `result` is omitted.
     public static func defaultResult(for output: ExtensionOutputKind) -> ExtensionResultDelivery? {
         switch output {
         case .text:

@@ -1,14 +1,11 @@
 // DeepLinkRouter.swift
 // OpenClip
 //
-// The one place that acts on an inbound `openclip://` URL. It dispatches to the app-level commands
-// or the extension installer.
+// The one place that acts on an inbound `openclip://` URL, dispatching to app commands or the extension
+// installer. The grammar lives in Core (`OpenClipDeepLink`); `AppDelegate` delegates to `handle(_:)`.
 //
-// The grammar itself lives in Core (`OpenClipDeepLink`), so the app target only decides *how* to
-// act. `AppDelegate.application(_:open:)` is a one-line delegate to `handle(_:)`.
-//
-// There is no settings read/write route and no reply callback: a URL scheme is unauthenticated, so
-// it may only trigger effects, never expose or mutate configuration. See `OpenClipDeepLink`.
+// A URL scheme is unauthenticated, so there is no settings read/write route and no reply callback:
+// deep links may only trigger effects, never expose or mutate configuration.
 import AppKit
 import Core
 import Foundation
@@ -17,8 +14,7 @@ import Foundation
 final class DeepLinkRouter {
     static let shared = DeepLinkRouter()
 
-    /// Brings OpenClip's Settings window forward. Injected by `AppDelegate`, which owns the status
-    /// bar controller that shows it.
+    /// Shows the Settings window; injected by `AppDelegate`, which owns the status bar controller.
     private var openPreferences: () -> Void = {}
 
     private init() {}

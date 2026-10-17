@@ -1,27 +1,20 @@
 // MathEvaluator.swift
 // OpenClip
 //
-// Deterministic, exception-free evaluator for simple arithmetic expressions used by
-// CalculateAction. Replaces NSExpression(format:), which throws an uncaught Objective-C
-// exception on malformed input (bare operators, unbalanced parens, invalid numbers) and crashes
-// the app. Returns nil for anything that isn't well-formed; never traps.
+// Deterministic, exception-free evaluator for CalculateAction. NSExpression(format:) raises an
+// uncaught Objective-C exception on malformed input, so this returns nil for anything malformed instead.
 import Foundation
 
 enum MathEvaluator {
-    /// Deepest recursion the descent parser will follow. Only the edges that can recurse
-    /// unboundedly — nested parentheses, repeated unary signs, and right-associative powers —
-    /// increment the depth; the fixed `expression → term → unary → power → primary` chain does
-    /// not. On macOS secondary threads (512 KB stacks) deeply nested input otherwise exhausts the
-    /// stack and crashes with `EXC_BAD_ACCESS` (issue #50).
+    /// Recursion cap. Only nested parens, repeated unary signs and right-associative powers count;
+    /// deeper input would overflow 512 KB secondary-thread stacks (issue #50).
     private static let maxDepth = 32
 
     static func evaluate(_ input: String) -> Double? {
         var tokens = tokenize(input)
         guard !tokens.isEmpty else { return nil }
         var pos = 0
-        // A non-finite result (overflow to ±infinity, or NaN from an invalid operation) is a
-        // failure, not a value: returning it would let `CalculateAction` emit an empty string and
-        // delete the selection (issue #50).
+        // A non-finite result is a failure, not a value: CalculateAction would emit "" and delete the selection (issue #50).
         guard let value = parseExpression(tokens: &tokens, pos: &pos, depth: 0),
               pos == tokens.count,
               value.isFinite else { return nil }
@@ -36,8 +29,7 @@ enum MathEvaluator {
         case leftParen, rightParen
     }
 
-    /// Splits an already-validated arithmetic string into tokens. Returns an empty array for any
-    /// character outside the number/operator/paren alphabet, so callers treat it as "not calculable".
+    /// Tokenizes the input; returns [] for any character outside the number/operator/paren alphabet.
     private static func tokenize(_ input: String) -> [Token] {
         let chars = Array(input)
         var result: [Token] = []
@@ -105,9 +97,8 @@ enum MathEvaluator {
     //   power   := primary ('^' unary)?
     //   primary := (number | '(' expr ')') ('%')?
     //
-    // '^' is right-associative (2^3^2 = 2^(3^2) = 512) via the recursive power rule, and unary
-    // sign binds looser than '^' (Python's u_expr/power split): -2^2 = -(2^2) = -4, while the
-    // exponent itself may carry a sign (2^-2 = 0.25).
+    // '^' is right-associative (2^3^2 = 512); unary sign binds looser than '^' (-2^2 = -4);
+    // the exponent may carry a sign (2^-2 = 0.25).
 
     private static func parseExpression(tokens: inout [Token], pos: inout Int, depth: Int) -> Double? {
         guard depth <= maxDepth,

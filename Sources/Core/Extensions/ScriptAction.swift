@@ -1,14 +1,8 @@
 // ScriptAction.swift
 // OpenClip
 //
-// Implements an action backed by an external script file located in an extension directory.
-// Enablement and match resolution delegate to the shared ActionVisibility evaluator when rules
-// are attached; perform exports the selection and match data to the subprocess via env vars
-// (OPENCLIP_TEXT, OPENCLIP_MATCHED, OPENCLIP_CAPTURE_N, OPENCLIP_BUNDLE_ID, OPENCLIP_ACTION_ID)
-// plus configured option values as OPENCLIP_OPTION_*
-// and runs it through the
-// shared ShellProcessRunner (one watchdog), then translates stdout JSON via ShellResultMapper and
-// returns the raw runtime result (secondary/delivery handling happens downstream).
+// An action backed by a script file in an extension directory. Selection and match data go to the
+// subprocess as OPENCLIP_* env vars and run through the shared ShellProcessRunner.
 import Foundation
 
 public struct ScriptAction: ConfigurableAction, ActionWithRules {
@@ -46,7 +40,7 @@ public struct ScriptAction: ConfigurableAction, ActionWithRules {
     @MainActor
     public func isEnabled(for context: ActionContext) -> Bool {
         guard let rules else {
-            // Scripts usually need some text, but could be general. We'll enable if there is any selection.
+            // Enabled when there is any selection text.
             return !context.selection.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
         return rules.resolveVisibility(for: context).enabled
@@ -58,7 +52,6 @@ public struct ScriptAction: ConfigurableAction, ActionWithRules {
         return rules.resolveVisibility(for: context).match
     }
     
-    /// Runs the extension script and converts its standard output into an action result.
     @MainActor
     public func perform(_ context: ActionContext) async throws -> ActionResult {
         let text = context.selection.text
@@ -105,9 +98,7 @@ public struct ScriptAction: ConfigurableAction, ActionWithRules {
             stdinText: text
         ))
 
-        // Raw runtime result: JSON stdout wins, plain-text stdout file detection wins if existing file,
-        // plain-text stdout is implicitly returned text (governed by the user's per-click preference),
-        // empty stdout succeeds.
+        // Precedence: JSON stdout, then an existing file path, then plain-text stdout as returned text.
         let raw: ActionResult
         if let jsonResult = ShellResultMapper.actionResult(from: output.stdout, actionID: id) {
             raw = jsonResult

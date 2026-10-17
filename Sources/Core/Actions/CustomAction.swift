@@ -1,13 +1,9 @@
 // CustomAction.swift
 // OpenClip
 //
-// Defines the domain model for user-created custom actions, supporting web searches, text templates,
-// and shell scripts. Implements the Action protocol to allow user-defined operations to be presented
-// and executed seamlessly. The manifest shellInline/textSnippet paths attach ExtensionActionRules so
-// declarative visibility flows through the shared evaluator here too, and the factory stamps
-// `.extensionPkg` chrome so GUI-created actions share the extension trash path. All three type cases
-// return their raw runtime result; the shellScript case runs through the shared ShellProcessRunner
-// (one watchdog) with `replaceSelection` deciding paste-vs-copy for plain-text stdout.
+// Domain model for user-created custom actions (URL, text snippet, shell, JavaScript). Manifest-backed
+// actions attach ExtensionActionRules; GUI-created ones get `.extensionPkg` chrome so they share the
+// extension trash path. Shell scripts run through the shared ShellProcessRunner (one watchdog).
 import Foundation
 
 public enum CustomActionType: Codable, Sendable, Equatable, Hashable {
@@ -150,7 +146,6 @@ public struct CustomAction: ConfigurableAction, ActionWithRules, Codable, Sendab
         return rules.resolveVisibility(for: context).match
     }
     
-    /// Executes the configured action and maps its output to the requested delivery behavior.
     @MainActor
     public func perform(_ context: ActionContext) async throws -> ActionResult {
         let text = context.selection.text
@@ -205,8 +200,7 @@ public struct CustomAction: ConfigurableAction, ActionWithRules, Codable, Sendab
                 stdinText: nil
             ))
 
-            // Raw runtime result: JSON stdout wins; plain-text stdout file detection wins if existing file and !replaceSelection;
-            // plain-text stdout pastes when replaceSelection is true (replacing the selection) or copies otherwise.
+            // Precedence: JSON stdout, then an existing file path (when !replaceSelection), then paste/copy.
             if let jsonResult = ShellResultMapper.actionResult(from: output.stdout, actionID: id) {
                 raw = jsonResult
             } else if !replaceSelection, let fileResult = ShellResultMapper.detectFileResult(from: output.stdout) {
@@ -235,8 +229,7 @@ public struct CustomAction: ConfigurableAction, ActionWithRules, Codable, Sendab
     }
 }
 
-/// Protocol for executing JavaScript CustomActions. Implemented in the application target
-/// (OpenClip) by wrapping OpenClipJSHost, keeping Core pure of JavaScriptCore runtime dependencies.
+/// Implemented in OpenClip (wraps OpenClipJSHost) so Core stays free of JavaScriptCore.
 @MainActor
 public protocol CustomActionJSRunning: Sendable {
     func run(
@@ -248,7 +241,7 @@ public protocol CustomActionJSRunning: Sendable {
     ) async throws -> ActionResult
 }
 
-/// Registry holding the active CustomActionJSRunning implementation injected at app startup.
+/// Runner injected at app startup.
 @MainActor
 public enum CustomActionJSRunnerRegistry {
     public static var runner: (any CustomActionJSRunning)?

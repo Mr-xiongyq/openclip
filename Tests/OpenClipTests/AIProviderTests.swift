@@ -63,6 +63,13 @@ final class AIProviderTests: XCTestCase {
         }
     }
 
+    func testOMLXPresetUsesLoopbackOpenAICompatibleEndpoint() {
+        XCTAssertEqual(LocalLLMPreset(rawValue: "omlx"), .omlx)
+        XCTAssertEqual(LocalLLMPreset.omlx.displayName, "oMLX")
+        XCTAssertEqual(LocalLLMPreset.omlx.defaultBaseURL, "http://127.0.0.1:8000/v1")
+        XCTAssertEqual(LocalLLMPreset.omlx.primaryModel, "default")
+    }
+
     func testLocalLLMKeepsThinkingByDefault() {
         XCTAssertFalse(LocalLLMProvider(baseURL: "http://localhost:1234/v1", model: "default").disableThinking)
         XCTAssertTrue(LocalLLMProvider(baseURL: "http://localhost:11434/v1", model: "qwen3.5:4b", disableThinking: true).disableThinking)
@@ -150,11 +157,8 @@ final class AIProviderTests: XCTestCase {
         let previous = manager.activeProviderRaw
         defer { manager.activeProviderRaw = previous }
 
-        // `activeProviderType` downgrades .apple to .local whenever the on-device model is
-        // unsupported, and a CI runner never has it. Without pinning availability here the .apple
-        // assertion below passed only on a maintainer's Apple-Silicon Mac and failed everywhere
-        // else — which is what kept the build red. The downgrade branch is covered separately by
-        // testAppleIntelligenceSupportCheckAndUnsupportedFallback.
+        // Pin availability: CI has no on-device model, and .apple would otherwise downgrade to .local.
+        // The downgrade itself is covered by testAppleIntelligenceSupportCheckAndUnsupportedFallback.
         AppleIntelligenceAvailability.statusOverride = .available
         defer { AppleIntelligenceAvailability.statusOverride = nil }
 
@@ -192,7 +196,6 @@ final class AIProviderTests: XCTestCase {
     // MARK: - Extract Result & Reasoning Tags
 
     func testExtractResultText() {
-        // Standard XML tags
         XCTAssertEqual(AIRequestSupport.extractResultText("<result>Clean text</result>"), "Clean text")
         XCTAssertEqual(AIRequestSupport.extractResultText("<output>Clean output</output>"), "Clean output")
         
@@ -212,7 +215,6 @@ final class AIProviderTests: XCTestCase {
         XCTAssertEqual(AIRequestSupport.extractResultText("<result></result>"), "<result></result>")
         XCTAssertEqual(AIRequestSupport.extractResultText("<output>   </output>"), "<output>   </output>")
 
-        // Plain text without tags
         XCTAssertEqual(AIRequestSupport.extractResultText("Simple raw response"), "Simple raw response")
 
         // Title tags are stripped from result text
@@ -283,8 +285,16 @@ final class AIProviderTests: XCTestCase {
         XCTAssertEqual(AIProviderType.supportedCases, [.local, .cli, .cloud])
 
         // AIServiceManager must fallback from .apple to .local on unsupported machines
-        AIServiceManager.shared.activeProviderRaw = "apple"
-        XCTAssertEqual(AIServiceManager.shared.activeProviderType, .local)
+        let manager = AIServiceManager.shared
+        let previous = manager.activeProviderRaw
+        defer { manager.activeProviderRaw = previous }
+        manager.activeProviderRaw = "apple"
+        XCTAssertEqual(manager.activeProviderType, .local)
+        XCTAssertEqual(manager.activeProviderRaw, "apple", "The fallback must not overwrite the saved choice")
+
+        // The same saved choice applies again once the hardware or build supports it.
+        AppleIntelligenceAvailability.statusOverride = .available
+        XCTAssertEqual(manager.activeProviderType, .apple)
     }
 
     // MARK: - Structured output contract
@@ -314,17 +324,15 @@ final class AIProviderTests: XCTestCase {
     }
 
     func testTaggedResponseWithEmptyResultIsNotDetectableByExtractor() {
-        // Regression: for an empty body `extractResultText` falls back to the raw `<result></result>`
-        // wrapper, so it cannot flag an empty guided result. AppleIntelligenceProvider must check the
-        // typed `result` field directly before re-emitting tags.
+        // Regression: an empty body falls back to the raw `<result></result>` wrapper, so the
+        // extractor cannot flag it. AppleIntelligenceProvider must check the typed field instead.
         let empty = AIRequestSupport.taggedResponse(result: "")
         XCTAssertEqual(empty, "<result></result>")
         XCTAssertFalse(AIRequestSupport.extractResultText(empty).isEmpty)
     }
 
     func testTaggedResponseStripsLeakedTagMarkup() {
-        // A text-shaped prompt can still tell the model to emit tags; guided generation may then
-        // place that literal markup inside a field. It must not survive the round-trip.
+        // Guided generation can echo tag markup from a text-shaped prompt into a field; it must not survive.
         let leaked = AIRequestSupport.taggedResponse(
             result: "<result>Fixed text.</result>",
             title: "<title>Fix Spelling</title>"
@@ -356,7 +364,6 @@ final class AIProviderTests: XCTestCase {
             for try await _ in stream {}
             XCTFail("A cancelled producer must throw CancellationError, not finish cleanly")
         } catch is CancellationError {
-            // expected
         } catch {
             XCTFail("Expected CancellationError, got \(error)")
         }

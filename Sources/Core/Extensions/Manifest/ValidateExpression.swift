@@ -1,11 +1,8 @@
 // ValidateExpression.swift
 // OpenClip
 //
-// Pure-Core expression DSL for computed extension visibility. Tokenizes, parses, and evaluates a
-// small bounded expression language (booleans, comparisons, string predicates, numeric helpers)
-// without any JavaScript or AppKit. Parse-once-eval-many: DefaultActionFactory compiles the AST
-// once at load; ActionVisibility evaluates it synchronously per gate. Bounded by construction
-// (depth caps, no loops/assignments), so no timeout/watchdog is ever needed.
+// Pure-Core expression DSL for extension visibility. Parsed once at load, evaluated per gate.
+// Bounded by construction (depth caps, no loops), so it needs no timeout.
 import Foundation
 
 public struct ValidateExpression: Sendable, Equatable {
@@ -353,8 +350,7 @@ public struct ValidateExpression: Sendable, Equatable {
 
         init(context: ActionContext, match: ActionMatchInfo?) {
             self.context = context
-            // The explicit match parameter takes precedence; fall back to the match the
-            // context carries (populated by ActionVisibility) when it is nil.
+            // Explicit match wins; otherwise use the one ActionVisibility put on the context.
             self.match = match ?? context.match
         }
 
@@ -496,15 +492,13 @@ public struct ValidateExpression: Sendable, Equatable {
                 case (.string(let a), .string(let b)): return a == b
                 case (.array(let a), .array(let b)): return a == b
                 default:
-                    // Cross-type equality is a manifest authoring error, not a runtime value.
-                    // Surface it as an EvalError so the gate fails closed and the author sees why.
+                    // Cross-type == is an authoring error; throw so the gate fails closed.
                     throw EvalError.typeMismatch("== requires operands of the same type")
                 }
             }
         }
 
-        /// Returns .orderedSame / .orderedAscending / .orderedDescending. Cross-type or null
-        /// operands for ordering comparisons are a type mismatch (EvalError).
+        /// Cross-type or null operands are a type mismatch.
         private func compare(_ l: Node, _ r: Node, depth: Int) throws -> ComparisonResult {
             let lv = try evaluate(l, depth: depth + 1)
             let rv = try evaluate(r, depth: depth + 1)

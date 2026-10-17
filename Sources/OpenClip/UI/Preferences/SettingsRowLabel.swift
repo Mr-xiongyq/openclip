@@ -10,9 +10,7 @@
 
 import SwiftUI
 
-/// Section card container for settings cards:
-/// section heading sits OUTSIDE the card, semibold, secondary color, ~16-17pt.
-/// The card itself is a rounded rectangle (~18pt radius) with a slightly lighter fill.
+/// Section card with its heading outside a rounded, lightly filled container.
 struct SettingsCard<Content: View>: View {
     var title: LocalizedStringKey?
     var infoTooltip: String?
@@ -80,14 +78,12 @@ struct SettingsRowLabel: View {
     var subtitleText: Text?
     var systemImage: String?
     var iconTileTint: Color?
-    /// Renders the glyph as a plain, secondary-colored symbol instead of a colored tile. A neutral
-    /// anchor for control rows, where a saturated tile would just be decoration.
+    /// Plain secondary-colored glyph instead of a colored tile, for control rows where a tile is decoration.
     var plainIcon: Bool
     var descriptionOnHover: Bool
     @State private var isHovered = false
     @State private var isDescriptionPresented = false
 
-    /// Creates a settings label with an optional localized subtitle.
     init(
         title: LocalizedStringKey,
         subtitle: LocalizedStringKey? = nil,
@@ -105,7 +101,6 @@ struct SettingsRowLabel: View {
         self.descriptionOnHover = descriptionOnHover
     }
 
-    /// Creates a settings label with an optional prebuilt subtitle view.
     init(
         title: LocalizedStringKey,
         subtitleText: Text?,
@@ -197,6 +192,8 @@ struct SettingsRowLabel: View {
 struct SettingsRow<Trailing: View>: View {
     let title: LocalizedStringKey
     var subtitle: LocalizedStringKey?
+    /// Explanation shown in the (i) popover next to the title instead of a line under it.
+    var info: LocalizedStringKey?
     var subtitleText: Text?
     var systemImage: String?
     var iconTileTint: Color?
@@ -205,10 +202,10 @@ struct SettingsRow<Trailing: View>: View {
     var showChevron: Bool
     @ViewBuilder var trailing: () -> Trailing
 
-    /// Creates a settings row with a localized subtitle and trailing control.
     init(
         title: LocalizedStringKey,
         subtitle: LocalizedStringKey? = nil,
+        info: LocalizedStringKey? = nil,
         systemImage: String? = nil,
         iconTileTint: Color? = nil,
         plainIcon: Bool = false,
@@ -218,6 +215,7 @@ struct SettingsRow<Trailing: View>: View {
     ) {
         self.title = title
         self.subtitle = subtitle
+        self.info = info
         self.subtitleText = nil
         self.systemImage = systemImage
         self.iconTileTint = iconTileTint
@@ -227,7 +225,6 @@ struct SettingsRow<Trailing: View>: View {
         self.trailing = trailing
     }
 
-    /// Creates a settings row with a prebuilt subtitle and trailing control.
     init(
         title: LocalizedStringKey,
         subtitleText: Text?,
@@ -251,24 +248,29 @@ struct SettingsRow<Trailing: View>: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            if let subtitleText {
-                SettingsRowLabel(
-                    title: title,
-                    subtitleText: subtitleText,
-                    systemImage: systemImage,
-                    iconTileTint: iconTileTint,
-                    plainIcon: plainIcon,
-                    descriptionOnHover: descriptionOnHover
-                )
-            } else {
-                SettingsRowLabel(
-                    title: title,
-                    subtitle: subtitle,
-                    systemImage: systemImage,
-                    iconTileTint: iconTileTint,
-                    plainIcon: plainIcon,
-                    descriptionOnHover: descriptionOnHover
-                )
+            HStack(alignment: .center, spacing: 8) {
+                if let subtitleText {
+                    SettingsRowLabel(
+                        title: title,
+                        subtitleText: subtitleText,
+                        systemImage: systemImage,
+                        iconTileTint: iconTileTint,
+                        plainIcon: plainIcon,
+                        descriptionOnHover: descriptionOnHover
+                    )
+                } else {
+                    SettingsRowLabel(
+                        title: title,
+                        subtitle: subtitle,
+                        systemImage: systemImage,
+                        iconTileTint: iconTileTint,
+                        plainIcon: plainIcon,
+                        descriptionOnHover: descriptionOnHover
+                    )
+                }
+                if let info {
+                    SettingsInfoButton(title: title, info: info)
+                }
             }
             Spacer(minLength: 12)
             trailing()
@@ -288,6 +290,7 @@ struct SettingsRow<Trailing: View>: View {
 struct SettingsToggleRow: View {
     let title: LocalizedStringKey
     var subtitle: LocalizedStringKey?
+    var info: LocalizedStringKey?
     var systemImage: String?
     var iconTileTint: Color?
     var plainIcon: Bool
@@ -296,6 +299,7 @@ struct SettingsToggleRow: View {
     init(
         title: LocalizedStringKey,
         subtitle: LocalizedStringKey? = nil,
+        info: LocalizedStringKey? = nil,
         systemImage: String? = nil,
         iconTileTint: Color? = nil,
         plainIcon: Bool = false,
@@ -303,6 +307,7 @@ struct SettingsToggleRow: View {
     ) {
         self.title = title
         self.subtitle = subtitle
+        self.info = info
         self.systemImage = systemImage
         self.iconTileTint = iconTileTint
         self.plainIcon = plainIcon
@@ -313,6 +318,7 @@ struct SettingsToggleRow: View {
         SettingsRow(
             title: title,
             subtitle: subtitle,
+            info: info,
             systemImage: systemImage,
             iconTileTint: iconTileTint,
             plainIcon: plainIcon

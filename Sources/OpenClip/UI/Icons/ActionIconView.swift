@@ -1,18 +1,13 @@
 // ActionIconView.swift
 // OpenClip
 //
-// Renders action icons dynamically across SF Symbols, custom images, remote URLs, and text representations,
-// applying smart optical normalization so line icons, solid shapes, SVGs, and glyphs maintain balanced visual weight.
+// Renders action icons (SF Symbols, Iconify, remote and local images, text) with optical normalization.
 import SwiftUI
 import SDWebImage
 import SDWebImageSVGCoder
 import Core
 
-/// Fetches a remote monochrome (`currentColor`) SVG and renders it as an AppKit
-/// template image so it inherits the environment tint and adapts to light/dark —
-/// the same decode pipeline as `IconifySVGView`, generalized to arbitrary URLs.
-/// Used for extension-store/onboarding icons sourced from the publish pipeline's
-/// normalized SVGs. Results are cached per URL for the session.
+/// Remote monochrome SVG rendered as a template image so it adopts the environment tint.
 @MainActor
 struct RemoteTemplateIcon: View {
     let url: URL?
@@ -57,7 +52,6 @@ struct RemoteTemplateIcon: View {
     }
 }
 
-/// Session cache for decoded template images keyed by absolute URL.
 actor RemoteTemplateIconCache {
     static let shared = RemoteTemplateIconCache()
     private let cache = NSCache<NSString, Box>()
@@ -73,13 +67,12 @@ actor RemoteTemplateIconCache {
         }
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
-            // Decode off-main: SDImageSVGCoder produces an NSImage from raw SVG data.
+            // Decode off the main actor.
             let decoded = await Task.detached(priority: .utility) { () -> NSImage? in
                 SDImageSVGCoder.shared.decodedImage(with: data, options: nil)
             }.value
             guard let decoded else { return nil }
-            // Template mode → AppKit renders it as a mask tinted by foregroundColor,
-            // which is what makes currentColor-style icons theme-adaptive.
+            // Template mode lets AppKit tint the mask with foregroundColor.
             decoded.isTemplate = true
             decoded.size = NSSize(width: 64, height: 64)
             let box = Box(decoded)
@@ -91,23 +84,14 @@ actor RemoteTemplateIconCache {
     }
 }
 
-/// SF Symbols draw at wildly different optical sizes for the same point size: an open outlined
-/// circle like `equal.circle` sits well inside its box, while a two-page `doc.on.doc` runs edge to
-/// edge. Scaling them all identically left the sidebar's icon column visibly uneven, so every
-/// symbol OpenClip ships is now named here and scaled to read the same size; only unknown symbols
-/// (an extension's own, say) fall through to the heuristics in `classify`.
+/// Per-symbol optical correction so the sidebar icon column reads evenly; unknown symbols use `classify`.
 public enum IconOpticalCategory: Sendable {
-    /// Heavy, filled shapes: shrink so their solid mass matches the line-drawn icons.
     case solidOrFilled
-    /// Thin, open strokes: grow so they are not lost beside the heavier glyphs.
     case thinLine
-    /// Glyphs already as wide as their box: shrink to keep the column's left edge even.
     case wideAspect
-    /// Neither extreme.
     case standard
 
-    /// The symbols OpenClip ships, each with the correction that makes it match the rest. Keys are
-    /// lower-cased symbol names.
+    /// Keys are lower-cased symbol names.
     private static let known: [String: IconOpticalCategory] = [
         // Thin, open strokes read small for their size, so they grow.
         "sparkle": .thinLine,
@@ -178,6 +162,39 @@ public enum IconOpticalCategory: Sendable {
     }
 }
 
+/// How a `.text` icon renders: a compact glyph badge ("Aa", "#", an emoji) or a regular 15 pt label.
+/// One rule shared by the bar, the sub-bar, the width estimator and the preferences preview (#156).
+enum ActionTextIconStyle {
+    /// Two Latin-ish characters read as a glyph; two CJK characters are a word ("翻译", "粘贴") and must
+    /// render like every other text label, or a group mixing 2- and 3-character titles looks uneven.
+    static func isCompactGlyph(_ text: String) -> Bool {
+        guard !text.isEmpty, text.count <= 2 else { return false }
+        return !text.unicodeScalars.contains(where: isWide)
+    }
+
+    /// Emoji are as wide as full-width characters in a label, but stay badges when there are one or two.
+    static func rendersFullWidth(_ character: Character) -> Bool {
+        character.unicodeScalars.contains { isWide($0) || $0.properties.isEmojiPresentation || $0.value == 0xFE0F }
+    }
+
+    /// Full-width scripts render at roughly one em per character.
+    static func isWide(_ scalar: Unicode.Scalar) -> Bool {
+        if scalar.properties.isIdeographic { return true }
+        switch scalar.value {
+        case 0x1100...0x11FF,   // Hangul Jamo
+             0x3000...0x30FF,   // CJK punctuation, Hiragana, Katakana
+             0x3130...0x318F,   // Hangul compatibility Jamo
+             0x31F0...0x31FF,   // Katakana phonetic extensions
+             0xAC00...0xD7AF,   // Hangul syllables
+             0xFF00...0xFF60,   // Fullwidth forms
+             0xFFE0...0xFFE6:
+            return true
+        default:
+            return false
+        }
+    }
+}
+
 public struct ActionIconView: View {
     public let icon: ActionIcon
     public let size: CGFloat
@@ -205,7 +222,7 @@ public struct ActionIconView: View {
             switch effectiveIcon {
             case .symbol(let name):
                 if name.contains(":") {
-                    // Iconify SVGs usually have internal padding in their viewBox; scale up so optical weight matches SF Symbols.
+                    // Iconify viewBoxes carry padding; scale up to match SF Symbol weight.
                     let isBrand = name.hasPrefix("simple-icons:") || name.hasPrefix("logos:") || name.hasPrefix("cib:") || name.contains("brand")
                     let opticalFactor: CGFloat = isBrand ? 1.08 : 1.20
                     let dim = targetDimension * opticalFactor
@@ -219,7 +236,7 @@ public struct ActionIconView: View {
                         .imageScale(.medium)
                 }
             case .text(let text):
-                if text.count <= 2 {
+                if ActionTextIconStyle.isCompactGlyph(text) {
                     Text(text)
                         .font(.system(size: targetDimension * 0.90, weight: .semibold, design: .rounded))
                         .lineLimit(1)

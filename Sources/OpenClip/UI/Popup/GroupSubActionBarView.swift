@@ -1,10 +1,7 @@
 // GroupSubActionBarView.swift
 // OpenClip
 //
-// Renders the horizontal sub-bar for a group action's children. Themed identically to the
-// main action bar (glass/classic), with pagination chevrons when the sub-action count
-// exceeds the user-configured page size. Each button uses the same sizing, icon rendering,
-// local hover fallback, and hover tracking as main bar buttons.
+// Horizontal sub-bar for a group action's children, styled and sized like the main bar, with pagination.
 import SwiftUI
 import Core
 
@@ -27,12 +24,10 @@ public struct GroupSubActionBarView: View {
     @Environment(\.colorScheme) private var effectiveColorScheme
     @Binding public var currentPage: Int
     private let hoverState: SubBarHoverState
-    /// Shared popup mode store: the sub-bar reads `inlineResults` from it so a child action with
-    /// `chrome.isInlineResult` shows its computed text in place of its icon, exactly like the main bar.
+    /// Inline children show computed text in place of their icon, as on the main bar.
     @ObservedObject private var modeStore: PopupModeStore
 
     @Setting(SettingKey.popupPageSize) private var pageSize
-    @Setting(SettingKey.popupFitToWidth) private var fitToWidth
 
     @Namespace private var hoverHighlightNamespace
 
@@ -64,7 +59,6 @@ public struct GroupSubActionBarView: View {
         screenWidth: CGFloat? = nil
     ) {
         _pageSize = Setting(SettingKey.popupPageSize, store: settingsStore)
-        _fitToWidth = Setting(SettingKey.popupFitToWidth, store: settingsStore)
         self.subActions = subActions
         self._currentPage = currentPage
         self.hoverState = hoverState
@@ -130,22 +124,20 @@ public struct GroupSubActionBarView: View {
     }
 
     private var maxSubBarBudget: CGFloat {
-        // Reserve the row's end inset so a page packed to the budget still fits once the padding is
-        // applied (the padding is added to the rendered HStack but not to the estimator).
+        // Reserve the end inset: padding is added to the HStack but not to the estimator.
         (screenWidth ?? NSScreen.main?.visibleFrame.width ?? 1440.0) * PopupMetrics.maxScreenFraction
             - 2 * PopupMetrics.subBarEndInset * scale
     }
 
     private var pages: [[any Action]] {
-        // Inline children re-pack at their rendered text width once a preview lands, mirroring the
-        // main bar; reading `modeStore.inlineResults` is what makes the view re-evaluate.
+        // Reading `modeStore.inlineResults` makes this re-evaluate when previews land.
         PopupPageLayout.computePages(
             actions: subActions,
             inlineResults: modeStore.inlineResults,
             leadingWidth: 0,
             trailingWidth: 0,
             maxBudget: maxSubBarBudget,
-            maxItemsPerPage: fitToWidth ? Int.max : max(2, min(24, pageSize)),
+            maxItemsPerPage: max(2, min(24, pageSize)),
             scale: scale,
             presenter: presenter
         )
@@ -167,9 +159,7 @@ public struct GroupSubActionBarView: View {
 
     public var body: some View {
         HStack(spacing: 0) {
-            // Identity by action id (not slot position): a page turn must replace rows rather than
-            // keep a slot's identity and animate it from one action to the next, which cross-faded
-            // the inline preview and resized the button mid-page-change. See PopupView for detail.
+            // Identity by action id, not slot: page turns must replace rows, not cross-fade them.
             ForEach(Array(pagedSubActions.enumerated()), id: \.element.id) { index, action in
                 let isHovered = hoveredTarget == .subAction(index)
                 subActionButton(action: action, index: index, isHovered: isHovered)
@@ -207,8 +197,7 @@ public struct GroupSubActionBarView: View {
         let foregroundColor: Color = isHovered ? .white : restForeground
         let backgroundColor: Color = isHovered ? PopupThemeModel.barHoverFill : Color.clear
 
-        // Mirrors the main bar: an inline-result action swaps its icon for the computed text once
-        // `InlineResultEvaluator` publishes a result, truncating at the shared width cap.
+        // Inline results replace the icon once InlineResultEvaluator publishes a value.
         let labelView = Group {
             if action.chrome.isInlineResult, let resolved = modeStore.inlineResults[action.id] {
                 Text(resolved)
@@ -237,8 +226,7 @@ public struct GroupSubActionBarView: View {
 
         Button {
             guard action.isEnabled(for: context) else { return }
-            // Capture the intent once, synchronously, so the perform context and the delivery
-            // snapshot agree and neither reads live state after an await.
+            // Capture intent once, synchronously, so perform context and delivery agree.
             let clickIntent = onClickIntent()
             if ActionIdentity.isAIPreset(action) {
                 onRunAI(action.id)
@@ -248,15 +236,13 @@ public struct GroupSubActionBarView: View {
                 onRunLoadingAction(action, clickIntent)
                 return
             }
-            // An already-computed inline result is delivered directly instead of re-running the action.
             if action.chrome.isInlineResult, let resolved = modeStore.inlineResults[action.id] {
                 guard onWillPerformAction(action, clickIntent) else { return }
                 onActionPerformed(action.id)
                 onResult(.text(resolved))
                 return
             }
-            // An in-flight inline evaluation (e.g. started before the popup re-opened) is joined
-            // rather than re-run, mirroring the main bar; an empty result falls back to perform.
+            // Join an in-flight inline evaluation rather than re-running it; empty falls back to perform.
             if action.chrome.isInlineResult, let inFlight = InlineResultEvaluator.shared.runningTask(for: action.id) {
                 Task {
                     guard onWillPerformAction(action, clickIntent) else { return }

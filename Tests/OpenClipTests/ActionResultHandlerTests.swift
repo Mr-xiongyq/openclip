@@ -7,7 +7,136 @@ final class ActionResultHandlerTests: XCTestCase {
     @MainActor
     private final class RecordingPoster: KeyboardEventPosting {
         var keys: [CGKeyCode] = []
-        func postKey(keyCode: CGKeyCode, flags: CGEventFlags) { keys.append(keyCode) }
+        var onPost: (() -> Void)?
+        func postKey(keyCode: CGKeyCode, flags: CGEventFlags) {
+            keys.append(keyCode)
+            onPost?()
+        }
+    }
+
+    private final class SourceApp: NSRunningApplication {
+        override var processIdentifier: pid_t { 99999 }
+        override var bundleIdentifier: String? { "md.obsidian" }
+    }
+
+    func testCopyPlaysSoundOnlyWhenEnabled() async throws {
+        let board = NSPasteboard(name: .init("OpenClipCopySound-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        let store = MemorySettingsStore()
+        var played: [CopySound] = []
+        let handler = DefaultActionResultHandler(
+            settingsStore: store, keyboardPoster: RecordingPoster(), pasteboard: board,
+            copySoundPlayer: { played.append($0) }
+        )
+        try await handler.handle(.copy("one"), in: nil)
+        XCTAssertTrue(played.isEmpty, "Sound is off by default")
+        store.set(.playCopySound, value: true)
+        store.set(.copySoundName, value: "thock")
+        try await handler.handle(.copy("two"), in: nil)
+        XCTAssertEqual(played, [.thock])
+        XCTAssertEqual(board.string(forType: .string), "two")
+    }
+
+    func testCapturePickerRefusalIsNotReportedAsChangedSource() async throws {
+        let board = NSPasteboard(name: .init("OpenClipNativeCopy-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.setString("Original", forType: .string)
+        let source = SourceApp()
+        let poster = RecordingPoster()
+        let handler = DefaultActionResultHandler(
+            settingsStore: MemorySettingsStore(), keyboardPoster: poster, pasteboard: board,
+            pasteboardRestoreDelay: 0.01, appActivator: { _ in }, targetActiveChecker: { _ in true },
+            frontmostPID: { 99999 }, copyOverlayPresent: { true }
+        )
+        do {
+            try await handler.handle(.copySelection(SelectionContext(text: "Text", sourceApp: AppIdentity(source))),
+                                     in: nil, targetApp: source)
+            XCTFail("A capture picker must block Copy")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "Finish the screen capture before copying.")
+        }
+        XCTAssertTrue(poster.keys.isEmpty)
+        XCTAssertEqual(board.string(forType: .string), "Original")
+    }
+
+    func testLiveCopyPostsNativeCommandAndLeavesSourceFormatsIntact() async throws {
+        let board = NSPasteboard(name: .init("OpenClipNativeCopy-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.setString("Old clipboard", forType: .string)
+        let source = SourceApp()
+        let poster = RecordingPoster()
+        let custom = NSPasteboard.PasteboardType("com.test.obsidian-table")
+        var copiedCount = 0
+        poster.onPost = {
+            let item = NSPasteboardItem()
+            item.setString("**Bold**", forType: .string)
+            item.setString("<b>Bold</b>", forType: .html)
+            item.setData(Data([1, 2, 3]), forType: custom)
+            board.clearContents()
+            board.writeObjects([item])
+            copiedCount = board.changeCount
+        }
+        let handler = DefaultActionResultHandler(
+            settingsStore: MemorySettingsStore(), keyboardPoster: poster, pasteboard: board,
+            pasteboardRestoreDelay: 0.01, appActivator: { _ in }, targetActiveChecker: { _ in true },
+            frontmostPID: { 99999 }
+        )
+        let selection = SelectionContext(text: "AX plain text", sourceApp: AppIdentity(source), selectionGeneration: 12)
+        try await handler.handle(.copySelection(selection), in: nil, targetApp: source,
+                                 isSelectionCurrent: { $0.selectionGeneration == 12 })
+        XCTAssertEqual(poster.keys, [Constants.copyVirtualKey])
+        XCTAssertEqual(board.changeCount, copiedCount)
+        XCTAssertEqual(board.data(forType: custom), Data([1, 2, 3]))
+        XCTAssertEqual(board.string(forType: .html), "<b>Bold</b>")
+        XCTAssertEqual(board.string(forType: .string), "**Bold**")
+    }
+
+    func testLiveCopyRejectsSelectionChangedDuringActivation() async throws {
+        let board = NSPasteboard(name: .init("OpenClipNativeCopy-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.setString("Original", forType: .string)
+        let source = SourceApp()
+        let poster = RecordingPoster()
+        var current = true
+        let handler = DefaultActionResultHandler(
+            settingsStore: MemorySettingsStore(), keyboardPoster: poster, pasteboard: board,
+            pasteboardRestoreDelay: 0.01, appActivator: { _ in },
+            targetActiveChecker: { _ in current = false; return true }, frontmostPID: { 99999 }
+        )
+        let selection = SelectionContext(text: "Old selection", sourceApp: AppIdentity(source))
+        do {
+            try await handler.handle(.copySelection(selection), in: nil, targetApp: source,
+                                     isSelectionCurrent: { _ in current })
+            XCTFail("A stale selection must not trigger Copy")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "The source selection is no longer available.")
+        }
+        XCTAssertTrue(poster.keys.isEmpty)
+        XCTAssertEqual(board.string(forType: .string), "Original")
+    }
+
+    func testLiveCopyRefusesDifferentForegroundApplicationWithoutActivatingSource() async throws {
+        let board = NSPasteboard(name: .init("OpenClipNativeCopy-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.setString("Original", forType: .string)
+        let poster = RecordingPoster()
+        var activated = false
+        let handler = DefaultActionResultHandler(
+            settingsStore: MemorySettingsStore(), keyboardPoster: poster, pasteboard: board,
+            pasteboardRestoreDelay: 0.01, appActivator: { _ in activated = true },
+            targetActiveChecker: { _ in true }, frontmostPID: { 88888 }
+        )
+        let source = SourceApp()
+        do {
+            try await handler.handle(.copySelection(SelectionContext(text: "Text", sourceApp: AppIdentity(source))),
+                                     in: nil, targetApp: source)
+            XCTFail("Copy must not switch back to an unrelated app")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "The source selection is no longer available.")
+        }
+        XCTAssertFalse(activated)
+        XCTAssertTrue(poster.keys.isEmpty)
+        XCTAssertEqual(board.string(forType: .string), "Original")
     }
 
     private func makeHandler(settingsStore: SettingsStore = MemorySettingsStore(),
@@ -52,27 +181,21 @@ final class ActionResultHandlerTests: XCTestCase {
             try await handler.handle(.copyDefinition("zzznotaword"), in: nil)
             XCTFail("Expected empty definition lookup to throw")
         } catch {
-            // Expected: surfaces as an error status.
         }
         XCTAssertNil(isolatedPasteboard.string(forType: .string))
     }
 
-    /// The `shortcut` effect routes through the shortcuts CLI under a watchdog. Only exercised when
-    /// the binary is present; there is no deterministic short-lived Shortcut to invoke here, so the
-    /// assertion is that a non-existent name surfaces as a thrown error (→ status) and that the
-    /// missing-binary guard throws cleanly too.
+    /// Skipped without the shortcuts CLI; a missing shortcut must throw rather than hang.
     func testRunShortcutDoesNotCrash() async throws {
         let handler = makeHandler()
         let binary = URL(fileURLWithPath: Constants.shortcutsBinaryPath)
         guard FileManager.default.isExecutableFile(atPath: binary.path) else {
             throw XCTSkip("shortcuts CLI unavailable; skipping run-shortcut handler test")
         }
-        // A name that almost certainly does not exist: either it runs and logs, or the CLI exits
-        // non-zero (→ throw). Both are acceptable; the point is the handler path does not hang.
+        // Either the CLI runs it or exits non-zero; both are fine as long as nothing hangs.
         do {
             try await handler.handle(.runShortcut(name: "__openclip_should_not_exist__", input: nil), in: nil)
         } catch {
-            // Expected: non-existent shortcut → non-zero exit → thrown error.
         }
     }
 
@@ -92,7 +215,6 @@ final class ActionResultHandlerTests: XCTestCase {
         isolatedPasteboard.clearContents()
         isolatedPasteboard.setString("UserNewCopy", forType: .string)
 
-        // Wait for restore delay
         try await Task.sleep(nanoseconds: UInt64((testDelay + 0.05) * 1_000_000_000))
 
         // Ensure user's new copy was NOT overwritten by stale restore task
@@ -198,12 +320,11 @@ final class ActionResultHandlerTests: XCTestCase {
         isolatedPasteboard.clearContents()
         isolatedPasteboard.setString("BaselineClipboard", forType: .string)
 
-        // Spawn a paste in background task that will restore after delay:
         let pasteTask = Task { @MainActor in
             try await handler.handle(.paste("PastedText"), in: nil)
         }
 
-        // Wait briefly for paste to acquire coordinator session and write temporary text:
+        // Let the paste acquire its session before the explicit copy.
         try await Task.sleep(nanoseconds: 20_000_000)
 
         // User explicitly copies before the restore delay expires:
@@ -211,7 +332,6 @@ final class ActionResultHandlerTests: XCTestCase {
 
         _ = await pasteTask.result
 
-        // The user's explicit copy must remain and not be overwritten by the paste restore:
         XCTAssertEqual(isolatedPasteboard.string(forType: .string), "ExplicitUserCopy")
     }
 
@@ -232,10 +352,9 @@ final class ActionResultHandlerTests: XCTestCase {
             try await handler.handle(.pasteContent(payload1), in: nil)
         }
 
-        // Yield slightly so task1 begins and sets dirty state:
+        // Let task1 begin and set the dirty state first.
         try await Task.sleep(nanoseconds: 20_000_000)
 
-        // task2 preempts task1:
         let task2 = Task { @MainActor in
             try await handler.handle(.pasteContent(payload2), in: nil)
         }
@@ -243,7 +362,6 @@ final class ActionResultHandlerTests: XCTestCase {
         _ = await task1.result
         _ = await task2.result
 
-        // The final restored text must be OriginalBaseline, NOT Temp 1 or Temp 2!
         XCTAssertEqual(isolatedPasteboard.string(forType: .string), "OriginalBaseline")
     }
 }

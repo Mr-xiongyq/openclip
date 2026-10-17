@@ -1,18 +1,13 @@
 // InstalledExtensionInfo.swift
 // OpenClip
 //
-// One installed extension package as the Settings window sees it: its name and icon, the actions
-// it contributes, and whether the trust gate is holding it back. Built from the action catalog,
-// which is the one list that already knows what is installed and loaded — the sidebar lists these
-// under Extensions, one page each, and the Actions list points at the same pages.
+// One installed extension package as the Settings window sees it: its name, icon, contributed actions,
+// and whether the trust gate holds it back. Built from the action catalog, which knows what is loaded.
 
 import Foundation
 import Core
 
-/// What an installed package's folder holds beyond the actions it registers: the manifest's
-/// version, author and description, where the folder is, and whether it ships a README. Read off
-/// the main thread by the settings window, which hands it to the extension's page and uses it to
-/// decide what the toolbar's ellipsis menu offers.
+/// The package folder's details beyond its registered actions: manifest, directory and README. Read off the main thread.
 struct ExtensionPackageDetails: Equatable {
     let packageID: String
     let manifest: ExtensionMetadata?
@@ -26,8 +21,7 @@ struct ExtensionPackageDetails: Equatable {
         ExtensionPackageDetails(packageID: packageID, manifest: nil, directoryURL: nil, readmeURL: nil)
     }
 
-    /// Walks the extensions directory for the package's folder. Runs off the main actor: it opens
-    /// and decodes every manifest it passes.
+    /// Finds the package folder by walking the extensions directory, off the main actor.
     static func load(
         packageID: String,
         in directory: URL = Constants.extensionsDirectory
@@ -69,8 +63,7 @@ struct InstalledExtensionInfo: Identifiable {
     let icon: ActionIcon
     /// The group action that carries the package's sub-actions, when the package is a group.
     let containerActionID: String?
-    /// The actions a user can run, in catalog order — without the group container and without
-    /// the placeholder the trust gate registers for a package it is holding back.
+    /// Runnable actions in catalog order, excluding the group container and the trust gate's placeholder.
     let commands: [any Action]
     let gatedReason: ExtensionGateReason?
 
@@ -108,9 +101,7 @@ struct InstalledExtensionInfo: Identifiable {
         return make(packageID: packageID, actions: members)
     }
 
-    /// GUI-authored custom actions are stored as single-action manifest packages too, so they load
-    /// through the same path as extensions. They are the user's own actions, not an installed
-    /// extension, and the Actions list is where they live.
+    /// GUI-authored custom actions are single-action manifest packages too; they belong to the Actions list, not Extensions.
     static func isCustomPackage(_ packageID: String) -> Bool {
         packageID.hasPrefix(Constants.customIdentifierPrefix) || packageID.hasPrefix("custom.")
     }
@@ -141,8 +132,7 @@ struct InstalledExtensionInfo: Identifiable {
     }
 }
 
-/// What the trust gate's state means, in the user's words. Nil for a revoked package, which the
-/// enable switch already explains by being off.
+/// The gate state in the user's words. Nil for revoked packages; the enable switch already explains those.
 func extensionGateDescription(for reason: ExtensionGateReason) -> String? {
     switch reason {
     case .filesChanged:

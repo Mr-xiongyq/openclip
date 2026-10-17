@@ -1,11 +1,8 @@
 // PopupSwatch.swift
 // OpenClip
 //
-// The single live preview for the Appearance settings. It renders the real `PopupView` — the
-// search affordance and the first actions — over a soft, abstract gradient so Glass reads as
-// translucent and Classic as an opaque card. It reads the same theme, color mode and scale the
-// live popup reads, so it always shows the combination the controls above resolve to. There is
-// deliberately only one preview in the section; the controls below are compact segmented pickers.
+// Live preview for the Appearance settings: the real `PopupView` over a soft gradient, reading the
+// same theme, color mode and scale as the live popup.
 
 import SwiftUI
 import AppKit
@@ -14,9 +11,7 @@ import Core
 
 @MainActor
 struct PopupSwatch: View {
-    /// The canonical action set the preview shows, independent of the user's own bar so the
-    /// preview is about appearance, not content. Has enough actions (13) to exercise pagination
-    /// for the Actions Per Page preference.
+    /// Fixed 13-action set, independent of the user's bar, so pagination is exercised.
     static let actions: [any Action] = [
         CalculateAction(),
         CustomAction(id: "swatch.search", title: "Search", iconName: "magnifyingglass", type: .textSnippet(template: "")),
@@ -33,19 +28,14 @@ struct PopupSwatch: View {
         CustomAction(id: "swatch.notes", title: "Add to Notes", iconName: "note.text.badge.plus", type: .textSnippet(template: ""))
     ]
 
-    /// A resting hover state the preview never observes, so it never reacts to — or leaks into —
-    /// the real popup's shared state.
+    /// Resting hover state; the preview never observes it, so it can't leak into the real popup.
     private static let hoverState = PopupHoverState()
 
-    /// The desktop wallpaper every appearance preview shares, decoded once and downscaled so the
-    /// tab does not re-read the image on each render.
+    /// Shared wallpaper thumbnail, decoded once.
     @MainActor private static let wallpaper: NSImage? = loadWallpaper()
 
-    /// Height of the preview stage. Comfortably taller than the bar so there is padding above and
-    /// below the popup for the gradient to read.
     var height: CGFloat = 116
-    /// Extra headroom above the bar, on top of the centering slack. The bar's drop shadow reads as
-    /// visual weight below it, so a touch more space on top keeps the preview from looking top-heavy.
+    /// Extra headroom above the bar so the drop shadow doesn't make the preview look top-heavy.
     var topInset: CGFloat = 12
 
     @Setting(SettingKey.popupTheme) private var storedTheme
@@ -73,8 +63,7 @@ struct PopupSwatch: View {
 
     var body: some View {
         let context = ActionContext(selection: mockContext.selection, modifiers: [])
-        // The stage owns its size. Overlay content cannot enlarge the settings pane when
-        // pagination or scale increases the popup's intrinsic width.
+        // The stage owns its size; a wider popup must not enlarge the settings pane.
         Color.clear
         .frame(maxWidth: .infinity)
         .frame(height: height)
@@ -110,10 +99,7 @@ struct PopupSwatch: View {
         .animation(.easeInOut(duration: 0.15), value: effectiveScheme)
     }
 
-    /// The blurred desktop wallpaper, so the glass material has something real to blur and Classic
-    /// reads as an opaque card on the desktop. The tint tracks the color mode: darker over the
-    /// wallpaper in dark mode, lighter in light mode, so the popup's contrast stays honest. Falls
-    /// back to an abstract gradient when no wallpaper can be read.
+    /// Blurred wallpaper for the glass to blur; tint follows color mode. Gradient fallback if unreadable.
     @ViewBuilder
     private var backdrop: some View {
         if let image = Self.wallpaper {
@@ -138,8 +124,7 @@ struct PopupSwatch: View {
         }
     }
 
-    /// Decodes the current desktop wallpaper into a small thumbnail. Returns nil when the screen or
-    /// image cannot be resolved, which the backdrop turns into its gradient fallback.
+    /// Decodes the current wallpaper to a thumbnail; nil when it can't be resolved.
     private static func loadWallpaper() -> NSImage? {
         guard let screen = NSScreen.main ?? NSScreen.screens.first,
               let url = NSWorkspace.shared.desktopImageURL(for: screen) else { return nil }
@@ -176,8 +161,7 @@ private struct PopupPreviewPresenter: ActionPresenting {
     func tableIcon(for action: any Action) -> ActionIcon { action.icon }
 }
 
-/// Center the popup in the stage when it fits, keeping a leading inset when the popup is wider
-/// than the available space. Placement never changes the size proposed by the preview stage.
+/// Centers the popup when it fits; otherwise keeps a leading inset. Never changes the proposed size.
 private struct PopupPreviewLayout: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         proposal.replacingUnspecifiedDimensions()

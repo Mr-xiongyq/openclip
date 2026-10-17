@@ -1,11 +1,9 @@
 // CustomizePage.swift
 // OpenClip
 //
-// The Customize page: the popup bar's layout and action enablement.
-// One reorderable outline of everything the bar shows — drag to change the order, drag onto a group
-// to add to it, select several rows and make a group of them. Each row carries an enable toggle and a
-// chevron to its own page, where its alias, hotkey, and delete live. The search field lives in the
-// window toolbar, like the Store's, so the list itself is just the list.
+// The Customize page: the popup bar's layout and action enablement, as one reorderable outline.
+// Drag to reorder, drag onto a group to add to it, or select rows and group them. Each row has an
+// enable toggle and a chevron to its own page. The search field lives in the window toolbar.
 
 import SwiftUI
 import UniformTypeIdentifiers
@@ -34,9 +32,7 @@ struct CustomizePage: View {
         _query = query
     }
 
-    /// Eligible candidate action IDs for custom grouping. Only top-level standalone actions
-    /// (not AI presets, not AI launcher, not group parents, not extension sub-actions,
-    /// and not existing custom group members) can be selected for a new group.
+    /// Top-level standalone actions among `selectedRowIDs` that can join a new group.
     static func groupCandidates(selectedRowIDs: Set<String>, coordinator: ActionCoordinator) -> [String] {
         let customGroupMemberIDs = Set(coordinator.actionGroupDefs.flatMap(\.memberActionIDs))
 
@@ -91,8 +87,7 @@ struct CustomizePage: View {
             )
 
             if hasNoMatches {
-                // No background: the outline is empty, so the pane shows through and the empty
-                // state reads as part of the pane instead of a mismatched rectangle.
+                // No background, so the empty state reads as part of the pane.
                 ContentUnavailableView.search(text: query)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -104,8 +99,7 @@ struct CustomizePage: View {
 
 // MARK: - Rows
 
-/// One action in the Actions list: icon, title, enable toggle, and the chevron that opens its page.
-/// Alias, hotkey, and delete live on the action's own settings page.
+/// One action row: icon, title, enable toggle, and a chevron to its page (alias, hotkey and delete live there).
 @MainActor
 struct ActionRowView: View {
     let action: any Action

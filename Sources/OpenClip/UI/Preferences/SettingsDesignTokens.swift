@@ -13,8 +13,7 @@ public enum SettingsDesignTokens {
 
     // MARK: - Colors
 
-    /// Scrim overlay atop the behind-window Liquid Glass blur. Kept light so more of the desktop
-    /// shows through; raise the alpha if text contrast over busy wallpapers gets uncomfortable.
+    /// Kept light so the desktop shows through; raise alpha if text over busy wallpapers lacks contrast.
     public static var windowScrim: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -25,7 +24,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Very dark near-black background for the window (solid fallback or underlay).
     public static var windowBackground: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -36,7 +34,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Primary text color (adapts to dark and light modes).
     public static var primaryText: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -47,7 +44,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Secondary text color (adapts to dark and light modes).
     public static var secondaryText: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -58,7 +54,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Tertiary text / placeholder color.
     public static var tertiaryText: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -69,7 +64,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Lighter, softer blue tone for glass action buttons (e.g. Generate, Check for Updates).
     public static var glassButtonBlue: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -80,7 +74,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Lighter, softer red/rose tone for destructive glass buttons (e.g. Delete).
     public static var glassButtonRed: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -91,9 +84,7 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// The fill for the inset detail card (translucent smoked glass matching the sidebar with
-    /// balanced contrast). Lowered so the detail pane reads a touch more translucent; raise the
-    /// alpha if text over the card needs more contrast.
+    /// Translucent smoked glass matching the sidebar; raise alpha if text over it lacks contrast.
     public static var detailCardBackground: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -104,7 +95,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Subtle border for the detail card.
     public static var detailCardBorder: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -115,8 +105,7 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// The fill for individual section cards inside the detail pane. Tuned to just above the
-    /// detail card's translucency so the cards read as glass against the window, not as opaque slabs.
+    /// Sits just above the detail card's translucency so cards read as glass, not opaque slabs.
     public static var sectionCardBackground: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -127,7 +116,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Border for section cards inside the detail pane.
     public static var sectionCardBorder: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -138,7 +126,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Background for the sidebar search field.
     public static var sidebarSearchBackground: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -149,7 +136,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Border for the sidebar search capsule.
     public static var sidebarSearchBorder: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -160,7 +146,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Placeholder and icon color for the sidebar search field.
     public static var sidebarSearchPlaceholder: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -171,7 +156,7 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Selected sidebar row highlight (subtle translucent highlight, NOT accent color).
+    /// Translucent, not the accent colour.
     public static var selectedRowBackground: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -182,7 +167,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Hovered sidebar row highlight.
     public static var hoveredRowBackground: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -193,7 +177,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Foreground color for navigation pills (< | > and trailing pill buttons).
     public static var navPillForeground: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -204,7 +187,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Background for navigation pills (< | > and trailing pill buttons).
     public static var navPillBackground: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -215,7 +197,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Border for navigation pills.
     public static var navPillBorder: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -226,7 +207,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Inset hairline divider between rows inside a section card.
     public static var rowDivider: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -237,7 +217,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Section header text color (sits outside the card).
     public static var sectionHeaderColor: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -248,7 +227,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Row title color.
     public static var rowTitleColor: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -259,7 +237,6 @@ public enum SettingsDesignTokens {
         }))
     }
 
-    /// Row subtitle color.
     public static var rowSubtitleColor: Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
             if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
@@ -276,7 +253,7 @@ public enum SettingsDesignTokens {
     public static let detailCardRadius: CGFloat = 22
     public static let sectionCardRadius: CGFloat = 16
     public static let iconTileRadius: CGFloat = 5
-    /// Proportional squircle corner radius for icon tiles (e.g. 5pt for 20px, 9pt for 40px, 11pt for 50px).
+    /// Squircle radius scaled to the tile size (about 22%, minimum 5pt).
     public static func iconTileRadius(for size: CGFloat) -> CGFloat {
         max(5, round(size * 0.225))
     }
@@ -297,7 +274,7 @@ public enum SettingsDesignTokens {
 
     // MARK: - Icon Tile Colors
 
-    /// Stable, sensible per-page icon tile colors matching macOS system settings.
+    /// Icon tile colours matching macOS System Settings.
     public static func iconTileColor(for page: SettingsPage) -> Color {
         switch page {
         case .general:
@@ -315,7 +292,7 @@ public enum SettingsDesignTokens {
         case .about:
             return SettingsTint.about
         case .ai, .aiNewPreset, .aiPreset:
-            return SettingsTint.openClip
+            return SettingsTint.ai
         case .customActions, .newCustomAction:
             return SettingsTint.openClip
         case .newGroup, .iconPicker, .addApplication:
@@ -329,7 +306,6 @@ public enum SettingsDesignTokens {
         }
     }
 
-    /// Stable color for specific builtin and common action IDs.
     public static func iconTileColor(forActionID id: String) -> Color {
         let lower = id.lowercased()
         if lower.contains("copy") {
@@ -364,7 +340,6 @@ public enum SettingsDesignTokens {
         return Color(hue: Double(hash) / 360.0, saturation: 0.75, brightness: 0.88)
     }
 
-    /// Color for an SF Symbol used in settings rows.
     public static func iconTileColor(forSystemImage image: String) -> Color {
         let lower = image.lowercased()
         if lower.contains("paint") || lower.contains("brush") || lower.contains("palette") {
@@ -440,7 +415,7 @@ public enum SettingsDesignTokens {
 // MARK: - Liquid Glass Modifiers
 
 public extension View {
-    /// Renders a liquid glass capsule with frosted blur on macOS 26+, or nav pill background fallback.
+    /// Liquid Glass capsule on macOS 26+; nav pill background before that.
     @ViewBuilder
     func settingsGlassCapsule(tint: Color? = nil, interactive: Bool = true) -> some View {
         if #available(macOS 26.0, *) {
@@ -467,7 +442,7 @@ public extension View {
         }
     }
 
-    /// Renders a liquid glass circle with frosted blur on macOS 26+, or nav pill background fallback.
+    /// Circle variant of `settingsGlassCapsule`.
     @ViewBuilder
     func settingsGlassCircle(tint: Color? = nil, interactive: Bool = true) -> some View {
         if #available(macOS 26.0, *) {

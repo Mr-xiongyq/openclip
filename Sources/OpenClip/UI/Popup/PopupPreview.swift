@@ -1,11 +1,8 @@
 // PopupPreview.swift
 // OpenClip
 //
-// Static visual preview of the popup bar rendered with a fixed action set
-// (Search, Copy, Cut, Paste, Share + AI), mirroring how the real bar will look
-// for the currently selected theme. It is intentionally decoupled from the live
-// action registry so it always shows the same canonical actions. Used by the
-// Preferences Appearance tab.
+// Static preview of the popup bar with a fixed action set, decoupled from the live registry so it always
+// shows the same canonical actions. Used by the Preferences Appearance tab.
 import SwiftUI
 import AppKit
 import ImageIO
@@ -13,8 +10,7 @@ import Core
 
 @MainActor
 struct PopupPreview: View {
-    /// The canonical action set shown in the preview, independent of what the user
-    /// has enabled/reordered in the real popup.
+    /// Canonical preview actions, independent of what the user has enabled in the real popup.
     private static let previewActions: [any Action] = [
         SearchAction(),
         CopyAction(),
@@ -23,8 +19,7 @@ struct PopupPreview: View {
         AIToolsAction()
     ]
 
-    /// The preview observes its own hover state (and ignores hover entirely), so it
-    /// never reacts to — or leaks into — the real popup's shared hover state.
+    /// Uses its own hover state so it never leaks into the real popup's shared hover state.
     private static let previewHoverState = PopupHoverState()
 
     @State private var wallpaperImage: NSImage? = nil
@@ -118,8 +113,7 @@ struct PopupPreview: View {
         .frame(width: 8, height: 20)
     }
 
-    /// Decodes the desktop wallpaper into a thumbnail sized for the preview (drawn at 156 pt with
-    /// a blur). Falls back to a full decode if thumbnail creation fails.
+    /// Decodes a wallpaper thumbnail sized for the blurred 156 pt preview; falls back to a full decode.
     private nonisolated static func downscaledWallpaper(at url: URL) -> NSImage? {
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -209,9 +203,8 @@ struct PopupPreview: View {
                 .stroke(Color.primary.opacity(0.12), lineWidth: 1)
         )
         .task {
-            // NSScreen/NSWorkspace are main-actor AppKit API; resolve them here, then decode off
-            // the main thread. The preview draws the image at 156 pt with a blur, so a downscaled
-            // thumbnail is enough and avoids decoding a full-resolution wallpaper every time.
+            // Resolve the AppKit wallpaper lookup on the main actor, then decode a thumbnail off-main.
+            // A full-resolution decode is unnecessary for the blurred preview.
             guard let screen = NSScreen.main ?? NSScreen.screens.first,
                   let url = NSWorkspace.shared.desktopImageURL(for: screen) else { return }
             let image = await Task.detached(priority: .userInitiated) { () -> NSImage? in

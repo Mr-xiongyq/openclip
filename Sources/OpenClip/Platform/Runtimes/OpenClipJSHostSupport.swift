@@ -13,9 +13,7 @@ private typealias OpenClipJSTerminationCallback = @convention(c) (
     UnsafeMutableRawPointer?
 ) -> Bool
 
-// JavaScriptCore's Objective-C API no longer exposes JSVirtualMachine.invalidate(), but its C API
-// still exports the VM watchdog used by WebKit. Declare the two functions here because Apple ships
-// their declarations in JSContextRefPrivate.h rather than the public module interface.
+// Declared here: the JSContextGroup execution-limit C API lives in JSContextRefPrivate.h, not the public module.
 @_silgen_name("JSContextGroupSetExecutionTimeLimit")
 private func setJSContextGroupExecutionTimeLimit(
     _ group: JSContextGroupRef,
@@ -37,8 +35,7 @@ private func terminateTimedOutScript(
     return true
 }
 
-/// Owns JavaScriptCore's execution-time limit for one context. The runtime invokes the callback and
-/// terminates synchronous JavaScript even while `evaluateScript` is still on the stack.
+/// Owns the JSC execution-time limit for one context; it terminates sync JS even while `evaluateScript` runs.
 final class JSExecutionTimeLimit {
     private let context: JSContext
     private let group: JSContextGroupRef
@@ -68,9 +65,7 @@ final class JSExecutionTimeLimit {
     }
 }
 
-/// Bounds the number of concurrent synchronous JS evaluations. When a run carries a budget, the
-/// runtime execution limit makes its slot recoverable after timeout; the cap still protects against
-/// concurrent startup bursts. A run with no budget holds its slot until it settles.
+/// Caps concurrent sync evaluations. A budgeted run's slot is recovered by the execution limit; unbudgeted runs hold it until settled.
 final class SyncEvaluationGate: @unchecked Sendable {
     private let lock = NSLock()
     let capacity: Int
@@ -101,33 +96,21 @@ final class SyncEvaluationGate: @unchecked Sendable {
     }
 }
 
-/// Boxes the JS context **weakly** so a URLSession completion handler — which runs on a worker
-/// thread — can hand the context back to the JS thread's runloop without strongly retaining it.
-/// Holding a strong `JSContext` (directly or through a JSValue) from an off-thread closure risks
-/// releasing the last JavaScript reference off the JS thread, which the memory-safety note in
-/// `docs/architecture/known-debt.md` forbids. The evaluation retains its own context for the whole
-/// run, so the weak reference is live exactly while the run is; afterwards the completion is
-/// discarded by `FetchTaskBox.isEnded` anyway.
+/// Weak context box so off-thread URLSession completions never hold the last JS reference (see `known-debt.md`).
+/// The evaluation retains its context for the run, so this is live exactly while the run is.
 final class WeakJSContextBox: @unchecked Sendable {
     weak var context: JSContext?
     init(_ context: JSContext) { self.context = context }
 }
 
-/// Weak, Sendable handle to an arbitrary object, so an off-thread closure can reach a
-/// JS-thread-owned object without retaining it — and without the compiler rejecting the capture.
-/// Used by the fetch bridge so a URLSession completion (worker thread) can hand work to the JS
-/// thread's runloop while holding no strong JavaScript reference (issue #47).
+/// Weak, Sendable handle so an off-thread closure can reach a JS-thread object without retaining it (issue #47).
 final class WeakRef<T: AnyObject>: @unchecked Sendable {
     weak var value: T?
     init(_ value: T) { self.value = value }
 }
 
-/// JS-thread-owned store of the resolve/reject functions for in-flight fetches, keyed by URL task
-/// identifier. The URLSession completion runs on a worker thread and must not hold JavaScript
-/// references — releasing the last one off the JS thread is the memory-safety hazard called out in
-/// `docs/architecture/known-debt.md` — so it looks the pair up here (through a `WeakRef`) inside the
-/// JS thread's runloop block. Entries are removed when settled, or released with this object at the
-/// end of the run, always on the JS thread.
+/// JS-thread-owned resolve/reject pairs for in-flight fetches, keyed by task identifier.
+/// Completions look them up on the JS runloop so no JS reference is held off-thread (see `known-debt.md`).
 final class FetchResolvers: @unchecked Sendable {
     private let lock = NSLock()
     private var entries: [Int: (resolve: JSValue, reject: JSValue)] = [:]
@@ -138,18 +121,14 @@ final class FetchResolvers: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// Removes and returns the resolve/reject pair for `identifier`, or nil if it was already
-    /// settled or removed.
+    /// Removes and returns the pair for `identifier`, or nil if already settled or removed.
     func take(_ identifier: Int) -> (resolve: JSValue, reject: JSValue)? {
         lock.lock()
         defer { lock.unlock() }
         return entries.removeValue(forKey: identifier)
     }
 
-    /// Drops every pending pair, releasing the retained resolve/reject JSValues on the calling
-    /// thread. Called at the end of a run (on the JS thread) so a fetch that never settled —
-    /// cancelled, timed out, or completed after the run ended, all of which skip `take` — cannot
-    /// keep its JSContext alive through the registry (issue #47).
+    /// Drops every pending pair on the calling (JS) thread so unsettled fetches cannot keep the context alive (issue #47).
     func clearPending() {
         lock.lock()
         entries.removeAll()
@@ -162,10 +141,7 @@ final class RunLoopBox: @unchecked Sendable {
     init(_ runLoop: CFRunLoop) { self.runLoop = runLoop }
 }
 
-/// Mutable evaluation state written by the JS effect blocks and read back on the host thread. Boxed
-/// so the `@convention(block)` closures capture a Sendable reference instead of a non-Sendable local
-/// `var` — the region-based isolation checker rejects the direct capture inside a `Task.detached`
-/// region.
+/// Boxes effect state so `@convention(block)` closures capture a Sendable reference (region isolation checker in `Task.detached`).
 final class CollectedBox: @unchecked Sendable {
     var value: OpenClipJSHost.Collected
     init() { self.value = OpenClipJSHost.Collected() }
@@ -177,8 +153,7 @@ final class EffectsBox: @unchecked Sendable {
     init() { self.value = [] }
 }
 
-/// Settled by the promise bridge on the JS thread (via `openclip.__resolve`/`__reject`) and read by
-/// the host's pump loop on that same thread. Lock-guarded so property access across threads/closures is safe.
+/// Settled by the promise bridge on the JS thread and read by the host's pump loop on that thread.
 final class PromiseState: @unchecked Sendable {
     private let lock = NSLock()
     private var _isSettled = false
@@ -219,10 +194,7 @@ final class PromiseState: @unchecked Sendable {
         _isSettled = true
     }
 
-    /// Drops the settled JSValues once the evaluation has consumed the outcome. The resolve/reject
-    /// blocks stored on `openclip` still reference this object, and `openclip` is owned by the
-    /// context, so a retained JSValue would reach back to the context and keep the whole
-    /// JSVirtualMachine alive (issue #47). Clearing breaks that last edge.
+    /// Drops settled JSValues after the outcome is consumed; retaining them would keep the JSVirtualMachine alive via `openclip` (issue #47).
     func clear() {
         lock.lock()
         defer { lock.unlock() }
@@ -231,9 +203,8 @@ final class PromiseState: @unchecked Sendable {
     }
 }
 
-/// Boxes the stable `URLSessionDataTask.taskIdentifier` so the fetch completion can remove its own
-/// task without capturing a mutable reference across threads. The identifier is written on the JS
-/// thread before `resume()` and read back on the URLSession completion thread.
+/// Carries the stable `taskIdentifier` to the completion thread, which removes its own task.
+/// Written on the JS thread before `resume()`, read on the completion thread.
 final class TaskIdentifierBox: @unchecked Sendable {
     private let lock = NSLock()
     private var _value = 0
@@ -249,10 +220,8 @@ final class TaskIdentifierBox: @unchecked Sendable {
     }
 }
 
-/// Thread-safe container that tracks in-flight URLSessionDataTasks and latches the end of the evaluation.
-/// `cancelAll()` is terminal: once cancellation starts, any task added afterwards is cancelled
-/// immediately rather than being appended (so a task racing in during `cancelAll()` cannot escape
-/// cancellation).
+/// Thread-safe in-flight task tracker; `cancelAll()` is terminal.
+/// Tasks added after cancellation starts are cancelled immediately, so none can escape.
 final class FetchTaskBox: @unchecked Sendable {
     private let lock = NSLock()
     private var tasks: [URLSessionDataTask] = []
@@ -279,19 +248,14 @@ final class FetchTaskBox: @unchecked Sendable {
         }
     }
 
-    /// Removes the tracked task with the given stable `taskIdentifier`.
     func remove(_ identifier: Int) {
         lock.lock()
         defer { lock.unlock() }
         tasks.removeAll(where: { $0.taskIdentifier == identifier })
     }
 
-    /// Registers a one-shot cleanup that runs when the evaluation ends (`finish()` or
-    /// `cancelAll()`), on whichever thread ends it. The fetch bridge uses it to invalidate its
-    /// per-evaluation `URLSession`: Apple retains a session — and, with it, its delegate, worker
-    /// threads, and Mach ports — until explicit invalidation, so without this every async run
-    /// leaked one session for the life of the process (issue #46). If the box has already closed,
-    /// the handler runs immediately so a registration racing the end cannot be dropped.
+    /// Runs once when the evaluation ends. Apple retains a `URLSession` until invalidated, so this invalidates the per-run session (issue #46).
+    /// If already closed, runs immediately so a racing registration is not dropped.
     func setCloseHandler(_ handler: @escaping @Sendable () -> Void) {
         lock.lock()
         if didClose {

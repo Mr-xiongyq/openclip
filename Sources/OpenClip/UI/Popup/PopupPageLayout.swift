@@ -15,15 +15,11 @@ public enum PopupPageLayout {
 
     /// Per-character width estimate at the popup's 15 pt regular label font.
     private static let estimatedGlyphWidth: CGFloat = 9.0
+    /// CJK, emoji and other full-width characters are about one em wide at 15 pt.
+    private static let estimatedWideGlyphWidth: CGFloat = 15.0
 
-    /// Estimates the horizontal width of a single action button in points at the given scale.
-    ///
-    /// An inline-result action (`chrome.isInlineResult`) renders its computed text in place of the
-    /// icon, up to `PopupMetrics.inlineResultMaxWidth`. When `inlineResult` is supplied the estimate
-    /// tracks that rendered width so page packing budgets for what is actually drawn; without a
-    /// result yet — or for non-inline actions — the button falls back to its icon/text width. Before
-    /// a preview lands the bar is packed icon-width, so a result arriving re-packs the page instead
-    /// of overflowing the budget (the bar re-renders because its view reads `inlineResults`).
+    /// Width of one action button. Inline-result actions size to their rendered preview text (capped), so pages
+    /// never overflow once previews land; before a result lands the button packs at icon width.
     public static func estimatedItemWidth(
         for action: any Action,
         inlineResult: String? = nil,
@@ -37,7 +33,7 @@ public enum PopupPageLayout {
             return max(PopupMetrics.actionButtonWidth * scale, padded)
         }
         let icon = action.displayIcon(using: presenter)
-        if case .text(let text) = icon, text.count > 2 {
+        if case .text(let text) = icon, !text.isEmpty, !ActionTextIconStyle.isCompactGlyph(text) {
             let estimated = estimatedTextWidth(text, scale: scale) + 25.0 * scale
             return max(PopupMetrics.actionButtonWidth * scale, min(144.0 * scale, estimated))
         }
@@ -46,22 +42,14 @@ public enum PopupPageLayout {
 
     /// Estimated intrinsic width of a one-line label at the popup font, before any max-width clamp.
     private static func estimatedTextWidth(_ text: String, scale: CGFloat) -> CGFloat {
-        CGFloat(text.count) * estimatedGlyphWidth * scale
+        let width = text.reduce(CGFloat(0)) { sum, character in
+            sum + (ActionTextIconStyle.rendersFullWidth(character) ? estimatedWideGlyphWidth : estimatedGlyphWidth)
+        }
+        return width * scale
     }
 
-    /// Computes width-budgeted pages for a list of actions.
-    ///
-    /// - Parameters:
-    ///   - actions: The action items to distribute across pages.
-    ///   - inlineResults: Computed inline-preview text keyed by action ID (`modeStore.inlineResults`).
-    ///     Supplying it sizes inline buttons at their rendered text width, so a page never overflows
-    ///     once previews land; omit it (or leave entries absent) to pack at icon width.
-    ///   - leadingWidth: Width reserved for leading persistent controls (e.g. completion chevron).
-    ///   - trailingWidth: Width reserved for trailing persistent controls (e.g. search button).
-    ///   - maxBudget: Maximum allowable content width for any single page.
-    ///   - scale: Current popup scale factor.
-    ///   - presenter: Customization presenter for resolving display icons.
-    /// - Returns: Array of action pages.
+    /// Computes width-budgeted pages. Passing `inlineResults` sizes inline buttons at their rendered width.
+    /// Leading and trailing widths are reserved for persistent controls.
     public static func computePages(
         actions: [any Action],
         inlineResults: [String: String] = [:],
@@ -88,7 +76,7 @@ public enum PopupPageLayout {
             sum + estimatedItemWidth(for: action, inlineResult: inlineResults[action.id], scale: scale, presenter: presenter)
         }
 
-        // Single page optimization: if everything fits within count and budget without pagination chevrons, return one page.
+        // Everything fits on one page: no pagination chevrons needed.
         if actions.count <= effectiveMaxItems && (leadingWidth + trailingWidth + totalActionsWidth <= maxBudget) {
             return [actions]
         }

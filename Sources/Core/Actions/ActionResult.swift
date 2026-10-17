@@ -1,10 +1,7 @@
 // ActionResult.swift
 // OpenClip
 //
-// Defines the value enum representing execution results and platform side-effects returned by actions.
-// Specifies outcomes such as copy, cut, paste, URL opening, system service triggers, notification
-// posting, presentation results (status, configuration), and simple success/failure. Also
-// carries the popup dismissal policy computed once on a top-level result (decision 8).
+// Value enum of action results and platform side-effects. `dismissesPopup` is computed once on the top-level result.
 import Foundation
 
 public indirect enum ActionResult: Sendable {
@@ -14,47 +11,32 @@ public indirect enum ActionResult: Sendable {
     case openURL(URL)
     case openURLInApp(url: URL, appBundleIdentifier: String)
     case copy(String)
+    /// Ask the original application to copy its live selection, retaining its native formats.
+    case copySelection(SelectionContext)
     case cut(String)
     case paste(String)
-    /// Rich multi-type paste (plain text, RTF, HTML).
     case pasteContent(RichPasteboardPayload)
-    /// Rich multi-type copy (plain text, RTF, HTML).
     case copyContent(RichPasteboardPayload)
-    /// Implicitly returned text — a JS string return, AppleScript output, shell plain-text stdout,
-    /// or a text snippet. Unlike `.paste`, it carries no delivery decision: the user's per-click
-    /// preference (General tab → "When an action returns text") decides preview / paste / copy in
-    /// `ActionResultDelivery.resolve`. Explicit effects (openclip.paste/copy, JSON effects, declared
-    /// `secondary`) are never re-decided. Does not auto-dismiss the popup; the controller decides
-    /// dismissal from the resolved outcome.
+    /// Implicitly returned text (JS return, AppleScript output, shell stdout). Carries no delivery decision:
+    /// the "When an action returns text" preference picks preview/paste/copy. Explicit effects are never re-decided.
     case text(String)
     case showServices(String)
 
-    /// Show the system Look Up dictionary popover for `word`. Declared by Core; presented by the
-    /// effect door via `NSView.showDefinition(for:at:)` so Core stays AppKit-free. Pure presentation —
-    /// nothing is written to the pasteboard and the popup stays open so the popover keeps its anchor.
+    /// Look Up popover for `word`. Nothing is copied and the popup stays open to keep the anchor.
     case showDefinition(String)
 
-    /// Look up `word` in the system dictionaries headlessly (no app launch) and copy its definition
-    /// to the pasteboard. Declared by Core; resolved by the effect door via DictionaryServices so
-    /// Core and the JS host stay testable. Returned by `DefineAction` on a force-copy click (the
-    /// right-click/⇧-click alternative to opening Dictionary.app).
+    /// Copies the headless dictionary definition of `word`; returned by Define on a force-copy click.
     case copyDefinition(String)
 
-    /// Invoke a specific macOS sharing service by its identifier (e.g.
-    /// `com.apple.Notes.SharingExtension`) with the given text. Handled by the effect door via
-    /// `NSSharingService(named:).perform`, so Core and the JS host stay testable. Unlike `.showServices`
-    /// (a picker), this targets the service directly (e.g. opens the Notes inline popup) and dismisses
-    /// the popup.
+    /// Sends `text` directly to the sharing service `identifier` and dismisses the popup. Unlike `.showServices`, no picker.
     case shareService(identifier: String, text: String)
 
-    /// Post a macOS user notification (title/body) via `UNUserNotificationCenter`. Handled by the
-    /// effect door so Core and the JS host stay testable; best-effort (skipped if not authorized).
+    /// macOS user notification; best-effort, skipped when not authorised.
     case notify(title: String, body: String)
 
     // MARK: - Presentation results (presenter-owned; the effect handler treats these as no-ops)
 
-    /// Surface a transient toast (success/error/info) as a banner or corner badge. Dismisses the
-    /// popup by default; `keepVisible` opts out.
+    /// Transient toast; dismisses the popup unless `keepVisible`.
     case toast(StatusFeedback)
     /// Hide the popup and ask the user to configure the named action (opens Preferences → ActionEditorPage).
     case openConfiguration(ConfigurationRequest)
@@ -66,25 +48,20 @@ public indirect enum ActionResult: Sendable {
 
     // MARK: - Keyboard execution (Phase 8; no execution here)
 
-    /// Send a synthetic key press to the frontmost app.
     case keyPress(KeyPressSpec)
-    /// Run a registered shortcut by name with optional input.
     case runShortcut(name: String, input: String?)
 
     // MARK: - Native File Outputs
 
-    /// Native file output from an action (e.g. generated image, exported file, downloaded media).
-    /// Kept open for in-card preview with quick actions to save to default location, copy file, or drag.
+    /// File output shown in-card, with quick actions to save, copy or drag.
     case file(FileOutputPayload)
-    /// Explicitly copy the specified file to the system clipboard (as file URL / NSURL).
     case copyFile(URL)
-    /// Explicitly save the specified file to the settings-configured default save location.
+    /// Saves to the configured default location.
     case saveFile(URL)
 
     case none
 }
 
-/// Value payload representing a file output produced by an action.
 public struct FileOutputPayload: Sendable, Equatable {
     public let url: URL
     public let filename: String?
@@ -118,18 +95,14 @@ public struct FileOutputPayload: Sendable, Equatable {
 }
 
 extension ActionResult {
-    /// Whether the popup should hide after this top-level result is handled. Computed once on the
-    /// top-level result (decision 8): a `.toast` dismisses the popup by default (`keepVisible` opts
-    /// out), and a `.sequence` dismisses only when non-empty and every item dismisses. Everything
-    /// else (leaf effects, `.openConfiguration`) dismisses.
+    /// Computed on the top-level result: a `.toast` dismisses unless `keepVisible`; a `.sequence`
+    /// dismisses only when non-empty and every item does.
     public var dismissesPopup: Bool {
         switch self {
         case .toast(let feedback):
             return !feedback.keepVisible
         case .text, .file, .showDefinition:
-            // Implicit returned text and file outputs are presentation results:
-            // kept open for in-card preview; explicit actions (save, copy) or Esc dismiss.
-            // The Look Up popover is anchored to the popup panel, so it also stays open.
+            // Kept open for in-card preview; the Look Up popover is anchored to the panel, so it stays too.
             return false
         case .sequence(let items):
             return !items.isEmpty && items.allSatisfy(\.dismissesPopup)
@@ -138,11 +111,7 @@ extension ActionResult {
         }
     }
 
-    /// Whether this result hands the user a detached, interactive surface (the system Look Up
-    /// popover) that stays on screen while the popup remains open. A scroll over such a surface —
-    /// the definition itself scrolls — must not auto-dismiss the popup, or the surface anchored to
-    /// it goes down with it. Presentation results that render inside the popup (`.text`, `.file`)
-    /// don't need this: their `.content` mode already suspends scroll dismissal.
+    /// A scroll over the Look Up popover must not dismiss the popup, or the popover goes down with it.
     public var suspendsScrollDismissal: Bool {
         switch self {
         case .showDefinition: return true
@@ -151,8 +120,7 @@ extension ActionResult {
         }
     }
 
-    /// True when this result (or any item of a `.sequence`) is a `.toast` — the presenter uses this
-    /// to suppress the delivery companion toast so a script toast wins (one toast per run).
+    /// Lets a script toast win over the delivery companion toast (one toast per run).
     public var containsToast: Bool {
         switch self {
         case .toast: return true

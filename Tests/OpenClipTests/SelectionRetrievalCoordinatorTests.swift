@@ -278,8 +278,7 @@ final class SelectionRetrievalCoordinatorTests: XCTestCase {
     }
 
     func testMenuCopyStartsAtMenuCopyEvenWhenAXTextAvailable() async {
-        // A menu-copy rule starts the chain at menu copy, so it never performs the AX text strategy
-        // above it — even when the target happens to expose AX text.
+        // A menu-copy rule starts at menu copy and skips the AX text strategy, even if AX text is exposed.
         let coordinator = SelectionRetrievalCoordinator(
             inspect: { Self.textFieldTarget(selectedText: "ax text") },
             copyCapture: { _ in TextResult(text: "captured via menu copy") }
@@ -307,8 +306,7 @@ final class SelectionRetrievalCoordinatorTests: XCTestCase {
         XCTAssertEqual(result?.text, "captured keyboard copy")
     }
 
-    /// Electron/Chromium apps are copy-classified but now read AX first (non-destructively) before
-    /// posting ⌘C.
+    /// Electron/Chromium apps are copy-classified but read AX first, non-destructively, before ⌘C.
     func testElectronKeyboardCopyPrefersAXTextOverCopy() async {
         final class Counter: @unchecked Sendable { var calls = 0 }
         let counter = Counter()
@@ -331,8 +329,7 @@ final class SelectionRetrievalCoordinatorTests: XCTestCase {
     }
 
     func testKeyboardCopyHasNoFallbackBelowIt() async {
-        // keyboard-copy is the terminal strategy in the chain, so a failed keyboard copy does not
-        // fall through to menu copy.
+        // Keyboard copy is terminal in the chain: a failure does not fall through to menu copy.
         final class Counter: @unchecked Sendable { var calls = 0 }
         let counter = Counter()
         let coordinator = SelectionRetrievalCoordinator(
@@ -448,10 +445,7 @@ final class SelectionRetrievalCoordinatorTests: XCTestCase {
         XCTAssertEqual(result?.text, "captured select-all text")
     }
 
-    /// Regression (from a real log): in Zed a drag and a ⇧+arrow both retrieved fine through the
-    /// copy strategy one second apart, while ⌘A in the same element was refused — the guard
-    /// demanded a *known* text role, and editors/terminals that draw their own text expose none.
-    /// Only a recognized row container may refuse a select-all now.
+    /// Zed draws its own text with no known text role, so only a recognized row container may refuse ⌘A.
     func testSelectAllProceedsOnAppWithNoRecognizableAXRole() async {
         let coordinator = SelectionRetrievalCoordinator(
             inspect: { Self.opaqueTarget() },
@@ -467,9 +461,7 @@ final class SelectionRetrievalCoordinatorTests: XCTestCase {
         XCTAssertEqual(result?.text, "captured select-all text")
     }
 
-    /// A canvas drag (Figma): opaque AX role, arrow cursor, no selection signal. The copy strategy
-    /// must not fire — a synthetic ⌘C here mutates the app's selection/undo state instead of
-    /// reading text.
+    /// Canvas drag (Figma): opaque role, no selection signal. A synthetic ⌘C would mutate undo state, so the copy strategy must not fire.
     func testCopySkippedOnCanvasDragWithoutTextEvidence() async {
         final class Counter: @unchecked Sendable { var calls = 0 }
         let counter = Counter()
@@ -505,8 +497,38 @@ final class SelectionRetrievalCoordinatorTests: XCTestCase {
         XCTAssertEqual(result?.text, "explicit hotkey capture")
     }
 
-    /// A row container nested above the focused element still refuses — the Finder/Mail case the
-    /// guard exists for reaches it through `containedInRoles`, not the focused role.
+    func testCopyEvidencePolicyReachesDetailedCaptureThroughOpenClipBridge() async {
+        final class RequestRecorder: @unchecked Sendable {
+            var request: CopyRequest?
+        }
+
+        let recorder = RequestRecorder()
+        let coordinator = SelectionRetrievalCoordinator(
+            configuration: SelectionConfiguration(evidenceSettleMaxRetries: 0),
+            inspect: { _ in Self.textFieldTarget(selectedText: nil, role: "AXTextField") },
+            detailedCopyCapture: { request in
+                recorder.request = request
+                return SelectionReadResponse(
+                    result: SelectionResult(text: "captured text"),
+                    status: .selection
+                )
+            }
+        )
+
+        let response = await coordinator.retrieveResponse(
+            for: AppIdentity(bundleIdentifier: "com.sublimetext.3"),
+            policy: AppPolicyContext(retrievalMode: .keyboardCopy),
+            cursor: .unknown
+        )
+
+        XCTAssertEqual(response.result?.text, "captured text")
+        XCTAssertEqual(recorder.request?.evidence.reason, "ax-text-control")
+        XCTAssertEqual(recorder.request?.evidence.strength, .weak)
+        XCTAssertTrue(recorder.request?.requiresEnabledCopyMenu == true,
+                      "Evidence-required retrieval must ask the detailed capture to validate weak evidence against the enabled Copy menu")
+    }
+
+    /// A row container above the focused element still refuses (Finder/Mail, via `containedInRoles`).
     func testSelectAllSkippedInsideRowContainer() async {
         let coordinator = SelectionRetrievalCoordinator(
             inspect: { Self.opaqueTarget(containedInRoles: ["AXScrollArea", "AXOutline"]) },
@@ -691,8 +713,7 @@ final class SelectionRetrievalCoordinatorTests: XCTestCase {
     // MARK: - Rich-content enrichment
 
     func testTextOnlyWebAreaWinSkipsRichEnrichmentByDefault() async {
-        // Enrichment is opt-in (the shipping default skips the synthetic copy), so a successful
-        // AX read of a web area must not fire the capture.
+        // Enrichment is opt-in and skips the synthetic copy by default, so an AX read must not fire it.
         final class Counter: @unchecked Sendable { var calls = 0 }
         let counter = Counter()
         let coordinator = SelectionRetrievalCoordinator(
@@ -778,9 +799,7 @@ final class SelectionRetrievalCoordinatorTests: XCTestCase {
 
     // MARK: - Inspect concurrency gate
 
-    /// Regression: overlapping gestures (quick re-selection, double-click, hotkey+monitor races)
-    /// used to fail fast on the single AX slot — popup for neither selection. Each concurrent
-    /// read now gets its own permit and delivers independently.
+    /// Overlapping gestures (re-selection, double-click, hotkey and monitor races) each get a permit and deliver independently.
     func testConcurrentRetrievesBothDeliver() async {
         let inspectStarted = expectation(description: "both inspects started")
         inspectStarted.expectedFulfillmentCount = 2
@@ -817,12 +836,9 @@ final class SelectionRetrievalCoordinatorTests: XCTestCase {
         XCTAssertEqual(second?.text, "overlap text", "second overlapping gesture must not be dropped")
     }
 
-    /// Regression: the permit was released only when the underlying blocking inspect returned,
-    /// so one slow/hung app kept every subsequent popup missing for seconds. The permit must free
-    /// at the caller's watchdog deadline even while that worker is still parked.
+    /// The permit frees at the caller's watchdog deadline, even while a hung worker is still parked.
     func testFreshInspectUsesRemainingCapacityWhileWorkerStillHung() async {
-        // Worker #1 parks far past axReadTimeout (0.5s): its caller gets nil from the watchdog
-        // while the AX queue thread stays blocked on the semaphore.
+        // Worker #1 parks past axReadTimeout: its caller gets nil while the AX thread stays blocked.
         let zombieUnblock = DispatchSemaphore(value: 0)
         defer { zombieUnblock.signal() }
         let hungCoordinator = SelectionRetrievalCoordinator(
@@ -859,8 +875,7 @@ final class SelectionRetrievalCoordinatorTests: XCTestCase {
         zombieUnblock.signal() // release the abandoned AX worker thread
     }
 
-    /// The concurrency cap still bounds pile-up: at `Constants.axMaxConcurrentInspects`
-    /// simultaneously-awaited reads, further requests skip instead of stacking more workers.
+    /// Caps pile-up: beyond `Constants.axMaxConcurrentInspects` awaited reads, further requests skip.
     func testConcurrencyCapFailsFastWhenSaturated() async {
         let inspectStarted = expectation(description: "cap-filling inspects started")
         inspectStarted.expectedFulfillmentCount = Constants.axMaxConcurrentInspects
@@ -1134,9 +1149,7 @@ final class SelectionRetrievalCoordinatorTests: XCTestCase {
     }
 }
 
-/// Counts started menu presses.
-/// Tests start one blocked `.menuCopy` retrieve at a time.
-/// This keeps inspect permits and press permits from overlapping.
+/// Counts started menu presses. One blocked `.menuCopy` retrieve at a time keeps inspect and press permits apart.
 private final class PressStartSignal: @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0

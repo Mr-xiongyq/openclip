@@ -20,14 +20,11 @@ public final class SubBarPanelController {
     public var panelFrame: NSRect { panel.frame }
     /// Called when the sub-bar hides so parent state (like active button highlight) is dismissed immediately.
     public var onDismiss: (@MainActor @Sendable () -> Void)?
-    /// Hover from the sub-bar's own `.activeAlways` tracking area. Set by the popup controller so
-    /// the same hover pipeline runs when the event monitors cannot see the pointer (inactive app over
-    /// another app's fullscreen Space).
+    /// Hover from the `.activeAlways` tracking area; needed when event monitors can't see the pointer (inactive app over a fullscreen Space).
     public var onTrackingMouseMoved: (@MainActor @Sendable () -> Void)?
     /// The screen-space hover-tooltip surface shared with PopupWindowController. Injected for tests.
     public let tooltipController: TooltipPanelController
-    /// The main bar panel's screen frame for the current show, used as the tooltip avoidance rect
-    /// so a sub-bar tooltip flips away from the main bar instead of overlapping it.
+    /// Main bar's screen frame for the current show; sub-bar tooltips avoid it.
     private var mainBarScreenFrame: NSRect?
 
     public init(panel: SubBarPanel = SubBarPanel(),
@@ -128,9 +125,7 @@ public final class SubBarPanelController {
         let panelWidth = max(fit.width, PopupMetrics.actionButtonWidth)
         let panelHeight = max(fit.height, 30)
 
-        // Horizontal positioning:
-        // Anchors left to parent button, and pulls leftward towards the main bar body when
-        // the sub-bar overhangs significantly past the main bar's right edge.
+        // Anchor left to the parent button; pull toward the main bar when overhanging its right edge.
         let shadowInset = PopupMetrics.popupShadowInset
         let contentWidth = max(0, panelWidth - 2 * shadowInset)
         var contentX = parentButtonScreenFrame.minX
@@ -144,7 +139,7 @@ public final class SubBarPanelController {
                 // Pull left by ~55% of the right overhang
                 let pullAmount = overhang * 0.55
                 let candidateX = contentX - pullAmount
-                // Ensure the sub-bar doesn't shift past the main bar's left edge or uncover the parent button
+                // Don't shift past the main bar's left edge or uncover the parent button.
                 let minAllowedX = max(mainBarContent.minX, parentButtonScreenFrame.maxX - contentWidth)
                 contentX = max(minAllowedX, candidateX)
             }
@@ -184,9 +179,7 @@ public final class SubBarPanelController {
         return (above ? yAbove : yBelow, above)
     }
 
-    /// Presents a sub-bar button's hover tooltip in the screen-space tooltip window, avoiding the
-    /// main bar's frame so the tooltip flips below the sub-bar instead of overlapping the main bar
-    /// (or being clamped on top of the sub-bar's own buttons, the old in-panel behavior).
+    /// Shows a sub-bar hover tooltip in the screen-space window, avoiding the main bar so it flips instead of covering the sub-bar's buttons.
     private func presentTooltip(text: String, localFrame: CGRect, effectiveTheme: String, isDark: Bool) {
         guard panel.isVisible, let contentView = panel.contentView else { return }
         let viewRect = NSRect(x: localFrame.minX, y: localFrame.minY, width: localFrame.width, height: localFrame.height)
@@ -207,7 +200,7 @@ public final class SubBarPanelController {
         )
     }
 
-    /// Pin the current active sub-bar so it stays open until explicitly closed or an action runs.
+    /// Keeps the active sub-bar open until explicitly closed or an action runs.
     public func pin() {
         if let current = activeState {
             activeState = current.pinned()
@@ -215,7 +208,7 @@ public final class SubBarPanelController {
         }
     }
 
-    /// Whether an action index on the main bar is an immediate neighbor of the active parent action (within 1 position).
+    /// Whether an action index is adjacent to the active parent action.
     public func isImmediateNeighbor(actionIndex: Int) -> Bool {
         guard let parentIndex = activeState?.parentIndex else { return false }
         return abs(actionIndex - parentIndex) <= 1
@@ -289,7 +282,7 @@ public final class SubBarPanelController {
         onDismiss?()
     }
 
-    /// Checks if a screen location is over interactive sub-bar content (excluding transparent shadow ring).
+    /// Whether a screen location is over interactive content (excluding the transparent shadow ring).
     public func isOverContent(_ screenLocation: CGPoint) -> Bool {
         guard panel.isVisible, panel.frame.contains(screenLocation), let contentView = panel.contentView else {
             return false
@@ -302,8 +295,7 @@ public final class SubBarPanelController {
         return contentView.bounds.contains(contentPoint)
     }
 
-    /// Resizes the sub-bar panel to match content size changes (e.g. pagination) while respecting
-    /// horizontal anchoring (such as keeping the right edge fixed when clicking pagination chevrons).
+    /// Resizes to content changes (e.g. pagination), keeping the horizontal anchor fixed.
     public func resizePanel(to proposedSize: CGSize, mouseLocation: CGPoint? = nil) {
         guard panel.isVisible else { return }
         let newWidth = max(proposedSize.width, PopupMetrics.actionButtonWidth)
@@ -315,8 +307,7 @@ public final class SubBarPanelController {
         updateHoverLocation(at: mouseLocation)
     }
 
-    /// Updates the sub-bar hover coordinate in SubBarHoverState to reflect the current mouse position
-    /// within the resized or moved sub-bar window.
+    /// Updates SubBarHoverState to the mouse position within the resized or moved window.
     public func updateHoverLocation(at screenLocation: CGPoint? = nil) {
         guard panel.isVisible, let contentView = panel.contentView else {
             SubBarHoverState.shared.location = nil
@@ -360,8 +351,7 @@ private struct SubBarContentView: View {
     let onHoverChange: @MainActor @Sendable (Bool) -> Void
     let onPaginationAnchor: (@MainActor (PopupPanel.HorizontalAnchor) -> Void)?
     let onContentSizeChange: (@MainActor (CGSize) -> Void)?
-    /// Shows the hover tooltip for a sub-bar button in the controller's screen-space tooltip
-    /// window: (text, button frame in popupHoverSpace, effective theme token, isDark).
+    /// Shows a sub-bar button's hover tooltip: (text, button frame in popupHoverSpace, theme token, isDark).
     let onShowTooltip: @MainActor (String, CGRect, String, Bool) -> Void
     /// Hides the screen-space hover tooltip.
     let onHideTooltip: @MainActor () -> Void

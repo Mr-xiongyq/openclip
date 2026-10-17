@@ -1,5 +1,6 @@
 import XCTest
 import AppKit
+import os
 @testable import Core
 @testable import OpenClip
 
@@ -853,6 +854,81 @@ final class MacSelectionMonitorTests: XCTestCase {
         XCTAssertEqual(cached.context.sourceApp.bundleIdentifier, "com.apple.TextEdit")
     }
 
+    func testMouseUpDoesNotStartPasteProbeWhenRetrievalHasNoSelection() async throws {
+        let monitor = makeMonitor()
+        monitor.isExcludedBundle = { _ in false }
+        monitor.policyResolver = { _ in .default }
+        monitor.currentCursorProvider = { .arrow }
+        monitor.retriever = SelectionRetrievalCoordinator(inspect: {
+            Self.fixtureTarget(role: "AXTextField", selectedText: nil)
+        }, copyCapture: { _ in nil })
+
+        var probeCalls = 0
+        monitor.preparePasteProbe = { _, _ in
+            probeCalls += 1
+            return Task { true }
+        }
+        var outcome: SelectionTriggerResponse?
+        monitor.onReadOutcome = { outcome = $0 }
+
+        let app = MockTestApp(bundleID: "com.apple.TextEdit")
+        monitor.handleMouseDown(at: CGPoint(x: 100, y: 100))
+        monitor.handleMouseUp(app: app, cursor: CGPoint(x: 200, y: 100), clickCount: 1)
+        await monitor.debounceTask?.value
+
+        XCTAssertEqual(outcome?.status, .noSelection)
+        XCTAssertEqual(probeCalls, 0, "A missing selection must not start the Paste menu walk")
+    }
+
+    func testMouseUpDoesNotStartPasteProbeWhenCopyIsBlocked() async throws {
+        let monitor = makeMonitor()
+        monitor.isExcludedBundle = { _ in false }
+        monitor.policyResolver = { _ in .default }
+        monitor.retriever = SelectionRetrievalCoordinator(inspect: {
+            Self.fixtureTarget(role: "AXButton", selectedText: nil)
+        }, copyCapture: { _ in XCTFail("A gated control must not attempt Copy"); return nil })
+
+        var probeCalls = 0
+        monitor.preparePasteProbe = { _, _ in
+            probeCalls += 1
+            return Task { true }
+        }
+        var outcome: SelectionTriggerResponse?
+        monitor.onReadOutcome = { outcome = $0 }
+
+        let app = MockTestApp(bundleID: "com.apple.TextEdit")
+        monitor.handleMouseDown(at: CGPoint(x: 100, y: 100))
+        monitor.handleMouseUp(app: app, cursor: CGPoint(x: 200, y: 100), clickCount: 1)
+        await monitor.debounceTask?.value
+
+        XCTAssertEqual(outcome?.status, .copyBlocked)
+        XCTAssertEqual(probeCalls, 0, "A blocked retrieval must not start the Paste menu walk")
+    }
+
+    func testMouseUpStartsPasteProbeAfterValidSelection() async throws {
+        let monitor = makeMonitor()
+        monitor.isExcludedBundle = { _ in false }
+        monitor.policyResolver = { _ in .default }
+        monitor.retriever = SelectionRetrievalCoordinator(inspect: {
+            Self.fixtureTarget(role: "AXTextField", selectedText: "valid selection")
+        }, copyCapture: { _ in nil })
+
+        var probeCalls = 0
+        monitor.preparePasteProbe = { _, _ in
+            probeCalls += 1
+            return Task { true }
+        }
+
+        let app = MockTestApp(bundleID: "com.apple.TextEdit")
+        monitor.handleMouseDown(at: CGPoint(x: 100, y: 100))
+        monitor.handleMouseUp(app: app, cursor: CGPoint(x: 200, y: 100), clickCount: 1)
+        await monitor.debounceTask?.value
+
+        XCTAssertEqual(monitor.latestSelection?.context.text, "valid selection")
+        XCTAssertEqual(monitor.latestSelection?.canPaste, true)
+        XCTAssertEqual(probeCalls, 1, "A valid selection should still probe Paste availability")
+    }
+
     func testCurrentSelectionReturnsCachedForMatchingBundleAndNilForMismatch() async throws {
         let monitor = makeMonitor()
         let app = AppIdentity(bundleIdentifier: "com.apple.TextEdit", localizedName: "TextEdit")
@@ -1008,6 +1084,248 @@ final class MacSelectionMonitorTests: XCTestCase {
             XCTAssertNil(monitor.debounceTask)
             XCTAssertNil(monitor.latestSelection)
         }
+    }
+
+    func testMultiClickOnWindowChromeIsRejectedEvenWhenFrameDoesNotChange() async {
+        final class SelectionLogSink: LogSink, @unchecked Sendable {
+            let messages = OSAllocatedUnfairLock<[String]>(initialState: [])
+            func record(date: Date, category: String, level: Core.LogLevel, message: String) {
+                if category == "selection" { messages.withLock { $0.append(message) } }
+            }
+        }
+        let previousSinks = Log.currentSinks()
+        let logSink = SelectionLogSink()
+        Log.addSink(logSink)
+        defer { Log.restoreSinks(previousSinks) }
+        let store = MemorySettingsStore()
+        store.set(.isMouseHoldEnabled, value: false)
+        let monitor = makeMonitor(settingsStore: store)
+        let frame = CGRect(x: 100, y: 100, width: 500, height: 400)
+        monitor.isSystemChromeAt = { _ in false }
+        monitor.windowAtPoint = { _ in SelectionGestureWindow(id: 123, frame: frame) }
+        monitor.windowFrame = { _ in frame }
+        monitor.isPressOnWindowChrome = { _, _ in true }
+        monitor.retriever = SelectionRetrievalCoordinator(inspect: {
+            XCTFail("A multi-click on window chrome must be rejected before AX retrieval")
+            return Self.fixtureTarget(role: "AXTextField", selectedText: "stale selection")
+        }, copyCapture: { _ in
+            XCTFail("A multi-click on window chrome must not attempt Copy")
+            return nil as Core.TextResult?
+        })
+        var pasteProbeCalls = 0
+        monitor.preparePasteProbe = { _, _ in
+            pasteProbeCalls += 1
+            return Task { true }
+        }
+
+        let app = MockTestApp(bundleID: "com.apple.TextEdit")
+        monitor.handleMouseDown(at: CGPoint(x: 120, y: 470))
+        monitor.handleMouseUp(app: app, cursor: CGPoint(x: 120, y: 470), clickCount: 2)
+        await monitor.debounceTask?.value
+
+        XCTAssertNil(monitor.latestSelection)
+        XCTAssertEqual(pasteProbeCalls, 0)
+        XCTAssertTrue(
+            logSink.messages.withLock { $0 }.contains {
+                $0.contains("skipped press on window chrome") && $0.contains("com.apple.TextEdit")
+            },
+            "A chrome rejection must be diagnosable from the log, not a silent copyBlocked"
+        )
+    }
+
+    func testMultiClickRejectsWindowChangedAfterMouseUpBeforeSettle() async throws {
+        let store = MemorySettingsStore()
+        store.set(.isMouseHoldEnabled, value: false)
+        let monitor = makeMonitor(settingsStore: store)
+        let originalFrame = CGRect(x: 100, y: 100, width: 500, height: 400)
+        var currentFrame: CGRect? = originalFrame
+        monitor.isSystemChromeAt = { _ in false }
+        monitor.windowAtPoint = { _ in SelectionGestureWindow(id: 123, frame: originalFrame) }
+        monitor.windowFrame = { _ in currentFrame }
+        monitor.isPressOnWindowChrome = { _, _ in false }
+        monitor.retriever = SelectionRetrievalCoordinator(inspect: {
+            XCTFail("A window changed during the settle interval must be rejected before AX retrieval")
+            return Self.fixtureTarget(role: "AXTextField", selectedText: "stale selection")
+        }, copyCapture: { _ in
+            XCTFail("A window changed during the settle interval must not attempt Copy")
+            return nil as Core.TextResult?
+        })
+        var pasteProbeCalls = 0
+        monitor.preparePasteProbe = { _, _ in
+            pasteProbeCalls += 1
+            return Task { true }
+        }
+
+        let app = MockTestApp(bundleID: "com.apple.TextEdit")
+        monitor.handleMouseDown(at: CGPoint(x: 200, y: 200))
+        monitor.handleMouseUp(app: app, cursor: CGPoint(x: 200, y: 200), clickCount: 2)
+        let readTask = try XCTUnwrap(monitor.debounceTask)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000)
+            currentFrame = nil // closed or otherwise no longer present at the captured window ID
+        }
+        await readTask.value
+
+        XCTAssertNil(monitor.latestSelection)
+        XCTAssertEqual(pasteProbeCalls, 0)
+    }
+
+    func testMultiClickInContentWithStableWindowStillRetrievesSelection() async {
+        let store = MemorySettingsStore()
+        store.set(.isMouseHoldEnabled, value: false)
+        let monitor = makeMonitor(settingsStore: store)
+        let frame = CGRect(x: 100, y: 100, width: 500, height: 400)
+        monitor.isSystemChromeAt = { _ in false }
+        monitor.windowAtPoint = { _ in SelectionGestureWindow(id: 123, frame: frame) }
+        monitor.windowFrame = { _ in frame }
+        monitor.isPressOnWindowChrome = { _, _ in false }
+        monitor.isExcludedBundle = { _ in false }
+        monitor.policyResolver = { _ in .default }
+        monitor.retriever = SelectionRetrievalCoordinator(inspect: {
+            Self.fixtureTarget(role: "AXTextField", selectedText: "content selection")
+        }, copyCapture: { _ in nil })
+        var pasteProbeCalls = 0
+        monitor.preparePasteProbe = { _, _ in
+            pasteProbeCalls += 1
+            return Task { true }
+        }
+
+        let app = MockTestApp(bundleID: "com.apple.TextEdit")
+        let contentPoint = CGPoint(x: 200, y: 200)
+        monitor.handleMouseDown(at: contentPoint)
+        monitor.handleMouseUp(app: app, cursor: contentPoint, clickCount: 2)
+        await monitor.debounceTask?.value
+
+        XCTAssertEqual(monitor.latestSelection?.context.text, "content selection")
+        XCTAssertEqual(monitor.latestSelection?.canPaste, true)
+        XCTAssertEqual(pasteProbeCalls, 1)
+    }
+
+    nonisolated private static func boundedTarget(selectedText: String, axBounds: CGRect) -> AXElementInspector.Target {
+        AXElementInspector.Target(
+            focusedApp: nil, focusedElement: nil, role: "AXTextField", subRole: nil,
+            parentRoles: [], containedInRoles: [], webArea: nil, selectedText: selectedText,
+            selectedTextMarkerRange: nil, value: nil, selectedTextRange: nil, bounds: axBounds
+        )
+    }
+
+    private func makeLocalityMonitor(axBounds: CGRect) -> MacSelectionMonitor {
+        let store = MemorySettingsStore()
+        store.set(.isMouseHoldEnabled, value: false)
+        let monitor = makeMonitor(settingsStore: store)
+        monitor.isPressOnWindowChrome = { _, _ in false }
+        monitor.isExcludedBundle = { _ in false }
+        monitor.policyResolver = { _ in .default }
+        monitor.currentCursorProvider = { .unknown }
+        monitor.preparePasteProbe = { _, _ in Task { true } }
+        monitor.gestureScreens = {
+            .init(primaryMaxY: 1000, frames: [CGRect(x: 0, y: 0, width: 1440, height: 1000)])
+        }
+        monitor.retriever = SelectionRetrievalCoordinator(inspect: {
+            Self.boundedTarget(selectedText: "1080P", axBounds: axBounds)
+        }, copyCapture: { _ in nil })
+        return monitor
+    }
+
+    /// Issue #162: double-clicking a video made Chromium select a faded-out control label well
+    /// below the pointer. A selection that is not under the double-click is not its result.
+    func testDoubleClickIgnoresSelectionAwayFromThePointer() async {
+        // Cocoa y 80–98, ~100pt below the click at y 200.
+        let monitor = makeLocalityMonitor(axBounds: CGRect(x: 16, y: 902, width: 43, height: 18))
+        var delivered = 0
+        monitor.onSelection = { _, _ in delivered += 1 }
+
+        let point = CGPoint(x: 256, y: 200)
+        monitor.handleMouseDown(at: point)
+        monitor.handleMouseUp(app: MockTestApp(bundleID: "com.bilibili.bilibiliPC"), cursor: point, clickCount: 2)
+        await monitor.debounceTask?.value
+
+        XCTAssertNil(monitor.latestSelection)
+        XCTAssertEqual(delivered, 0)
+    }
+
+    func testDoubleClickDeliversSelectionUnderThePointer() async {
+        // Cocoa y 192–210 spans the click.
+        let monitor = makeLocalityMonitor(axBounds: CGRect(x: 230, y: 790, width: 60, height: 18))
+        let point = CGPoint(x: 256, y: 200)
+        monitor.handleMouseDown(at: point)
+        monitor.handleMouseUp(app: MockTestApp(bundleID: "com.apple.TextEdit"), cursor: point, clickCount: 2)
+        await monitor.debounceTask?.value
+
+        XCTAssertEqual(monitor.latestSelection?.context.text, "1080P")
+    }
+
+    /// The third press of a triple-click lands 100–200 ms after the second release. It must
+    /// cancel the double-click read before it reads or presents, not race a word popup.
+    func testThirdPressCancelsPendingDoubleClickRead() async {
+        let monitor = makeLocalityMonitor(axBounds: CGRect(x: 230, y: 790, width: 60, height: 18))
+        final class Counter: @unchecked Sendable { var inspects = 0 }
+        let counter = Counter()
+        monitor.retriever = SelectionRetrievalCoordinator(inspect: {
+            counter.inspects += 1
+            return Self.boundedTarget(selectedText: "word", axBounds: CGRect(x: 230, y: 790, width: 60, height: 18))
+        }, copyCapture: { _ in nil })
+        var delivered: [String] = []
+        monitor.onSelection = { context, _ in delivered.append(context.text) }
+        let point = CGPoint(x: 256, y: 200)
+        let app = MockTestApp(bundleID: "com.google.Chrome")
+
+        monitor.handleMouseDown(at: point)
+        monitor.handleMouseUp(app: app, cursor: point, clickCount: 2)
+        let doubleClickRead = monitor.debounceTask
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        monitor.handleMouseDown(at: point)
+        await doubleClickRead?.value
+
+        XCTAssertEqual(counter.inspects, 0, "the double-click read must not start before a third press can arrive")
+        XCTAssertTrue(delivered.isEmpty)
+    }
+
+    /// Chromium reports paragraph bounds that miss the click (degenerate 1×1 or offset by a
+    /// line). Triple-click selections are not locality-checked, so they still deliver.
+    func testTripleClickDeliversDespiteParagraphBoundsAwayFromPointer() async {
+        for axBounds in [CGRect(x: 56, y: 955, width: 1, height: 1), CGRect(x: 221, y: 830, width: 717, height: 48)] {
+            let monitor = makeLocalityMonitor(axBounds: axBounds)
+            let point = CGPoint(x: 411, y: 220)
+            monitor.handleMouseDown(at: point)
+            monitor.handleMouseUp(app: MockTestApp(bundleID: "com.google.Chrome"), cursor: point, clickCount: 3)
+            await monitor.debounceTask?.value
+            XCTAssertEqual(monitor.latestSelection?.context.text, "1080P", "\(axBounds)")
+        }
+    }
+
+    func testDragIgnoresSelectionOutsideTheDragArea() async {
+        let monitor = makeLocalityMonitor(axBounds: CGRect(x: 900, y: 100, width: 200, height: 18))
+        monitor.handleMouseDown(at: CGPoint(x: 100, y: 500))
+        monitor.handleMouseUp(app: MockTestApp(bundleID: "com.apple.TextEdit"), cursor: CGPoint(x: 300, y: 500), clickCount: 1)
+        await monitor.debounceTask?.value
+
+        XCTAssertNil(monitor.latestSelection)
+    }
+
+    func testDragDeliversSelectionAlongTheDragPath() async {
+        // Cocoa y 491–509, x 100–300: the dragged line.
+        let monitor = makeLocalityMonitor(axBounds: CGRect(x: 100, y: 491, width: 200, height: 18))
+        monitor.handleMouseDown(at: CGPoint(x: 100, y: 500))
+        monitor.handleMouseUp(app: MockTestApp(bundleID: "com.apple.TextEdit"), cursor: CGPoint(x: 300, y: 500), clickCount: 1)
+        await monitor.debounceTask?.value
+
+        XCTAssertEqual(monitor.latestSelection?.context.text, "1080P")
+    }
+
+    /// Electron needs AXManualAccessibility before its AX tree exists; request it as soon as an
+    /// app is activated, and again on press for an app that was already frontmost at launch.
+    func testActivationAndPressRequestAppAccessibility() {
+        let monitor = makeMonitor()
+        let app = MockTestApp(bundleID: "com.anthropic.claudefordesktop", pid: 31337)
+        monitor.frontmostAppProvider = { app }
+        var requested: [pid_t?] = []
+        monitor.requestAppAccessibility = { requested.append($0?.processIdentifier) }
+
+        monitor.handleApplicationActivation(app)
+        monitor.handleMouseDown(at: CGPoint(x: 10, y: 10))
+
+        XCTAssertEqual(requested, [31337, 31337])
     }
 
     func testTextDragWithinStationaryWindowStillRetrievesSelection() async {
@@ -1484,6 +1802,63 @@ final class MacSelectionMonitorTests: XCTestCase {
         ungated.handleMouseUp(app: app, cursor: CGPoint(x: 200, y: 100), clickCount: 1)
         await ungated.debounceTask?.value
         XCTAssertEqual(ungated.latestSelection?.context.text, "from copy")
+    }
+
+    func testTextDragKeepsPressEvidenceWhenReleasedOverBlankSpace() async {
+        for releaseCursor: CursorClass in [.arrow, .pointingHand, .unknown, .other] {
+            let monitor = makeKeyboardMonitor(overlay: false, bundleID: "com.openai.codex", role: "AXGroup")
+            var cursor: CursorClass = .beam
+            monitor.currentCursorProvider = { cursor }
+            final class EvidenceBox: @unchecked Sendable { var value: CopyEvidence? }
+            let evidence = EvidenceBox()
+            monitor.retriever = SelectionRetrievalCoordinator(
+                inspect: { Self.fixtureTarget(role: "AXGroup", selectedText: nil) },
+                copyCapture: { request in
+                    evidence.value = request.evidence
+                    XCTAssertTrue(request.requiresEnabledCopyMenu)
+                    return SelectionResult(text: "drag selection", strategy: .keyboardCopy)
+                }
+            )
+            let end = CGPoint(x: 250, y: 150)
+            monitor.handleMouseDown(at: CGPoint(x: 100, y: 100))
+            cursor = releaseCursor
+            monitor.handleMouseUp(app: MockTestApp(bundleID: "com.openai.codex"), cursor: end, clickCount: 1)
+            await monitor.debounceTask?.value
+
+            XCTAssertEqual(monitor.latestSelection?.context.text, "drag selection", "release cursor: \(releaseCursor)")
+            XCTAssertEqual(monitor.latestSelection?.context.cursorPosition, end)
+            XCTAssertEqual(evidence.value?.strength, .weak, "A text cursor is context, not proof of a selection")
+
+            // The next gesture starts on a blank/canvas surface and cannot inherit the prior beam.
+            // A completed drag is still weak gesture evidence, gated on an enabled Copy command.
+            cursor = .arrow
+            evidence.value = nil
+            monitor.handleMouseDown(at: CGPoint(x: 100, y: 100))
+            monitor.handleMouseUp(app: MockTestApp(bundleID: "com.openai.codex"), cursor: end, clickCount: 1)
+            await monitor.debounceTask?.value
+            XCTAssertEqual(evidence.value?.reason, "selection-gesture:dragEnd", "release cursor: \(releaseCursor)")
+            XCTAssertEqual(evidence.value?.strength, .weak)
+        }
+    }
+
+    func testTextDragPressEvidenceDoesNotOverrideObjectSelectionOrOverlayGates() async {
+        for (role, overlay) in [("AXImage", false), ("AXCollection", false), ("AXGroup", true)] {
+            let monitor = makeKeyboardMonitor(overlay: overlay, bundleID: "com.figma.Desktop", role: role)
+            var cursor: CursorClass = .beam
+            monitor.currentCursorProvider = { cursor }
+            monitor.retriever = SelectionRetrievalCoordinator(
+                inspect: { Self.fixtureTarget(role: role, selectedText: nil) },
+                copyCapture: { _ in
+                    XCTFail("Object selections and overlays must still block automatic Copy")
+                    return nil
+                }
+            )
+            monitor.handleMouseDown(at: CGPoint(x: 100, y: 100))
+            cursor = .arrow
+            monitor.handleMouseUp(app: MockTestApp(bundleID: "com.figma.Desktop"), cursor: CGPoint(x: 250, y: 150), clickCount: 1)
+            await monitor.debounceTask?.value
+            XCTAssertNil(monitor.latestSelection)
+        }
     }
 
     /// Regression: keyboard selection gestures (⌘A / ⌘L / ⇧arrow) are explicit user actions and must

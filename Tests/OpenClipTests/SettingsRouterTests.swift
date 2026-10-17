@@ -1,10 +1,8 @@
 // SettingsRouterTests.swift
 // OpenClipTests
 //
-// Pins the settings window's navigation model: the router's path and history (what the toolbar's
-// back/forward arrows walk), the sidebar's search matching, how installed extensions are derived
-// from the action catalog for the sidebar's second group, where every kind of action's settings
-// live, and what the toolbar's trailing switch and ellipsis menu offer per page.
+// Settings window navigation: router path and history, sidebar search, installed-extension groups,
+// action settings locations, and per-page toolbar contents.
 
 import XCTest
 import Combine
@@ -14,6 +12,11 @@ import SwiftUI
 
 @MainActor
 final class SettingsRouterTests: XCTestCase {
+
+    override func setUp() {
+        super.setUp()
+        TestIsolation.reset()
+    }
 
     // MARK: - Path and history
 
@@ -110,6 +113,22 @@ final class SettingsRouterTests: XCTestCase {
         XCTAssertEqual(router.history, [[.general], [.customize], [.shortcuts]])
     }
 
+    func testGeneralRevealRequestsRepeatOnTheSamePageAndIgnoreStaleClears() throws {
+        let router = SettingsRouter()
+        router.revealGeneralControl(GeneralSearchTarget.captureText)
+        let first = try XCTUnwrap(router.generalRevealRequest)
+        XCTAssertEqual(router.path, [.general])
+
+        router.revealGeneralControl(GeneralSearchTarget.captureText)
+        let second = try XCTUnwrap(router.generalRevealRequest)
+        XCTAssertNotEqual(first.id, second.id)
+        router.clearGeneralRevealRequest(first.id)
+        XCTAssertEqual(router.generalRevealRequest, second)
+
+        router.clearGeneralRevealRequest(second.id)
+        XCTAssertNil(router.generalRevealRequest)
+    }
+
     func testShowingTheCurrentPathAgainRecordsNothing() {
         let router = SettingsRouter()
         router.select(.customize)
@@ -193,6 +212,111 @@ final class SettingsRouterTests: XCTestCase {
         XCTAssertEqual(SettingsSidebarFilter.filter(rows, query: "").map(\.page), SettingsPage.systemPages)
         XCTAssertEqual(SettingsSidebarFilter.filter(rows, query: "hotkey").map(\.page), [.general, .customize])
         XCTAssertEqual(SettingsSidebarFilter.filter(rows, query: "licence").map(\.page), [.about])
+    }
+
+    func testPreferencesSearchOnlyMatchesNamesAndExplicitAliases() {
+        let entries = [
+            PreferencesSearchEntry.page(id: "settings", title: "General", breadcrumb: "Settings", path: [.general]),
+            PreferencesSearchEntry.page(id: "extension", title: "Café Tools", breadcrumb: "Extensions · Coffee", aliases: ["brew"], path: [.extensionPackage(id: "cafe")], section: .actions),
+            PreferencesSearchEntry.page(id: "builtin", title: "Capture Text", breadcrumb: "Actions", path: [.builtinAction(id: "capture")], section: .actions),
+        ]
+        XCTAssertEqual(PreferencesSearch.results(in: entries, query: "  CAPTURE TEXT ").map(\.id), ["builtin"])
+        XCTAssertEqual(PreferencesSearch.results(in: entries, query: "cafe").map(\.id), ["extension"])
+        XCTAssertEqual(PreferencesSearch.results(in: entries, query: "brew").map(\.id), ["extension"])
+        XCTAssertTrue(PreferencesSearch.results(in: entries, query: "coffee").isEmpty)
+        XCTAssertTrue(PreferencesSearch.results(in: entries, query: "builtin").isEmpty)
+        XCTAssertTrue(PreferencesSearch.results(in: entries, query: "ocr").isEmpty)
+        XCTAssertTrue(PreferencesSearch.results(in: entries, query: "  \n").isEmpty)
+    }
+
+    func testShortQueriesOnlyMatchPrefixesAndLongerQueriesCanMatchWithinNames() {
+        let entry = PreferencesSearchEntry.page(id: "save", title: "Save Location", breadcrumb: "General", aliases: ["Downloads"], path: [.general])
+        XCTAssertEqual(PreferencesSearch.results(in: [entry], query: "sa").count, 1)
+        XCTAssertEqual(PreferencesSearch.results(in: [entry], query: "do").count, 1)
+        XCTAssertTrue(PreferencesSearch.results(in: [entry], query: "lo").isEmpty)
+        XCTAssertEqual(PreferencesSearch.results(in: [entry], query: "loc").count, 1)
+        XCTAssertEqual(PreferencesSearch.results(in: [entry], query: "location save").count, 1)
+    }
+
+    func testSearchReturnsOnlySixBestResults() {
+        var entries = (0..<12).map { number in
+            PreferencesSearchEntry.page(id: "copy-\(number)", title: "Copy Tool \(number)", breadcrumb: "Actions", path: [.action(id: "copy-\(number)")])
+        }
+        entries.append(.page(id: "exact", title: "Copy", breadcrumb: "Actions", path: [.builtinAction(id: "copy")]))
+        XCTAssertEqual(PreferencesSearch.results(in: entries, query: "copy").map(\.id), [
+            "exact", "copy-0", "copy-1", "copy-2", "copy-3", "copy-4"
+        ])
+    }
+
+    func testPreferencesSearchTypingPerformance() {
+        let entries = (0..<300).map { index in
+            PreferencesSearchEntry.page(
+                id: "action-\(index)", title: "Sample Action \(index)", breadcrumb: "Extensions › Tools",
+                aliases: ["save", "clipboard", "screenshot", "翻译", "検索", "saisie automatique"],
+                path: [.action(id: "action-\(index)")], section: .actions
+            )
+        }
+        let index = PreferencesSearch.Index(entries: entries)
+        measure {
+            for query in ["s", "sa", "sam", "samp", "sample"] {
+                XCTAssertEqual(index.results(query: query).count, 6)
+            }
+        }
+    }
+
+    func testSearchKeyboardSelectionClampsAndRecoversAfterResultsChange() {
+        let ids = ["first", "second", "store"]
+        XCTAssertEqual(PreferencesSearch.movedSelection(from: nil, in: ids, direction: 1), "first")
+        XCTAssertEqual(PreferencesSearch.movedSelection(from: "first", in: ids, direction: -1), "first")
+        XCTAssertEqual(PreferencesSearch.movedSelection(from: "first", in: ids, direction: 1), "second")
+        XCTAssertEqual(PreferencesSearch.movedSelection(from: "second", in: ids, direction: 1), "store")
+        XCTAssertEqual(PreferencesSearch.movedSelection(from: "store", in: ids, direction: 1), "store")
+        XCTAssertEqual(PreferencesSearch.movedSelection(from: "removed", in: ids, direction: -1), "first")
+        XCTAssertNil(PreferencesSearch.movedSelection(from: nil, in: [], direction: 1))
+    }
+
+    func testPreferencesSearchRankingKeepsNamesAndAliasesInOneStableOrder() {
+        let entries = [
+            PreferencesSearchEntry.page(id: "keyword", title: "Other Tool", breadcrumb: "Settings", aliases: ["café"], path: [.general]),
+            PreferencesSearchEntry.page(id: "prefix", title: "Cafe Tools", breadcrumb: "Settings", path: [.about]),
+            PreferencesSearchEntry.page(id: "exact", title: "Café", breadcrumb: "Settings", path: [.store]),
+            PreferencesSearchEntry.page(id: "keyword-2", title: "Another", breadcrumb: "Settings", aliases: ["cafe"], path: [.ai]),
+        ]
+
+        XCTAssertEqual(PreferencesSearch.results(in: entries, query: "cafe").map(\.id), [
+            "exact", "keyword", "keyword-2", "prefix"
+        ])
+    }
+
+    func testPreferencesSearchDeduplicatesSameDestinationAndTitleAndKeepsGeneralTarget() {
+        let destination = PreferencesSearchEntry.page(
+            id: "action",
+            title: "Translate",
+            breadcrumb: "Extensions · Language Tools",
+            aliases: ["translate"],
+            path: [.extensionPackage(id: "language-tools"), .action(id: "translate")],
+            section: .actions
+        )
+        let duplicate = PreferencesSearchEntry.page(
+            id: "duplicate",
+            title: "Translate",
+            breadcrumb: "Extensions",
+            aliases: ["translate", "language"],
+            path: [.extensionPackage(id: "language-tools"), .action(id: "translate")],
+            section: .actions
+        )
+        let generalControl = PreferencesSearchEntry.generalControl(
+            id: GeneralSearchTarget.accessibilityAccess,
+            title: "Accessibility Access",
+            aliases: ["permission"]
+        )
+
+        let results = PreferencesSearch.results(in: [destination, duplicate, generalControl], query: "translate")
+        XCTAssertEqual(results.map(\.id), ["action"])
+        XCTAssertEqual(results[0].target, .page([.extensionPackage(id: "language-tools"), .action(id: "translate")]))
+        XCTAssertEqual(generalControl.target, .generalControl(id: "general.accessibilityAccess"))
+        XCTAssertEqual(GeneralSearchTarget.all.count, 11)
+        XCTAssertEqual(Set(GeneralSearchTarget.all).count, GeneralSearchTarget.all.count)
     }
 
     func testTheSidebarListsWhatShippedBeforeWhatWasInstalled() {
@@ -293,8 +417,7 @@ final class SettingsRouterTests: XCTestCase {
     }
 
     func testAOneCommandPackageIsStillAnExtensionWithItsOneCommand() throws {
-        // Not every package groups its commands behind one icon; a package can contribute a
-        // single top-level action, and it gets the same page with one row in it.
+        // A package with one top-level action still gets an extension page with one row.
         let package = "com.openclip.shortenlink"
         let action = StubAction(
             id: "\(package).action.0",
@@ -509,7 +632,6 @@ final class SettingsRouterTests: XCTestCase {
         }
         XCTAssertGreaterThan(seen.count, 100, "the palette must still spread, not pile up on a few hues")
 
-        // The real identifiers this Mac has installed, and the empty case.
         for id in ["io.appwrite.openclip", "com.openclip.jwt", "com.openclip.harper", "com.openclip.urlquery", ""] {
             XCTAssertFalse(SettingsTint.reservedBlueHues.contains(SettingsTint.hue(for: id)), id)
         }
@@ -523,15 +645,14 @@ final class SettingsRouterTests: XCTestCase {
     }
 
     func testTheSidebarsThreeKindsOfRowAreThreeColours() {
-        // Extensions hash to their own stable colour, which the settings rows never borrow — the
-        // settings group is chrome and reads as its own palette (blue/black/grey).
+        // Settings chrome uses blue/black/grey; extension colours must never borrow those.
         let generated = SettingsPage.extensionPackage(id: "com.openclip.jwt").tint
         for page in SettingsPage.systemPages {
             XCTAssertNotEqual(page.tint, generated,
                               "\(page.id) must not wear an extension's generated colour")
         }
 
-        XCTAssertEqual(SettingsPage.ai.tint, SettingsTint.openClip)
+        XCTAssertEqual(SettingsPage.ai.tint, SettingsTint.ai)
         XCTAssertEqual(SettingsPage.customActions.tint, SettingsTint.openClip)
         XCTAssertEqual(SettingsPage.builtinAction(id: "builtin.copy").tint, SettingsTint.openClip)
 

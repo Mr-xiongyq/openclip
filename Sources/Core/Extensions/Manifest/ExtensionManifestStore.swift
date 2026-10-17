@@ -7,8 +7,7 @@
 // this so manifest discovery and authoring never diverge. Pure Core — no AppKit/SwiftUI.
 import Foundation
 
-/// Identifies a single manifest entry inside a package: the manifest file plus the index of the
-/// action metadata it describes.
+/// One manifest entry inside a package: the manifest file plus the index of the action it describes.
 public struct LocatedManifest: Sendable {
     public let manifestURL: URL
     public let manifest: ExtensionMetadata
@@ -43,20 +42,17 @@ public enum ExtensionManifestStore {
         try? decodeManifest(at: url)
     }
 
-    /// Decodes an `ExtensionMetadata` manifest from a file URL, surfacing read/decode failures so
-    /// the loader can log them instead of silently skipping the package.
+    /// Like `readManifest`, but surfaces read/decode errors so the loader can log them.
     public static func decodeManifest(at url: URL) throws -> ExtensionMetadata {
         try decodeManifest(from: Data(contentsOf: url))
     }
 
-    /// Decodes an `ExtensionMetadata` manifest from raw data, so a caller that already holds the
-    /// bytes (e.g. the loader, which also fingerprints them) decodes exactly what it fingerprinted.
+    /// Decodes from bytes the caller already holds, so it decodes exactly what it fingerprinted.
     public static func decodeManifest(from data: Data) throws -> ExtensionMetadata {
         try JSONDecoder().decode(ExtensionMetadata.self, from: data)
     }
 
-    /// Encodes and atomically writes a manifest. The stable formatting (pretty-printed, sorted
-    /// keys) is defined here once so every writer produces byte-consistent packages.
+    /// Single stable format (pretty-printed, sorted keys) so every writer produces byte-identical packages.
     public static func writeManifest(_ manifest: ExtensionMetadata, to url: URL) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -64,11 +60,7 @@ public enum ExtensionManifestStore {
         try data.write(to: url, options: .atomic)
     }
 
-    /// Locates the manifest package that backs `action` in `directory`: the package whose
-    /// identifier matches the action's chrome source (or, as a fallback for stray `.custom`
-    /// actions, its id), then the manifest entry whose uniform action ID equals `action.id`.
-    /// Only directory-backed manifest packages are considered; a standalone script file with the
-    /// same identifier returns nil.
+    /// Finds the directory-backed package and entry for `action`. Standalone script files are ignored.
     public static func locateManifest(
         for action: any Action,
         in directory: URL = Constants.extensionsDirectory

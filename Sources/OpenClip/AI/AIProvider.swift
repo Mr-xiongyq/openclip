@@ -98,25 +98,22 @@ enum AIRequestSupport {
     /// Seconds before network AI calls time out.
     static let timeoutInterval: TimeInterval = 30
 
-    /// Output contract for text-completion providers that return free-form strings, where the
-    /// result is recovered by scraping `<result>` / `<title>` tags.
+    /// Output contract for free-form providers: the result is scraped from `<result>` / `<title>` tags.
     private static let taggedOutputRules = [
         "Wrap your final result inside <result>...</result> tags.",
         "If a short name was requested, put a concise 2-4 word name inside <title>...</title> tags immediately before the <result> block."
     ]
 
-    /// Output contract for providers using guided generation, where the schema — not the prompt —
-    /// enforces the shape. Asking for XML tags here would make the model embed them *inside* the
-    /// generated field, so the tag wording is replaced rather than kept.
+    /// Output contract for guided-generation providers: the schema enforces the shape, and XML tags would leak into fields.
     private static let structuredOutputRules = [
         "Put the final deliverable in the `result` field. Do not wrap it in XML tags or markdown fences of your own.",
         "If a short name was requested, put a concise 2-4 word name in the `title` field; otherwise leave it empty."
     ]
 
-    /// OpenClip's role line: the opening of every built-in system prompt.
+    /// Opening line of every built-in system prompt.
     private static let defaultRole = "You execute a user-defined action in OpenClip. Follow the task below. The task determines whether to edit, explain, summarize, translate, extract information, answer a question, or create new content."
 
-    /// The built-in general behavior rules (rules 1–4 of the default system prompt).
+    /// Rules 1–4 of the default system prompt.
     private static let defaultBehaviorRules = [
         "Return only the requested deliverable, without greetings, preambles, or commentary about completing the task. Include explanations and examples when the task requests them.",
         "Follow the task's requested language, tone, length, and format.",
@@ -124,20 +121,15 @@ enum AIRequestSupport {
         "When answering or analyzing, prioritize accuracy and relevance. Do not invent facts missing from the input. If essential information is missing, briefly state what is needed."
     ]
 
-    /// The part of the system prompt users may replace in Settings → AI → System Prompt: the role
-    /// and the general behavior rules, shown as the editor's starting text and its reset value.
-    /// The task, the `<text>` handling rule and the output contract are never part of it — the
-    /// pipeline depends on them — so a custom prompt can change behavior but not break parsing.
+    /// The user-replaceable part of the prompt (Settings → AI → System Prompt): role plus behavior rules.
+    /// The task, the `<text>` rule and the output contract stay fixed because parsing depends on them.
     static var defaultGuidelines: String {
         "\(defaultRole)\n\n" + numbered(defaultBehaviorRules)
     }
 
-    /// Builds the system role instruction including the specific task prompt (preset or custom).
-    /// When `hasInputText` is true, uses `<text>...</text>` as source material or context for the requested task.
-    /// When `hasInputText` is false, fulfills a standalone question or task without selected-text context.
-    /// When `structuredResult` is true, the provider recovers the result from typed fields instead of tags.
-    /// `customGuidelines` (Settings → AI → System Prompt) replaces the role and behavior rules; blank
-    /// means the built-in prompt, which is then produced exactly as before the setting existed.
+    /// Builds the system instruction for the task. Input text is source material in `<text>`; without it,
+    /// the task is answered standalone. `structuredResult` selects typed-field output over tags.
+    /// Non-blank `customGuidelines` replace the role and behavior rules.
     static func systemPrompt(for instruction: String, hasInputText: Bool = true, structuredResult: Bool = false, customGuidelines: String? = nil) -> String {
         let task = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
         let taskSection = task.isEmpty ? "" : "\n\nTask:\n\(task)"
@@ -158,9 +150,7 @@ enum AIRequestSupport {
         rules.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")
     }
 
-    /// Wraps the user's selected raw text in `<text>...</text>` boundaries so the model
-    /// treats it strictly as input data without mixing with instruction text.
-    /// If text is empty, falls back to `fallbackPrompt` directly without `<text>` wrapping.
+    /// Wraps selected text in `<text>` so the model treats it as data; empty text falls back to `fallbackPrompt`.
     static func userContent(for text: String, fallbackPrompt: String = "") -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
@@ -180,10 +170,7 @@ enum AIRequestSupport {
         prompt.contains(standalonePromptMarker)
     }
 
-    /// Terminates a provider stream with the correct outcome. A cancelled producing task must
-    /// surface as a thrown `CancellationError`, never a clean `finish()`: an `AsyncThrowingStream`
-    /// treats `finish()` as successful completion, so a cancellation that cracks mid-response would
-    /// otherwise hand a truncated answer to the consumer as if it were final (issue #43).
+    /// A cancelled producer must throw `CancellationError`; a clean `finish()` would hand a truncated answer over as complete (issue #43).
     static func finishStream(_ continuation: AsyncThrowingStream<String, Error>.Continuation) {
         if Task.isCancelled {
             continuation.finish(throwing: CancellationError())
@@ -225,11 +212,8 @@ enum AIRequestSupport {
         return .httpStatus(status, snippet)
     }
 
-    /// Serializes a structured provider result back into the tag contract every downstream consumer
-    /// (`extractResultText`, `extractTitleText`) already understands. Used by providers whose guided
-    /// generation returns typed fields instead of free-form tags, so the palette, result card, and
-    /// "save as AI tool" flows stay provider-agnostic. Any tag markup that leaked into the generated
-    /// fields (a text-shaped prompt can still ask for tags) is stripped before re-emitting.
+    /// Re-emits a structured result in the tag contract that `extractResultText` and `extractTitleText` parse.
+    /// Tag markup leaked into the typed fields is stripped first.
     static func taggedResponse(result: String, title: String? = nil) -> String {
         var parts: [String] = []
         if let title = sanitizeTitle(title ?? "") {
@@ -240,8 +224,7 @@ enum AIRequestSupport {
         return parts.joined(separator: "\n")
     }
 
-    /// Removes `<result>` / `<output>` / `<title>` wrapper markup that a model may emit *inside* a
-    /// structured field, where those tags are text rather than structure.
+    /// Removes `<result>` / `<output>` / `<title>` markup a model may emit inside a structured field.
     static func stripTagMarkup(_ raw: String) -> String {
         var text = raw
         for tag in ["result", "output", "title"] {
