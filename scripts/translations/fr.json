@@ -824,5 +824,6 @@
   "Tick": "Tic",
   "Thock": "Toc",
   "Bubble": "Bulle",
-  "Swoosh": "Swoosh"
+  "Swoosh": "Swoosh",
+  "Detected content: %@": "Contenu détecté : %@"
 }

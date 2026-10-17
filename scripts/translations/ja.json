@@ -824,5 +824,6 @@
   "Tick": "カチッ",
   "Thock": "トン",
   "Bubble": "バブル",
-  "Swoosh": "スウッ"
+  "Swoosh": "スウッ",
+  "Detected content: %@": "検出された内容：%@"
 }
