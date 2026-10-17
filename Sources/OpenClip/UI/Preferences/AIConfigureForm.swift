@@ -53,7 +53,7 @@ public struct AIConfigureForm: View {
         Group {
             Section(header: Text("Provider Settings")) {
                 Picker("Select a Provider", selection: Binding(
-                    get: { aiManager.activeProviderRaw },
+                    get: { aiManager.activeProviderType.rawValue },
                     set: { newValue in
                         withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
                             aiManager.activeProviderRaw = newValue

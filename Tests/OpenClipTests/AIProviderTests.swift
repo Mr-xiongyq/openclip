@@ -285,8 +285,16 @@ final class AIProviderTests: XCTestCase {
         XCTAssertEqual(AIProviderType.supportedCases, [.local, .cli, .cloud])
 
         // AIServiceManager must fallback from .apple to .local on unsupported machines
-        AIServiceManager.shared.activeProviderRaw = "apple"
-        XCTAssertEqual(AIServiceManager.shared.activeProviderType, .local)
+        let manager = AIServiceManager.shared
+        let previous = manager.activeProviderRaw
+        defer { manager.activeProviderRaw = previous }
+        manager.activeProviderRaw = "apple"
+        XCTAssertEqual(manager.activeProviderType, .local)
+        XCTAssertEqual(manager.activeProviderRaw, "apple", "The fallback must not overwrite the saved choice")
+
+        // The same saved choice applies again once the hardware or build supports it.
+        AppleIntelligenceAvailability.statusOverride = .available
+        XCTAssertEqual(manager.activeProviderType, .apple)
     }
 
     // MARK: - Structured output contract
