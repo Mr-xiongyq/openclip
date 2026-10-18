@@ -54,6 +54,9 @@ public struct ActionEditorPage: View {
     @State private var customJSIsAsync: Bool = false
     @State private var replaceSelection: Bool = true
     @State private var aiPrompt: String = ""
+    @State private var isPromptExpanded = false
+    @State private var aiProviderOverride: String?
+    @State private var aiModelOverride: String?
 
     // Manifest-backed state: the target action lives in an extension manifest package.
     @State private var manifestState: LocatedManifest?
@@ -732,26 +735,50 @@ public struct ActionEditorPage: View {
                 }
 
                 if isAIPreset {
-                    SettingsCard("Prompt Instruction") {
+                    let promptIsEmpty = aiPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    SettingsCard {
                         VStack(alignment: .leading, spacing: 8) {
-                            TextField("Prompt instruction...", text: $aiPrompt, axis: .vertical)
-                                .lineLimit(4...12)
-                                .textFieldStyle(.roundedBorder)
-                                .accessibilityLabel(String(localized: "Prompt Instruction"))
-
-                            if aiPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                Text("Prompt cannot be empty.")
-                                    .font(.caption)
-                                    .foregroundStyle(.red)
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) { isPromptExpanded.toggle() }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .rotationEffect(.degrees(isPromptExpanded || promptIsEmpty ? 90 : 0))
+                                        .frame(width: 10)
+                                    Text("Prompt Instruction")
+                                        .font(.system(size: 13, weight: .medium))
+                                    Spacer()
+                                }
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
+                            .accessibilityValue(isPromptExpanded ? String(localized: "Expanded") : String(localized: "Collapsed"))
 
-                            Text("The selected text is appended to the instruction when the action runs.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            if isPromptExpanded || promptIsEmpty {
+                                TextField("Prompt instruction...", text: $aiPrompt, axis: .vertical)
+                                    .lineLimit(4...12)
+                                    .textFieldStyle(.roundedBorder)
+                                    .accessibilityLabel(String(localized: "Prompt Instruction"))
+
+                                if promptIsEmpty {
+                                    Text("Prompt cannot be empty.")
+                                        .font(.caption)
+                                        .foregroundStyle(.red)
+                                }
+
+                                Text("The selected text is appended to the instruction when the action runs.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         .padding(.horizontal, SettingsDesignTokens.sectionCardPaddingH)
                         .padding(.vertical, SettingsDesignTokens.sectionCardPaddingV)
                     }
+                }
+
+                if isAIPreset {
+                    AIPresetModelSection(provider: $aiProviderOverride, model: $aiModelOverride)
                 }
 
                 if !action.actionOptions.isEmpty {
@@ -915,6 +942,16 @@ public struct ActionEditorPage: View {
             autoSave()
         }
         .task(id: aliasText) {
+            guard isLoaded, !isDeleting else { return }
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled, !isDeleting else { return }
+            autoSave()
+        }
+        .onChange(of: aiProviderOverride) { _, _ in
+            guard isLoaded, !isDeleting else { return }
+            autoSave()
+        }
+        .task(id: aiModelOverride) {
             guard isLoaded, !isDeleting else { return }
             try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled, !isDeleting else { return }
@@ -1233,6 +1270,8 @@ public struct ActionEditorPage: View {
             logicEditable = false
             manifestMissing = false
             aiPrompt = aiPreset?.prompt ?? ""
+            aiProviderOverride = aiPreset?.provider
+            aiModelOverride = aiPreset?.model
             return
         }
 
@@ -1370,9 +1409,16 @@ public struct ActionEditorPage: View {
         }
         if isAIPreset {
             let prompt = aiPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !prompt.isEmpty, var preset = aiPreset, prompt != preset.prompt {
-                preset.prompt = prompt
-                AIServiceManager.shared.updatePreset(preset)
+            let model = aiModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if var preset = aiPreset {
+                let promptChanged = !prompt.isEmpty && prompt != preset.prompt
+                let modelChanged = preset.provider != aiProviderOverride || preset.model != (model?.isEmpty == true ? nil : model)
+                if promptChanged || modelChanged {
+                    if promptChanged { preset.prompt = prompt }
+                    preset.provider = aiProviderOverride
+                    preset.model = model?.isEmpty == true ? nil : model
+                    AIServiceManager.shared.updatePreset(preset)
+                }
             }
             return
         }
