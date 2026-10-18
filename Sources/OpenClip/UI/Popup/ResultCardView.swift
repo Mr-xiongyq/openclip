@@ -935,9 +935,7 @@ public struct ResultCardView: View {
                 onCopy()
             } label: {
                 HStack(spacing: 4) {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 10.5, weight: .medium))
-                    Text(String(localized: "Copy File"))
+                    Text(String(localized: "Copy"))
                         .font(.system(size: 11.5, weight: .medium))
                     Text("⌘C")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
@@ -963,8 +961,6 @@ public struct ResultCardView: View {
                 (onSave ?? onPaste)()
             } label: {
                 HStack(spacing: 4) {
-                    Image(systemName: "arrow.down.circle")
-                        .font(.system(size: 11, weight: .semibold))
                     Text(String(localized: "Save"))
                         .font(.system(size: 11.5, weight: .medium))
                     Image(systemName: "return")
