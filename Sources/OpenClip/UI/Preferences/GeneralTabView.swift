@@ -170,6 +170,9 @@ struct GeneralTab: View {
                             .onChange(of: copySoundName) { _, newValue in
                                 CopySound(stored: newValue).play()
                             }
+                            .onChange(of: playCopySound) { _, isOn in
+                                if isOn { CopySound.prepareIfEnabled() }
+                            }
 
                             Toggle("", isOn: $playCopySound)
                                 .labelsHidden()

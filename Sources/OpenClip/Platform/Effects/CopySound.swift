@@ -1,10 +1,11 @@
 // CopySound.swift
 // OpenClip
 //
-// The short sounds offered for the "Play Sound on Copy" setting. They are synthesized once into
-// in-memory WAVs, so the app ships no audio assets, and retained so the first play is as prompt as
-// every later one.
+// The short sounds offered for the "Play Sound on Copy" setting. They are synthesized into
+// in-memory WAVs, so the app ships no audio assets. `prepareIfEnabled` builds the chosen sound off the
+// main thread and wakes the audio output ahead of a copy, so the first play is as prompt as later ones.
 import AppKit
+import Core
 
 public enum CopySound: String, CaseIterable, Identifiable, Sendable {
     case swoosh, tick, thock, bubble, glass
@@ -26,6 +27,42 @@ public enum CopySound: String, CaseIterable, Identifiable, Sendable {
     public init(stored: String) { self = CopySound(rawValue: stored) ?? .default }
 
     @MainActor private static var cache: [CopySound: NSSound] = [:]
+    @MainActor private static var building: Set<CopySound> = []
+    @MainActor private static var silence: NSSound?
+
+    @MainActor static func isReady(_ sound: CopySound) -> Bool { cache[sound] != nil }
+
+    /// Builds the chosen sound off the main thread and wakes the audio output, when the setting is on.
+    /// Call when the app launches, the setting changes, or a copy is likely.
+    @MainActor public static func prepareIfEnabled(store: SettingsStore = DefaultSettingsStore.shared) {
+        guard store.get(.playCopySound) else { return }
+        prepare(CopySound(stored: store.get(.copySoundName)))
+        wakeOutput()
+    }
+
+    @MainActor static func prepare(_ sound: CopySound) {
+        guard cache[sound] == nil, building.insert(sound).inserted else { return }
+        Task.detached(priority: .userInitiated) {
+            let data = wavData(samples: sound.samples())
+            await MainActor.run {
+                building.remove(sound)
+                guard cache[sound] == nil, let made = NSSound(data: data) else { return }
+                made.volume = 0.6
+                cache[sound] = made
+            }
+        }
+    }
+
+    /// An idle output device takes noticeable time to start, which delays the first audible sample.
+    /// A silent buffer starts it early; the first real sound then begins without that wait.
+    @MainActor static func wakeOutput() {
+        if silence == nil {
+            silence = NSSound(data: wavData(samples: [Double](repeating: 0, count: Int(sampleRate * 0.05))))
+            silence?.volume = 0
+        }
+        silence?.stop()
+        silence?.play()
+    }
 
     /// Restarts from the beginning, so rapid copies never go silent while the previous one plays.
     @MainActor public func play() {

@@ -45,6 +45,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         RotatingFileLogSink.shared = rotatingSink
         Log.addSink(rotatingSink)
         _ = DebugLogStore.shared
+        CopySound.prepareIfEnabled()
 
         DiagnosticsHub.shared.install(OpenClipDiagnosticsSink())
         DiagnosticsHub.shared.setReportMode(.onFailureOrSlow)

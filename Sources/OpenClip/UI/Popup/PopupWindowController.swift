@@ -169,6 +169,7 @@ public class PopupWindowController {
     }
 
     func show(for context: SelectionContext, pasteAvailable: Bool?, preservingSessionID: UUID?, streamingTask: Task<Void, Never>?, initialMode: PopupMode = .actions, captureFeedback: StatusFeedback? = nil) {
+        CopySound.prepareIfEnabled()
         presentationAttemptID = UUID()
         didAttemptSpaceRecovery = false
         let attemptID = presentationAttemptID
