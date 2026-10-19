@@ -130,8 +130,16 @@ if [ "$FORCE_GENERATE" = true ] || [ ! -d "OpenClip.xcodeproj" ] || [ "project.y
 fi
 
 # Prefer Xcode-managed Apple Development signing when a local team or identity is supplied.
-if [ -z "${OPENCLIP_DEV_TEAM:-}" ] && [ -z "${OPENCLIP_DEV_SIGN_IDENTITY:-}" ] && [ -f "$PROJECT_DIR/keys/dev-signing-identity" ]; then
-  IFS= read -r OPENCLIP_DEV_SIGN_IDENTITY < "$PROJECT_DIR/keys/dev-signing-identity" || true
+# keys/ is gitignored, so a linked worktree has none; look in the main checkout too, otherwise the worktree
+# build is ad-hoc and replaces the installed Dev app with a different signature, which resets its permissions.
+if [ -z "${OPENCLIP_DEV_TEAM:-}" ] && [ -z "${OPENCLIP_DEV_SIGN_IDENTITY:-}" ]; then
+  MAIN_CHECKOUT=$(cd "$(git rev-parse --git-common-dir 2>/dev/null)/.." 2>/dev/null && pwd || true)
+  for identity_file in "$PROJECT_DIR/keys/dev-signing-identity" "${MAIN_CHECKOUT:+$MAIN_CHECKOUT/keys/dev-signing-identity}"; do
+    if [ -n "$identity_file" ] && [ -f "$identity_file" ]; then
+      IFS= read -r OPENCLIP_DEV_SIGN_IDENTITY < "$identity_file" || true
+      break
+    fi
+  done
 fi
 
 SIGNING_ARGS=()
@@ -260,6 +268,10 @@ if [ "$NO_INSTALL" = false ]; then
   INSTALL_RESULT='Failed'
   mkdir -p "$INSTALL_DIR"
   stage_line '>' "$C_ACCENT" 'Install' 'Installing app'
+  if codesign -dv "$BUILT_APP" 2>&1 | grep -q 'Signature=adhoc' \
+     && [ -d "$TARGET_APP" ] && ! codesign -dv "$TARGET_APP" 2>&1 | grep -q 'Signature=adhoc'; then
+    status_line '!' "$C_WARN" 'Ad-hoc build replacing a signed Dev app: macOS will ask for permissions again (see docs/developer-guide/signing-and-notarization.md)'
+  fi
   # Terminate old dev instance before updating the binary.
   pkill -f "OpenClip Dev" 2>/dev/null || true
   sleep 0.2

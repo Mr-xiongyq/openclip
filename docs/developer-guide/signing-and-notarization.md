@@ -77,6 +77,11 @@ This file is gitignored. Explicit environment variables take precedence; set
 `OPENCLIP_DEV_SIGN_IDENTITY=-` to run ad-hoc even when the file exists. Clones without local
 configuration continue to build ad-hoc.
 
+A linked git worktree has no `keys/` of its own, so the launcher also reads the file from the main checkout.
+All worktrees install to the same `~/Applications/OpenClip Dev.app`; an ad-hoc build replacing a signed one changes
+its code requirement, and macOS then asks for Accessibility and Screen Recording again. The launcher warns when that
+is about to happen.
+
 The dev launcher opens the `.app` through LaunchServices (`open`), as Finder does, rather than
 spawning `Contents/MacOS/OpenClip` directly. This gives permission requests the normal application
 launch context. After rebuilding, check both the app's permission status and its entry in
