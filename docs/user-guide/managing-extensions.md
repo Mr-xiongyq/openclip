@@ -1,63 +1,45 @@
-# Managing Extensions & Custom Actions
+# Managing extensions and custom actions
 
-OpenClip allows users to install community extensions and create custom search or script actions directly from the application interface or terminal.
+You can install community extensions and make your own search or script actions, either from the app or by dropping files into a folder.
 
----
+## Extension Store
 
-## Extension Store & Remote Installation
+The Extension Store is in **Preferences > Extension Store**. You can browse official and community extensions, read each one's details, actions, and author, and click **Install** to add it.
 
-OpenClip features a built-in Extension Store browser in **Preferences > Extension Store**.
+### How remote installation works
 
-```
-Preferences > Extension Store
-├── Browse official & community extensions
-├── View extension details, actions, and author metadata
-└── Click 'Install' to download and activate extensions instantly
-```
-
-### How Remote Installation Works
 1. `ExtensionsAPIClient` fetches the published extensions catalog.
-2. `RemoteExtensionInstaller` downloads the extension archive `.zip` or `.openclipext` bundle.
-3. [`ExtensionManager.installExtension(from:)`](../../Sources/Core/Extensions/ExtensionManager.swift) extracts and verifies the extension in `~/.openclip/extensions/`.
-4. `ExtensionManager` reloads the extensions catalog and registers new actions with `ActionRegistry`.
+2. `RemoteExtensionInstaller` downloads the extension's `.zip` or `.openclipext` bundle.
+3. [`ExtensionManager.installExtension(from:)`](../../Sources/Core/Extensions/ExtensionManager.swift) extracts and verifies it in `~/.openclip/extensions/`.
+4. `ExtensionManager` reloads the catalog and registers the new actions with `ActionRegistry`.
 
-The official & community catalog is published from the open
-[`openclip-extensions`](https://github.com/ganeshmshetty/openclip-extensions) repository (a git
-submodule at `Extensions/`); build, Releases, and download stats all live there. The app and the
-store talk only to the extension store API. Cloning the app repo requires
-`git submodule update --init` to populate `Extensions/`.
+The official and community catalog is published from the open [`openclip-extensions`](https://github.com/ganeshmshetty/openclip-extensions) repository, which holds its builds, releases, and download stats. The app and the store only talk to the extension store API. If you write extensions, clone that repository into `Extensions/` inside the app checkout. It is a separate clone, not a git submodule.
 
----
+## Installing by hand
 
-## Manual Installation of Extensions & Scripts
-
-You can manually install extensions or standalone script files by placing them directly into your local extensions directory:
+Put extensions or standalone scripts in your local extensions folder:
 
 ```bash
 ~/.openclip/extensions/
 ```
 
-### Installation File Types
-- **Extension Bundles (`.openclipext`)**: Folders containing `manifest.json` and code files.
-- **Zip Archives (`.zip`)**: Compressed extension packages automatically unzipped by `ExtensionManager`.
-- **Standalone Scripts (`.sh`, `.py`, `.js`, `.applescript`)**: Single script files with comment header metadata.
+Three kinds of file work there:
 
----
+- An extension bundle (`.openclipext`) is a folder with `manifest.json` and its code.
+- A `.zip` archive of an extension. `ExtensionManager` unzips it for you.
+- A standalone script (`.sh`, `.py`, `.js`, or `.applescript`) with its metadata in a comment header.
 
-## Creating Custom Actions in GUI
+## Creating custom actions in the app
 
-You can create custom web search links or inline shell scripts without writing extension manifests:
+You can make a web search link or an inline shell script without writing a manifest:
 
 1. Open **Preferences > Actions**.
 2. Click **+ Add Custom Action**.
-3. Choose the action type:
- - **URL Template**: Enter a title, SF Symbol icon, and URL string (e.g. `https://google.com/search?q={query}`).
- - **Shell Script**: Enter a script command or inline snippet (e.g. `tr '[:lower:]' '[:upper:]'`).
+3. Pick the type:
+   - **URL Template**: a title, an SF Symbol icon, and a URL such as `https://google.com/search?q={query}`.
+   - **Shell Script**: a command or short script, such as `tr '[:lower:]' '[:upper:]'`.
 4. Click **Save**.
 
-### Storage & Persistence
-- Custom actions created in the GUI are written as single-action manifest packages by
-  [`CustomActionManifestWriter`](../../Sources/OpenClip/Platform/Extensions/CustomActionManifestWriter.swift):
-  `~/Library/Application Support` is not used; the package lives at
-  `~/.openclip/extensions/<id>/openclip.json` and loads through the same extension scan as installed
-  extensions. (`custom_actions.json` and `CustomActionManager` are retired.)
+### Where custom actions are stored
+
+[`CustomActionManifestWriter`](../../Sources/OpenClip/Platform/Extensions/CustomActionManifestWriter.swift) writes each custom action as a one-action manifest package at `~/.openclip/extensions/<id>/openclip.json`. It loads through the same scan as installed extensions. `~/Library/Application Support` isn't used, and `custom_actions.json` and `CustomActionManager` are retired.

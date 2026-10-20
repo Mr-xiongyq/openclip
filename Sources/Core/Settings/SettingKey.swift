@@ -73,6 +73,8 @@ public extension SettingKey where Value == Set<String> {
     static var standaloneAIActionIDs: SettingKey<Set<String>> { SettingKey<Set<String>>("standaloneAIActionIDs", defaultValue: []) }
     static var disabledActionIDs: SettingKey<Set<String>> { SettingKey<Set<String>>("disabledActionIDs", defaultValue: []) }
     static var disabledPackages: SettingKey<Set<String>> { SettingKey<Set<String>>("disabledPackages", defaultValue: []) }
+    /// Actions that stay silent when they finish; every other action, including new ones, plays the sound.
+    static var actionSoundDisabledActionIDs: SettingKey<Set<String>> { SettingKey<Set<String>>("actionSoundDisabledActionIDs", defaultValue: []) }
     static var disabledContextualActionIDs: SettingKey<Set<String>> { SettingKey<Set<String>>("disabledContextualActionIDs", defaultValue: []) }
 }
 
@@ -105,7 +107,7 @@ public extension SettingKey where Value == Bool {
     static var hasDismissedPostOnboardingCoachMark: SettingKey<Bool> { SettingKey<Bool>("hasDismissedPostOnboardingCoachMark", defaultValue: false) }
     static var startAtLogin: SettingKey<Bool> { SettingKey<Bool>("startAtLogin", defaultValue: false) }
     /// Plays a short system sound when an action copies to the clipboard.
-    static var playCopySound: SettingKey<Bool> { SettingKey<Bool>("playCopySound", defaultValue: false) }
+    static var playActionSound: SettingKey<Bool> { SettingKey<Bool>("playActionSound", defaultValue: false) }
     static var captureTextAutoCopy: SettingKey<Bool> { SettingKey<Bool>("captureTextAutoCopy", defaultValue: true) }
     static var completionCopyToClipboard: SettingKey<Bool> { SettingKey<Bool>("completionCopyToClipboard", defaultValue: false) }
     /// True once the one-time migration (auto-trust existing installs) has run.
@@ -140,8 +142,8 @@ public extension SettingKey where Value == Data? {
 }
 
 public extension SettingKey where Value == String {
-    /// Which copy sound plays (a `CopySound` raw value); unknown values fall back to the default.
-    static var copySoundName: SettingKey<String> { SettingKey<String>("copySoundName", defaultValue: "swoosh") }
+    /// Which action sound plays (an `ActionSound` raw value); unknown values fall back to the default.
+    static var actionSoundName: SettingKey<String> { SettingKey<String>("actionSoundName", defaultValue: "click") }
     static var lastAppUpdateNotificationIdentifier: SettingKey<String> { SettingKey<String>("lastAppUpdateNotificationIdentifier", defaultValue: "") }
     static var lastAnnouncedAppUpdateVersion: SettingKey<String> { SettingKey<String>("lastAnnouncedAppUpdateVersion", defaultValue: "") }
     /// Which side of the main bar the contextual actions island sits on; see `ContextualPillPosition`.

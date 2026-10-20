@@ -11,6 +11,14 @@ set -eo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_DIR"
 
+# The test host is the app itself: while a UI test switches it to a regular app it gets a Dock icon, and a host left
+# behind by an interrupted run keeps that icon. Clear stale hosts before and after every run.
+kill_stale_test_hosts() {
+    pkill -f 'Library/Developer/Xcode/DerivedData/OpenClip-[^/]*/Build/Products/Debug/OpenClip.app/Contents/MacOS/OpenClip' 2>/dev/null || true
+}
+kill_stale_test_hosts
+trap kill_stale_test_hosts EXIT
+
 TEST_ARG="${1:-}"
 VERBOSE=false
 

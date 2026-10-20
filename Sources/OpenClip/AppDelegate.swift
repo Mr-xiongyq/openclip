@@ -38,6 +38,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // The test host must never grow a Dock icon of its own.
+        if NSClassFromString("XCTestCase") != nil { NSApp.setActivationPolicy(.accessory) }
         UNUserNotificationCenter.current().delegate = self
 
         // Register logging sinks (Rotating File Appender and In-Memory Buffer)
@@ -45,7 +47,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         RotatingFileLogSink.shared = rotatingSink
         Log.addSink(rotatingSink)
         _ = DebugLogStore.shared
-        CopySound.prepareIfEnabled()
+        ActionSound.prepareIfEnabled()
 
         DiagnosticsHub.shared.install(OpenClipDiagnosticsSink())
         DiagnosticsHub.shared.setReportMode(.onFailureOrSlow)

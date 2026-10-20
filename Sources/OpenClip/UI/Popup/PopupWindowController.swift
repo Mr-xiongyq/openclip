@@ -169,7 +169,7 @@ public class PopupWindowController {
     }
 
     func show(for context: SelectionContext, pasteAvailable: Bool?, preservingSessionID: UUID?, streamingTask: Task<Void, Never>?, initialMode: PopupMode = .actions, captureFeedback: StatusFeedback? = nil) {
-        CopySound.prepareIfEnabled()
+        ActionSound.prepareIfEnabled()
         presentationAttemptID = UUID()
         didAttemptSpaceRecovery = false
         let attemptID = presentationAttemptID
@@ -2041,6 +2041,7 @@ public class PopupWindowController {
                         self.cardConversation = AIConversation(original: finalResponse, steps: [.init(instruction: prompt, result: finalResponse)])
                     }
                     self.showResultCard(text: finalResponse, isError: false, title: activeTitle, isStreaming: false, session: session, originalText: originalForCard, overrideOriginal: overrideOriginal)
+                    ActionSoundPolicy.play(owner: presetID.map { AIAction(presetID: $0, title: "").id })
                 }
             } catch is CancellationError {
                 Log.ai.info("AI streaming cancelled")
@@ -2165,6 +2166,7 @@ public class PopupWindowController {
     /// is single-use: a later paste must never reuse a prior action's declaration.
     func deliverResult(_ result: ActionResult, delivery: DeliveryContext? = nil) {
         let resolvedDelivery = delivery ?? inFlightDeliveryContext ?? deliverySnapshot()
+        let completedActionID = pendingActionID
         inFlightDeliveryContext = nil
         pendingDelivery = nil
         pendingActionTitle = nil
@@ -2177,7 +2179,7 @@ public class PopupWindowController {
         if shouldDismiss(effectiveResult, delivery: effectiveDelivery) {
             hide()
         }
-        handleActionResult(effectiveResult, delivery: effectiveDelivery, suppressDeliveryToast: effectiveResult.containsToast)
+        handleActionResult(effectiveResult, delivery: effectiveDelivery, suppressDeliveryToast: effectiveResult.containsToast, completionActionID: completedActionID)
     }
 
     private func copyOnlyOCRResult(_ result: ActionResult) -> ActionResult {
@@ -2219,32 +2221,34 @@ public class PopupWindowController {
     /// Walks a performed result: presentation renders in the popup, leaf effects go to the effect handler. Dismissal is decided
     /// once at the top level. A top-level `.toast` suppresses delivery toasts, and a `.sequence` runs its items in order.
     @discardableResult
-    func handleActionResult(_ result: ActionResult, delivery: DeliveryContext? = nil, suppressDeliveryToast: Bool = false) -> Task<Void, Never>? {
+    func handleActionResult(_ result: ActionResult, delivery: DeliveryContext? = nil, suppressDeliveryToast: Bool = false, completionActionID: String? = nil, isFinalStep: Bool = true) -> Task<Void, Never>? {
         let (selectedResult, effectiveDelivery) = delivery?.consumeDeclaredSecondary(for: result) ?? (result, delivery)
         let effectiveResult = normalizeOCRResult(selectedResult, delivery: effectiveDelivery)
         let effectiveSuppressToast = suppressDeliveryToast || effectiveResult.containsToast
         switch effectiveResult {
         case .toast(let feedback):
             presentToast(feedback)
+            ActionSoundPolicy.play(owner: completionActionID, isFinalStep: isFinalStep)
             return nil
         case .openConfiguration(let request):
             presentConfiguration(for: request)
             return nil
         case .sequence(let items):
             return Task { @MainActor in
-                for item in items {
-                    await self.handleActionResult(item, delivery: effectiveDelivery, suppressDeliveryToast: effectiveSuppressToast)?.value
+                for (index, item) in items.enumerated() {
+                    let isLast = isFinalStep && index == items.count - 1
+                    await self.handleActionResult(item, delivery: effectiveDelivery, suppressDeliveryToast: effectiveSuppressToast, completionActionID: completionActionID, isFinalStep: isLast)?.value
                 }
             }
         default:
-            return handleEffect(effectiveResult, delivery: effectiveDelivery, suppressDeliveryToast: effectiveSuppressToast)
+            return handleEffect(effectiveResult, delivery: effectiveDelivery, suppressDeliveryToast: effectiveSuppressToast, completionActionID: completionActionID, isFinalStep: isFinalStep)
         }
     }
 
     /// Routes a leaf effect to DefaultActionResultHandler. A thrown error becomes a dismissing error toast. Applies the paste-vs-copy
     /// decision (`.paste` becomes `.copy` on force-copy, policy, or an unavailable target); nil `delivery` passes through.
     @discardableResult
-    private func handleEffect(_ result: ActionResult, delivery: DeliveryContext?, suppressDeliveryToast: Bool = false) -> Task<Void, Never> {
+    private func handleEffect(_ result: ActionResult, delivery: DeliveryContext?, suppressDeliveryToast: Bool = false, completionActionID: String? = nil, isFinalStep: Bool = true) -> Task<Void, Never> {
         let effect = result
         return Task { @MainActor in
             do {
@@ -2257,6 +2261,7 @@ public class PopupWindowController {
                         modeStore.canPaste = await pasteProbe.canPaste(in: delivery?.application, policy: delivery?.policy ?? .default) ?? false
                     }
                     showResultCard(text: text, isError: false, title: delivery?.actionTitle ?? "Action", icon: delivery?.actionIcon, session: aiSessionID, canFollowUp: false)
+                    ActionSoundPolicy.play(owner: completionActionID, isFinalStep: isFinalStep)
                     return
                 }
                 if case .file(let filePayload) = resolved.result {
@@ -2269,6 +2274,7 @@ public class PopupWindowController {
                         canFollowUp: false,
                         file: filePayload
                     )
+                    ActionSoundPolicy.play(owner: completionActionID, isFinalStep: isFinalStep)
                     return
                 }
                 // A detached-surface result suspends scroll dismissal for the rest of the session.
@@ -2277,6 +2283,7 @@ public class PopupWindowController {
                                                isSelectionCurrent: { [weak self] selection in
                     self?.selectionIsCurrent(selection) == true
                 })
+                ActionSoundPolicy.play(owner: completionActionID, result: resolved.result, isFinalStep: isFinalStep)
                 let toastToShow: StatusFeedback? = {
                     if let toast = resolved.toast {
                         if case .saveFile = resolved.result {
@@ -2524,7 +2531,7 @@ public class PopupWindowController {
                     return
                 }
                 let (effectiveResult, effectiveDelivery) = delivery.consumeDeclaredSecondary(for: result)
-                await self.settleLoadingResult(effectiveResult, delivery: effectiveDelivery, suppressDeliveryToast: effectiveResult.containsToast)
+                await self.settleLoadingResult(effectiveResult, delivery: effectiveDelivery, suppressDeliveryToast: effectiveResult.containsToast, completionActionID: action.id)
             } catch is CancellationError {
                 Log.presentation.info("Loading action cancelled (id \(action.id, privacy: .public))")
                 self.toastController.hide()
@@ -2542,7 +2549,7 @@ public class PopupWindowController {
 
     /// Settles a loading action's spinner toast from its result: `.toast` swaps in, a delivery toast swaps in, and other
     /// results fade the spinner. With `suppressDeliveryToast`, the script toast owns the toast (one per run).
-    private func settleLoadingResult(_ result: ActionResult, delivery: DeliveryContext, suppressDeliveryToast: Bool = false) async {
+    private func settleLoadingResult(_ result: ActionResult, delivery: DeliveryContext, suppressDeliveryToast: Bool = false, completionActionID: String? = nil, isFinalStep: Bool = true) async {
         let (selectedResult, effectiveDelivery) = delivery.consumeDeclaredSecondary(for: result)
         let effectiveResult = normalizeOCRResult(selectedResult, delivery: effectiveDelivery)
         let effectiveSuppressToast = suppressDeliveryToast || effectiveResult.containsToast
@@ -2550,11 +2557,15 @@ public class PopupWindowController {
         case .toast(var feedback):
             feedback.keepVisible = false
             toastController.show(feedback)
+            ActionSoundPolicy.play(owner: completionActionID, isFinalStep: isFinalStep)
         case .openConfiguration(let request):
             toastController.hide()
             presentConfiguration(for: request)
         case .sequence(let items):
-            for item in items { await settleLoadingResult(item, delivery: effectiveDelivery, suppressDeliveryToast: effectiveSuppressToast) }
+            for (index, item) in items.enumerated() {
+                let isLast = isFinalStep && index == items.count - 1
+                await settleLoadingResult(item, delivery: effectiveDelivery, suppressDeliveryToast: effectiveSuppressToast, completionActionID: completionActionID, isFinalStep: isLast)
+            }
         default:
             let effect = effectiveResult
             do {
@@ -2575,6 +2586,7 @@ public class PopupWindowController {
                         show(for: selection, pasteAvailable: canPaste)
                         showResultCard(text: text, isError: false, title: effectiveDelivery.actionTitle ?? "Action", icon: effectiveDelivery.actionIcon, session: aiSessionID, canFollowUp: false)
                     }
+                    ActionSoundPolicy.play(owner: completionActionID, isFinalStep: isFinalStep)
                     return
                 }
                 if case .file(let filePayload) = resolved.result {
@@ -2592,9 +2604,11 @@ public class PopupWindowController {
                             file: filePayload
                         )
                     }
+                    ActionSoundPolicy.play(owner: completionActionID, isFinalStep: isFinalStep)
                     return
                 }
                 try await resultHandler.handle(resolved.result, in: panel?.contentView)
+                ActionSoundPolicy.play(owner: completionActionID, result: resolved.result, isFinalStep: isFinalStep)
                 let toastToShow: StatusFeedback? = {
                     if let toast = resolved.toast {
                         if case .saveFile = resolved.result {

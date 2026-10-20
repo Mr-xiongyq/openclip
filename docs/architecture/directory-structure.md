@@ -1,4 +1,4 @@
-# OpenClip Directory Structure
+# OpenClip directory structure
 
 Annotated source tree. See `docs/architecture/overview.md` for the architectural (target-split)
 view; this is the detailed per-file map.
@@ -91,7 +91,7 @@ Sources/
 │   │   ├── AppFilter.swift                   # App bundle filtering helpers
 │   │   ├── AppIdentifying.swift              # Application identity protocol
 │   │   ├── BrowserDetector.swift             # Browser bundle ID classifier
-│   │   ├── Constants.swift                   # Domain/runtime constants (timeouts, key codes, env vars, manifest keys) — no UI sizing
+│   │   ├── Constants.swift                   # Domain/runtime constants (timeouts, key codes, env vars, manifest keys), no UI sizing
 │   │   ├── SelectionContext.swift            # Selection snapshot context
 │   │   ├── SelectionMonitoring.swift         # Selection monitor protocol
 │   │   ├── TextRetrieving.swift              # Text retrieval protocol
@@ -197,7 +197,7 @@ Sources/
         │   └── PermissionRecoveryWindowController.swift # Permission recovery window controller
         ├── Popup/                            # Floating popup panel
         │   ├── GroupSubActionBarView.swift   # Sub-bar action items view
-        │   ├── PopupGesturePolicy.swift      # Derived popup interaction policy from chrome + conformance (App target — UI-only)
+        │   ├── PopupGesturePolicy.swift      # Derived popup interaction policy from chrome + conformance (App target, UI-only)
         │   ├── PopupHoverSupport.swift       # Shared popup hover-state singleton + hover-target/frame preference keys (bar)
         │   ├── PopupMetrics.swift            # UI-only popup/search/AI-card sizing + placement/dismissal constants (App target, not Core)
         │   ├── PopupModeStore.swift          # Shared observable actions↔search↔content mode + resultCard payload
@@ -249,7 +249,7 @@ Sources/
             ├── PreferencesView.swift         # Settings window root: sidebar + SettingsNavigationStack detail
             ├── SettingsNavigationStack.swift # Mounted-levels page host, SettingsEditorPage footer layout, shared rows
             ├── SettingsDestination.swift     # Router path for any action's settings (builtin row / extension / custom / group)
-            ├── SettingsHeroHeader.swift      # Centred icon/title/subtitle identity block for pages about one thing
+            ├── SettingsHeroHeader.swift      # Centered icon/title/subtitle identity block for pages about one thing
             ├── SettingsNoticeBanner.swift    # Inline (glass) notice that replaces NSAlert in the window
             ├── SettingsRouter.swift          # SettingsPage enum + SettingsRouter (path, history, notices)
             ├── SettingsRowLabel.swift        # Shared settings row shapes

@@ -1,31 +1,24 @@
-# Installation & Onboarding Guide
+# Installation and onboarding
 
-Welcome to OpenClip! This guide will walk you through installing OpenClip on macOS, granting required permissions, and configuring your initial setup.
+This page covers installing OpenClip on macOS, granting the permission it needs, and what you see the first time you launch it.
 
----
+## System requirements
 
-## System Requirements
-
-- **Operating System**: macOS 14.0 (Sonoma) or later.
-- **Architecture**: Universal binary (Apple Silicon M1/M2/M3/M4 & Intel processors).
-- **Permissions**: Accessibility permission is required for global text selection detection.
+- macOS 14.0 (Sonoma) or later.
+- Apple Silicon (M1 through M4) or Intel. The app is a universal binary.
+- Accessibility permission, so OpenClip can detect when you select text.
 
 The interface follows the macOS system language. English, Simplified Chinese, Traditional Chinese, French, and Japanese are bundled.
 
----
+## Installation steps
 
-## Installation Steps
+1. Download the latest `.dmg` or `.zip` from the releases page.
+2. Drag `OpenClip.app` into your `/Applications` folder.
+3. Open `OpenClip.app` from Finder or Spotlight.
 
-1. **Download OpenClip**: Download the latest release `.dmg` or `.zip` file from the official releases page.
-2. **Move to Applications**: Drag `OpenClip.app` into your `/Applications` folder.
-3. **Launch OpenClip**: Open `OpenClip.app` from Finder or Spotlight.
+Releases are signed with an Apple Developer ID certificate and notarized by Apple, so OpenClip opens normally. You don't need to right-click to open it or strip a quarantine attribute with `xattr`. If macOS says the app "cannot be opened because the developer cannot be verified", you don't have a release build, so check where the download came from.
 
-Releases are signed with an Apple Developer ID certificate and notarized by Apple, so OpenClip
-opens normally. There is no need to right-click to open it, and no need to strip a quarantine
-attribute with `xattr`. If macOS says the app "cannot be opened because the developer cannot be
-verified", the download is not a release build — check where it came from.
-
-To confirm what you have before launching it:
+To check a copy before launching it:
 
 ```bash
 spctl -a -vv -t exec /Applications/OpenClip.app
@@ -36,34 +29,25 @@ xcrun stapler validate /Applications/OpenClip.app
 # The validate action worked!
 ```
 
----
+## Granting Accessibility permission
 
-## Granting Accessibility Permissions
+OpenClip uses the macOS Accessibility API (`AXUIElement`) to read the text you select without touching your clipboard.
 
-OpenClip relies on macOS Accessibility APIs (`AXUIElement`) to detect text selection events and extract selected text directly without polluting your clipboard.
-
-```
-System Settings ---> Privacy & Security ---> Accessibility ---> Enable OpenClip
-```
-
-1. On first launch, OpenClip will prompt you to grant Accessibility permissions.
-2. Click **Open System Settings**.
-3. Navigate to **Privacy & Security > Accessibility**.
-4. Toggle the switch next to **OpenClip** to **On**.
-5. Authenticate with your Mac password or Touch ID.
+1. On first launch, OpenClip asks for Accessibility permission. Click **Open System Settings**.
+2. Go to **Privacy & Security > Accessibility**.
+3. Turn on the switch next to **OpenClip**.
+4. Confirm with your Mac password or Touch ID.
 
 > [!NOTE]
-> OpenClip reads selected text strictly in real-time when mouse drag or selection events occur. No keystrokes or selection histories are logged or stored locally.
+> OpenClip reads the selection only when you select text with the mouse. It doesn't log keystrokes and it doesn't store what you selected.
 
----
+## First launch
 
-## First-Launch Onboarding Workflow
+The first time you open OpenClip it shows a four-step setup:
 
-When launched for the first time, OpenClip presents a 4-step onboarding wizard:
+1. **Welcome** explains the idea: select text, then pick an action.
+2. **Access** checks the Accessibility permission. Everything runs on your Mac.
+3. **Extensions** offers a few useful ones, such as translation, word count, and speech, each with a one-click install.
+4. **Try it** is a small sandbox where you can select text and see the real action bar.
 
-1. **Welcome**: Concept overview of turning selected text into instant contextual actions.
-2. **Access**: Accessibility permission check with 100% on-device privacy guarantee.
-3. **Extensions**: Recommended essential extensions (translations, word count, speech) with one-click installation.
-4. **Try It**: Interactive live playground sandbox to test text selection and see the real action bar in action.
-
-Onboarding can be skipped at any step; finishing it starts text-selection monitoring. You can also trigger the popup anytime with the global shortcut (**⌥⌘C** by default), configure AI providers anytime in **Preferences → AI**, and customize the popup bar's theme in **Preferences → Appearance**.
+You can skip any step. Finishing setup starts text-selection monitoring. After that you can open the popup at any time with the global shortcut (**⌥⌘C** by default), set up AI providers in **Preferences > AI**, and change the popup's look in **Preferences > Appearance**.

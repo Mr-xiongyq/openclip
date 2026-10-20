@@ -32,6 +32,7 @@ final class CaptureTextController {
         let autoCopy = settingsStore.get(.captureTextAutoCopy)
         if autoCopy {
             guard try await resultHandler.copyText(text, isCurrent: isCurrent) else { return }
+            ActionSoundPolicy.play(owner: nil, result: .copy(text))
         }
         try Task.checkCancellation()
         guard isCurrent() else { return }

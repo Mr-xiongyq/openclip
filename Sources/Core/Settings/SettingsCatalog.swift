@@ -15,6 +15,7 @@ public enum SettingsCatalog {
             SettingKey.disabledActionIDs.erased,
             SettingKey.disabledPackages.erased,
             SettingKey.disabledContextualActionIDs.erased,
+            SettingKey.actionSoundDisabledActionIDs.erased,
             SettingKey.contextualActionsEnabled.erased,
             SettingKey.contextualPillPosition.erased,
             SettingKey.actionUsageRecency.erased,
@@ -36,8 +37,8 @@ public enum SettingsCatalog {
             SettingKey.startAtLogin.erased,
             SettingKey.completionCopyToClipboard.erased,
             SettingKey.captureTextAutoCopy.erased,
-            SettingKey.playCopySound.erased,
-            SettingKey.copySoundName.erased,
+            SettingKey.playActionSound.erased,
+            SettingKey.actionSoundName.erased,
 
             // Updates
             SettingKey.automaticallyChecksForUpdates.erased,

@@ -1,12 +1,10 @@
-# Application-Specific Policy Rules (`AppRule`)
+# App rules
 
-OpenClip allows configuring application-specific behavior rules through [`AppRule`](../../Sources/Core/Rules/AppRule.swift) and [`RuleEngine`](../../Sources/Core/Rules/RuleEngine.swift). App rules control how OpenClip retrieves text and delivers it (paste vs copy) when specific target macOS applications are active.
+[`AppRule`](../../Sources/Core/Rules/AppRule.swift) and [`RuleEngine`](../../Sources/Core/Rules/RuleEngine.swift) let you change how OpenClip behaves in specific apps. A rule can turn OpenClip off in an app, limit it to the hotkey, choose how the selection is read, or force text to be copied instead of pasted.
 
----
+## Rule file format
 
-## JSON Configuration Format (`rules.json`)
-
-Rules are stored in JSON configuration files (such as `~/.openclip/rules.json`) conforming to `RuleEngineConfig`:
+Rules live in a JSON file such as `~/.openclip/rules.json`, which follows `RuleEngineConfig`:
 
 ```jsonc
 {
@@ -35,61 +33,58 @@ Rules are stored in JSON configuration files (such as `~/.openclip/rules.json`) 
 }
 ```
 
----
+## Properties
 
-## Policy Properties Reference
-
-| Property Key in JSON | Code Identifier | Type | Description |
+| JSON key | Code identifier | Type | What it does |
 | :--- | :--- | :--- | :--- |
-| `bundle-identifiers` | `bundleIdentifiers` | Array | Target application identifier patterns: bundle IDs, `process:<name>` / `path:<executable>` scoped patterns for apps without a bundle ID, wildcards, or group aliases. |
-| `disabled` | `disabled` | Bool | When `true`, completely disables OpenClip in the target application (no popup, hotkeys ignored). |
-| `hotkey-only` | `hotkeyOnly` | Bool | When `true`, suppresses automatic popup on text selection; OpenClip will only trigger when explicitly invoked via global hotkey (`⌥⌘C`). |
-| `deny-paste` | `denyPaste` | Bool | Force text delivery to be a copy instead of a paste, even when the app advertises a Paste command (e.g. terminals). |
-| `retrieval-mode` | `retrievalMode` | Enum | Which mechanism reads the selection. One of `ax-text-control` (default), `ax-web-area`, `browser-script`, `menu-copy`, `keyboard-copy` (see below). |
-| `gate` | `gate` | Object | Pre-retrieval gate rules — `skipRoles` (AX roles never allowed to hold a selection) and `allowedCursors` (cursor classes that suggest a text context). See [`SelectionGatePolicy`](../../Sources/Core/Rules/SelectionGatePolicy.swift). |
-| `use-menu-copy` | `useMenuCopy` | Bool | **Legacy alias.** `true` resolves to `retrieval-mode: "menu-copy"` (read via the AX Edit ▸ Copy menu item) only when the rule sets no `retrieval-mode` and no higher-priority builtin retrieval mode applies (the app isn't already assigned a different mode by the builtin catalog). Prefer `retrieval-mode` in new rules. |
+| `bundle-identifiers` | `bundleIdentifiers` | Array | The apps the rule applies to. Entries can be bundle IDs, `process:<name>` or `path:<executable>` patterns for apps without a bundle ID, wildcards, or group aliases. |
+| `disabled` | `disabled` | Bool | Turns OpenClip off in the app: no popup, and the hotkey is ignored. |
+| `hotkey-only` | `hotkeyOnly` | Bool | Stops the popup from appearing when text is selected. OpenClip opens only from the global hotkey (`⌥⌘C`). |
+| `deny-paste` | `denyPaste` | Bool | Delivers text as a copy even when the app offers a Paste command, as terminals do. |
+| `retrieval-mode` | `retrievalMode` | Enum | How OpenClip reads the selection: `ax-text-control` (default), `ax-web-area`, `browser-script`, `menu-copy`, or `keyboard-copy`. See the next table. |
+| `gate` | `gate` | Object | Checks that run before reading: `skipRoles` lists AX roles that can never hold a selection, and `allowedCursors` lists cursor types that suggest a text area. See [`SelectionGatePolicy`](../../Sources/Core/Rules/SelectionGatePolicy.swift). |
+| `use-menu-copy` | `useMenuCopy` | Bool | Legacy alias. `true` means `retrieval-mode: "menu-copy"` (read through the Edit > Copy menu item), but only if the rule has no `retrieval-mode` and the built-in catalog hasn't already given the app a different mode. Use `retrieval-mode` in new rules. |
 
-### `retrieval-mode` values
+### Retrieval modes
 
-| Value | Strategy | Target Context |
+| Value | How it reads | Used for |
 | :--- | :--- | :--- |
-| `ax-text-control` | Direct AX read of `kAXSelectedTextAttribute` — zero pasteboard side-effects. Default. | Standard native text controls |
-| `ax-web-area` | AX web-area read via text-marker ranges, with a settle-retry loop and deep DOM walk. | Web browsers (Safari, Chrome, Firefox, Arc) and embedded web content |
-| `browser-script` | **Legacy alias.** Formerly executed AppleScript in browsers; now maps directly to `ax-web-area` with `keyboard-copy` fallback for sub-millisecond selection without automation permission prompts. | Supported web browsers |
-| `menu-copy` | AXPress the Edit ▸ Copy menu item, then archive-and-restore the pasteboard. | Terminal emulators and CLI tools |
-| `keyboard-copy` | Synthesized ⌘C key event, then archive-and-restore the pasteboard. | Custom code editors and Electron apps |
+| `ax-text-control` | Reads `kAXSelectedTextAttribute` directly, with no pasteboard side effects. This is the default. | Standard native text controls |
+| `ax-web-area` | Reads the AX web area through text-marker ranges, retrying until the page settles and walking the DOM when needed. | Browsers (Safari, Chrome, Firefox, Arc) and embedded web content |
+| `browser-script` | Legacy alias. It used to run AppleScript in browsers. It now maps to `ax-web-area` with a `keyboard-copy` fallback, which is faster and needs no automation permission prompt. | Supported browsers |
+| `menu-copy` | Presses the Edit > Copy menu item through AX, then restores the pasteboard. | Terminal emulators and command-line tools |
+| `keyboard-copy` | Sends a ⌘C key event, then restores the pasteboard. | Custom code editors and Electron apps |
 
-These modes match the per-app defaults assigned by the builtin catalog (`DefaultAppRules.catalog`); a user rule only overrides the keys it sets, so e.g. `gate` alone leaves `retrieval-mode` at the app's default.
+These match the per-app defaults in the built-in catalog (`DefaultAppRules.catalog`). A rule overrides only the keys it sets, so a rule with just `gate` leaves the app's default `retrieval-mode` alone.
 
----
-
-## Identifier Matching & Shortcuts
+## Matching apps
 
 ### Bundle IDs
-Plain entries match the target application's bundle identifier. Apps without one — CLI tools and SDL apps such as [scrcpy](https://github.com/genymobile/scrcpy) — are targeted by scoped identifiers:
 
-- `"process:scrcpy"` matches the process's executable or localized name. Case-insensitive; `*` wildcards work (`"process:scr*"`).
-- `"path:/opt/homebrew/bin/scrcpy"` matches the executable path; `*` wildcards work (`"path:/opt/tools/*"`).
+A plain entry matches the app's bundle identifier. Apps without one, such as command-line tools and SDL apps like [scrcpy](https://github.com/genymobile/scrcpy), use scoped identifiers:
 
-The App Rules page and the menu bar's **Pause in &lt;App&gt;** item write `process:` rules automatically for bundle-less apps.
+- `"process:scrcpy"` matches the process's executable or localized name. Matching ignores case, and `*` wildcards work (`"process:scr*"`).
+- `"path:/opt/homebrew/bin/scrcpy"` matches the executable path, and `*` wildcards work (`"path:/opt/tools/*"`).
 
-### Wildcard Pattern Matching
-`RuleEngine` supports prefix wildcard matching using `.*` or global wildcard `*`:
-- `"com.example.*"` matches `com.example.app1`, `com.example.app2`, etc.
-- `"*"` matches all applications, including bundle-less ones.
+The App Rules page and the menu bar's **Pause in &lt;App&gt;** item write `process:` rules for apps without a bundle ID.
 
-### Builtin Group Expansion Aliases
+### Wildcards
 
-| Group Shortcut | Description |
+`RuleEngine` supports prefix wildcards with `.*` and a global `*`:
+
+- `"com.example.*"` matches `com.example.app1`, `com.example.app2`, and so on.
+- `"*"` matches every app, including those without a bundle ID.
+
+### Group aliases
+
+| Alias | Expands to |
 | :--- | :--- |
-| `:menu-copy-apps:` | Expands to all terminal applications configured for menu-based copy in `DefaultAppRules.menuCopyApps`. |
+| `:menu-copy-apps:` | Every terminal app set up for menu-based copy in `DefaultAppRules.menuCopyApps`. |
 
----
+## How a rule is applied
 
-## Rule Evaluation Mechanics
-
-1. When a selection event is detected, the trigger sites (`MacSelectionMonitor`, `HotkeyManager`) query `RuleEngine.shared.resolvePolicies(for: appIdentity)`.
-2. `RuleEngine` matches the target application's identity against effective rules (default rules + user rules): plain patterns against the bundle ID, `process:` patterns against the process name, `path:` patterns against the executable path, with `.*`-prefix / `*` wildcards.
-3. Matched policy settings override default `AppPolicyContext` values; the resolved `retrieval-mode` and `gate` are passed to `SelectionRetrievalCoordinator` to read the selection.
-4. A legacy `use-menu-copy: true` rule resolves to `retrieval-mode: "menu-copy"` only when the rule sets no explicit `retrieval-mode` and no higher-priority builtin retrieval mode applies (the app isn't already assigned a different mode by the builtin catalog).
-5. If `denyPaste: true` is active for the frontmost application, paste delivery is downgraded to copy and the Paste/Cut actions are hidden from the floating popup bar (via the unified `PasteAvailability` decision).
+1. When a selection is detected, the trigger sites (`MacSelectionMonitor` and `HotkeyManager`) call `RuleEngine.shared.resolvePolicies(for: appIdentity)`.
+2. `RuleEngine` compares the app's identity with the effective rules (default rules plus your rules). Plain patterns match the bundle ID, `process:` patterns the process name, and `path:` patterns the executable path, with `.*` prefix and `*` wildcards.
+3. Matching settings override the default `AppPolicyContext` values. The resolved `retrieval-mode` and `gate` go to `SelectionRetrievalCoordinator`, which reads the selection.
+4. A legacy `use-menu-copy: true` becomes `retrieval-mode: "menu-copy"` only when the rule has no explicit `retrieval-mode` and the built-in catalog hasn't already given the app a different mode.
+5. If `denyPaste: true` applies to the frontmost app, paste delivery falls back to copy and the Paste and Cut actions are hidden from the popup bar, through the shared `PasteAvailability` decision.

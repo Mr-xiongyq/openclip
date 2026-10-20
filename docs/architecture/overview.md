@@ -1,100 +1,94 @@
-# Architecture Overview
+# Architecture overview
 
-OpenClip is engineered around a clean target split and single-responsibility architectural boundaries ("Architectural Subsystems"). This design guarantees strict separation between pure domain logic, platform-specific side-effects, dynamic action runtimes, and user interface components.
+OpenClip is split into two targets, and each cross-cutting concern has exactly one owner. That keeps pure domain logic, platform side effects, action runtimes, and UI from leaking into each other.
 
----
+## Target split
 
-## Target Split
-
-The codebase is split into two primary targets:
-
-```
-OpenClip Workspace
-├── Core (Framework / Swift Package)
-│ ├── Pure domain models (Action, ActionChrome, ActionResult, SelectionContext)
-│ ├── Selection detection contracts (TextRetrieving, SelectionMonitoring)
-│ ├── Central action catalog & ordering (ActionRegistry, ActionCoordinator)
-│ ├── Action-search matcher & popup mode (ActionSearch)
-│ ├── Strongly-typed settings engine (SettingsStore, SettingKey)
-│ ├── Application policy rules (AppRule, RuleEngine)
-│ └── Pure snippet & manifest parsing (OpenClipSnippetParser, ExtensionManifest)
-│
-└── OpenClip (macOS Application Target)
- ├── AppKit floating panels & SwiftUI UI (PopupPanel, PopupView, PreferencesView)
- ├── Action execution runtimes (JavaScriptAction, AppleScriptAction)
- ├── Platform side-effect handler (ActionResultHandler)
- ├── Action factory implementation (DefaultActionFactory)
- ├── macOS selection monitoring & retrieval (MacSelectionMonitor, SelectionRetrievalCoordinator + strategies)
- └── App Composition Root (AppDelegate)
-```
-
-### Core Target Constraints
-- **Zero AppKit / SwiftUI UI dependencies** in `Sources/Core/Actions/` or `Sources/Core/Settings/`.
-- **Pure Swift Types**: Value types, protocols, and decoupled services.
-- **Dependency Injection**: Core components requiring settings accept a `SettingsStore` instance
-  during initialization (defaulting to `DefaultSettingsStore.shared`). Builtin actions
-  (`SearchAction`, `CalendarAction`, `CalculateAction`) take the store via
-  `BuiltinRegistry.makeCoreBuiltins(settingsStore:)`; `ActionCoordinator` takes
-  `registry`/`ruleEngine`/`extensionManager`/`settingsStore` in `init` (default `.shared`).
-  Display title/icon resolution goes through an injected `ActionPresenting`, never a hidden
-  singleton inside the `Action` protocol extension.
-
----
-
-## Core Architectural Subsystems
-
-OpenClip enforces a single entry point for each cross-cutting concern. Bypassing these single-responsibility interfaces is strictly prohibited.
+The codebase has two main targets:
 
 ```mermaid
-graph TD
- UI[UI Surface / PopupView] -->|1. Action Presentation| ACM[ActionCustomizationManager]
- UI -->|2. Action Chrome Policy| AC[ActionChrome]
- ACoord[ActionCoordinator] -->|6. Action Coordinator & Composition| AR[ActionRegistry]
- AF[DefaultActionFactory] -->|4. Action Factory| Action[Action Instance]
- Action -->|5. Action Result Handler| ARH[ActionResultHandler]
- Core[Domain Models & Actions] -->|1. Settings Subsystem| SS[SettingsStore]
+flowchart TD
+  W[OpenClip workspace] --> C[Core: framework and Swift package]
+  W --> A[OpenClip: macOS app target]
+  C --> C1[Domain models: Action, ActionChrome, ActionResult, SelectionContext]
+  C --> C2[Selection contracts: TextRetrieving, SelectionMonitoring]
+  C --> C3[Action catalog and ordering: ActionRegistry, ActionCoordinator]
+  C --> C4[Action search and popup mode: ActionSearch]
+  C --> C5[Typed settings: SettingsStore, SettingKey]
+  C --> C6[App policy rules: AppRule, RuleEngine]
+  C --> C7[Snippet and manifest parsing: OpenClipSnippetParser, ExtensionManifest]
+  A --> A1[AppKit panels and SwiftUI: PopupPanel, PopupView, PreferencesView]
+  A --> A2[Action runtimes: JavaScriptAction, AppleScriptAction]
+  A --> A3[Side effects: ActionResultHandler]
+  A --> A4[Action factory: DefaultActionFactory]
+  A --> A5[Selection monitoring: MacSelectionMonitor, SelectionRetrievalCoordinator]
+  A --> A6[Composition root: AppDelegate]
 ```
 
-### 1. Settings Subsystem — [`SettingsStore`](../../Sources/Core/Settings/SettingsStore.swift)
-- **Responsibility**: Centralized persistence and retrieval of application settings.
-- **Mechanism**: Operates via strongly-typed [`SettingKey<T>`](../../Sources/Core/Settings/SettingKey.swift) instances.
-- **Strict Rule**: Zero direct `UserDefaults.standard` calls anywhere in `Sources/`. All access goes through `SettingsStore` in Core via dependency injection or `DefaultSettingsStore.shared` in the App target. (The only remaining raw access is the one-time `aiCloudAPIKey` migration in `AIServiceManager` — read-then-delete; the AI-config/theme `@AppStorage` surface remains too. Migrating is ongoing — do not add new direct call sites.) Secrets (e.g. the cloud AI API key) live in `SecretStore` (`~/.openclip/secrets.json` with POSIX 0600 permissions), never UserDefaults.
+### Core target constraints
 
-### 2. Action Presentation — [`ActionCustomizationManager`](../../Sources/Core/Actions/ActionCustomizationManager.swift)
-- **Responsibility**: Resolves display titles and icons for specific UI surfaces (`.popup` or `.table`).
-- **Mechanism**: `ActionCustomizationManager.presented(action, surface:)` queries user customizations and falls back to action defaults; `ActionPresentationModel` carries the resolved title/icon.
-- **Strict Rule**: UI code never computes display icons using type checks or string matches. Preferences table icons delegate to `ConfigurableAction.preferenceIconName`.
+- Core has no AppKit or SwiftUI dependencies in `Sources/Core/Actions/` or `Sources/Core/Settings/`.
+- It uses plain Swift: value types, protocols, and decoupled services.
+- Components that need settings take a `SettingsStore` in their initializer, defaulting to `DefaultSettingsStore.shared`. Built-in actions (`SearchAction`, `CalendarAction`, `CalculateAction`) get the store through `BuiltinRegistry.makeCoreBuiltins(settingsStore:)`. `ActionCoordinator` takes `registry`, `ruleEngine`, `extensionManager`, and `settingsStore` in `init`, each defaulting to `.shared`. Title and icon resolution goes through an injected `ActionPresenting`, not a hidden singleton inside the `Action` protocol extension.
 
-### 3. Action Chrome Policy — [`ActionChrome`](../../Sources/Core/Actions/ActionChrome.swift)
-- **Responsibility**: Exposes UI policy metadata for actions without logic coupling.
-- **Metadata**:
+## Subsystems
+
+Each cross-cutting concern has one entry point, and code must not bypass it.
+
+```mermaid
+flowchart LR
+  UI[PopupView] -->|presentation| ACM[ActionCustomizationManager]
+  UI -->|chrome policy| AC[ActionChrome]
+  AF[DefaultActionFactory] -->|builds| Action[Action instance]
+  Action -->|side effects| ARH[ActionResultHandler]
+  ACoord[ActionCoordinator] -->|registers| AR[ActionRegistry]
+  Core[Domain models and actions] -->|settings| SS[SettingsStore]
+```
+
+### 1. Settings: [`SettingsStore`](../../Sources/Core/Settings/SettingsStore.swift)
+
+- **Owns:** persistence and retrieval of app settings.
+- **How:** through strongly typed [`SettingKey<T>`](../../Sources/Core/Settings/SettingKey.swift) instances.
+- **Rule:** no direct `UserDefaults.standard` calls anywhere in `Sources/`. Everything goes through `SettingsStore`, injected in Core or reached through `DefaultSettingsStore.shared` in the app target. The only raw access left is the one-time `aiCloudAPIKey` migration in `AIServiceManager` (read, then delete), plus the AI-config and theme `@AppStorage` surface. Migrating the rest is ongoing, so don't add new direct call sites. Secrets such as the cloud AI API key live in `SecretStore` (`~/.openclip/secrets.json`, POSIX 0600), never in UserDefaults.
+
+### 2. Action presentation: [`ActionCustomizationManager`](../../Sources/Core/Actions/ActionCustomizationManager.swift)
+
+- **Owns:** display titles and icons for a UI surface (`.popup` or `.table`).
+- **How:** `ActionCustomizationManager.presented(action, surface:)` looks up user customizations and falls back to the action's defaults. `ActionPresentationModel` carries the resolved title and icon.
+- **Rule:** UI code never picks icons with type checks or string matches. Preferences table icons use `ConfigurableAction.preferenceIconName`.
+
+### 3. Action chrome policy: [`ActionChrome`](../../Sources/Core/Actions/ActionChrome.swift)
+
+- **Owns:** UI policy metadata for an action, without coupling UI to logic.
+- **Fields:**
   - `badge`: `.none`, `.script`, `.url`, `.custom`, `.extensionPkg(String)`
   - `rowStyle`: `.standard`, `.actionGroup`
   - `popupBehavior`: `.perform`, `.showSubActions`, `.provideCompletions`
   - `source`: `.builtin`, `.custom`, `.extensionPkg(packageID: String)`
-- **Strict Rule**: Views must inspect `action.chrome.badge` or `action.chrome.source` instead of checking `if action is ScriptAction` or matching `action.id`.
+- **Rule:** views read `action.chrome.badge` or `action.chrome.source` instead of checking `if action is ScriptAction` or matching `action.id`.
 
-### 4. Action Factory — [`DefaultActionFactory`](../../Sources/OpenClip/Platform/Extensions/DefaultActionFactory.swift)
-- **Responsibility**: Instantiating executable `Action` objects from extension manifest JSON metadata or parsed script snippet headers.
-- **Mechanism**: Implements the `ActionFactory` protocol in the App target where JavaScript, AppleScript, and process runtimes are available.
+### 4. Action factory: [`DefaultActionFactory`](../../Sources/OpenClip/Platform/Extensions/DefaultActionFactory.swift)
 
-### 5. Action Result Handler — [`ActionResultHandler`](../../Sources/OpenClip/Platform/Effects/ActionResultHandler.swift)
-- **Responsibility**: Executing platform side-effects returned by actions (such as copying text, pasting into active apps, opening URLs, or showing system sharing services).
-- **Strict Rule**: `PopupWindowController` manages window presentation and event filtering, delegating all result execution side-effects to `ActionResultHandler`.
+- **Owns:** creating executable `Action` objects from extension manifest JSON or parsed snippet headers.
+- **How:** it implements the `ActionFactory` protocol in the app target, where the JavaScript, AppleScript, and process runtimes are available.
 
-### 6. Action Coordinator & Composition — [`ActionCoordinator`](../../Sources/Core/Actions/ActionCoordinator.swift)
-- **Responsibility**: Orchestrates initial state loading, registers builtins, and connects disk extensions (including GUI-authored manifest packages) to the central `ActionRegistry`.
-- **Strict Rule**: `ExtensionManager` does not couple directly to the registry; it reports changes through `onRegister`/`onUnregister` callbacks wired by `ActionCoordinator.loadInitialState()`.
-- **Search catalog**: `ActionCoordinator.searchCatalog` (→ `ActionRegistry.searchCatalog`) exposes what the popup's action-search palette may offer: the registered catalog minus anything switched off in settings (per action, whole package, a disabled group's members, an AI preset toggled off) and minus anything that cannot run against the current context. It is the bar's visibility rules on a flat, unpaginated surface; [`ActionSearch.search`](../../Sources/Core/Actions/ActionSearch.swift) ranks it.
+### 5. Action result handler: [`ActionResultHandler`](../../Sources/OpenClip/Platform/Effects/ActionResultHandler.swift)
 
----
+- **Owns:** the platform side effects an action returns: copying text, pasting into the active app, opening URLs, and showing system sharing services.
+- **Rule:** `PopupWindowController` handles window presentation and event filtering and leaves every result side effect to `ActionResultHandler`.
 
-## Key Design Guidelines
+### 6. Action coordinator and composition: [`ActionCoordinator`](../../Sources/Core/Actions/ActionCoordinator.swift)
 
-1. **Accept dependencies, don't create them**: Core types accept `SettingsStore` in `init(settingsStore:)` with default fallback (see §1 above); `ActionCoordinator` and the builtin builder take their collaborators in `init`.
-2. **No `ActionRegistry.shared` inside domain managers**: Domain managers report registration changes through `onRegister`/`onUnregister` callbacks wired by `ActionCoordinator`. Only `ActionCoordinator` touches the registry directly.
-3. **No `switch action.id` string matching in UI**: Display formatting relies on `ConfigurableAction.preferenceIconName` and `ActionChrome`.
-4. **Pure Snippet Parsing**: `OpenClipSnippetParser` is a pure string parser with no UI or `@MainActor` ties (nonisolated).
-5. **Pure Layout Math**: `PopupPositioner` is a pure static struct for computing panel coordinates and edge clamping.
-6. **Static previews don't share live state**: `PopupPreview` hardcodes a canonical action set and passes its own `PopupHoverState()` + `isStatic: true` to `PopupView`, so it never reflects — or leaks hover into — the real popup.
-7. **Standard windows unless a chrome-less card is the goal**: Preferences uses standard window chrome (`hiddenTitleBar`/`fullSizeContentView`) with `.glassSurface` content; onboarding is a `.borderless` transparent window that re-draws the card, border, and shadow manually.
+- **Owns:** loading the initial state, registering built-ins, and connecting extensions on disk (including manifest packages made in the GUI) to the central `ActionRegistry`.
+- **Rule:** `ExtensionManager` doesn't talk to the registry directly. It reports changes through `onRegister` and `onUnregister` callbacks that `ActionCoordinator.loadInitialState()` wires up.
+- **Search catalog:** `ActionCoordinator.searchCatalog` (backed by `ActionRegistry.searchCatalog`) is what the popup's action-search palette may offer. It's the registered catalog minus anything switched off in settings (a single action, a whole package, the members of a disabled group, an AI preset turned off) and minus anything that can't run in the current context. In effect it applies the bar's visibility rules to a flat, unpaginated list, and [`ActionSearch.search`](../../Sources/Core/Actions/ActionSearch.swift) ranks it.
+
+## Design guidelines
+
+1. **Accept dependencies, don't create them.** Core types take `SettingsStore` in `init(settingsStore:)` with a default (see §1 above). `ActionCoordinator` and the built-in builder take their collaborators in `init`.
+2. **No `ActionRegistry.shared` inside domain managers.** They report registration changes through `onRegister` and `onUnregister` callbacks wired by `ActionCoordinator`. Only `ActionCoordinator` touches the registry directly.
+3. **No `switch action.id` string matching in UI.** Display formatting uses `ConfigurableAction.preferenceIconName` and `ActionChrome`.
+4. **Pure snippet parsing.** `OpenClipSnippetParser` is a plain string parser with no UI or `@MainActor` ties (it is nonisolated).
+5. **Pure layout math.** `PopupPositioner` is a static struct that computes panel coordinates and clamps them to screen edges.
+6. **Static previews don't share live state.** `PopupPreview` hardcodes a standard action set and passes its own `PopupHoverState()` and `isStatic: true` to `PopupView`, so it never shows the real popup's state and hovering it never leaks into the real popup.
+7. **Standard windows unless a chrome-less card is the goal.** Preferences uses standard window chrome (`hiddenTitleBar` and `fullSizeContentView`) with `.glassSurface` content. Onboarding is a `.borderless` transparent window that redraws the card, border, and shadow itself.

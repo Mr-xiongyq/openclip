@@ -1,21 +1,17 @@
-# URL Templates Engine
+# URL templates engine
 
 The URL templates engine ([`URLTemplateAction`](../../Sources/Core/Actions/URLTemplateAction.swift)) powers instant web search, documentation lookup, and custom URI scheme deep-linking actions.
 
----
-
-## Execution Mechanism
+## Execution mechanism
 
 When a user selects a URL template action:
 
-1. **Text Extraction**: Selected text is trimmed of leading and trailing whitespace.
-2. **Placeholder Substitution**: [`TextPlaceholderEngine`](../../Sources/Core/Utils/TextPlaceholderEngine.swift) substitutes template tokens with percent-encoded query parameters.
-3. **URL Resolution**: The resulting string is parsed into a `URL` object and returned as `ActionResult.openURL(url)`.
-4. **Platform Launch**: `DefaultActionResultHandler` opens the URL via `NSWorkspace.shared.open(url)`.
+1. Text extraction: Selected text is trimmed of leading and trailing whitespace.
+2. Placeholder substitution: [`TextPlaceholderEngine`](../../Sources/Core/Utils/TextPlaceholderEngine.swift) substitutes template tokens with percent-encoded query parameters.
+3. URL resolution: The resulting string is parsed into a `URL` object and returned as `ActionResult.openURL(url)`.
+4. Platform launch: `DefaultActionResultHandler` opens the URL via `NSWorkspace.shared.open(url)`.
 
----
-
-## Supported Placeholders
+## Supported placeholders
 
 [`TextPlaceholderEngine`](../../Sources/Core/Utils/TextPlaceholderEngine.swift) replaces the following template tokens:
 
@@ -27,9 +23,7 @@ When a user selects a URL template action:
 | `{bundleID}` | Source application bundle identifier | Percent-encoded (`Constants.queryValueAllowed`) |
 | `{html}`, `{rtf}` | HTML/RTF selection content if present | Percent-encoded (`Constants.queryValueAllowed`) |
 
----
-
-## Regex Pattern Gating & Visibility Rules
+## Regex pattern gating and visibility rules
 
 URL template actions support regex gating (via `regexPattern` or `ExtensionActionRules`). When evaluated, enablement and capture extraction delegate to [`ActionVisibility`](../../Sources/Core/Actions/ActionVisibility.swift):
 
@@ -47,15 +41,13 @@ public func isEnabled(for context: ActionContext) -> Bool {
 }
 ```
 
-### Common Regex Examples
+### Common regex examples
 
 - **Match URLs Only**: `^https?://\\S+$`
 - **Match Issue Tracker Numbers**: `^#[0-9]+$` or `^[A-Z]+-[0-9]+$`
 - **Match IP Addresses**: `^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$`
 
----
-
-## Practical Examples
+## Practical examples
 
 ```json
 {

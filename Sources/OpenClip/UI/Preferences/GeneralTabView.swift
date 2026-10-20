@@ -17,13 +17,14 @@ struct GeneralTab: View {
     @State private var showMenuBarIcon: Bool
     @State private var isMouseHoldEnabled: Bool
     @Setting(SettingKey.captureTextAutoCopy) private var captureTextAutoCopy
-    @Setting(SettingKey.playCopySound) private var playCopySound
-    @Setting(SettingKey.copySoundName) private var copySoundName
+    @Setting(SettingKey.playActionSound) private var playActionSound
+    @Setting(SettingKey.actionSoundName) private var actionSoundName
     @State private var fileSaveLocation: String
     @ObservedObject private var launchManager = LaunchAtLoginManager.shared
     @ObservedObject private var permissionManager = PermissionManager.shared
     @ObservedObject private var router = SettingsRouter.shared
     @State private var highlightedControlID: String?
+    @State private var isShowingSoundActions = false
 
     /// Initializes preference state from the shared settings store.
     init() {
@@ -153,35 +154,53 @@ struct GeneralTab: View {
 
                 SettingsCard("App") {
                     SettingsRow(
-                        title: "Play Sound on Copy",
+                        title: "Play Sound",
+                        info: "Plays when an action finishes. Use the slider button to choose which actions.",
                         systemImage: "speaker.wave.2",
                         plainIcon: true
                     ) {
                         HStack(spacing: 10) {
-                            Picker("Sound", selection: $copySoundName) {
-                                ForEach(CopySound.allCases) { sound in
+                            Picker("Sound", selection: Binding(get: { ActionSound(stored: actionSoundName).rawValue }, set: { actionSoundName = $0 })) {
+                                ForEach(ActionSound.allCases) { sound in
                                     Text(LocalizedStringKey(sound.title)).tag(sound.rawValue)
                                 }
                             }
                             .labelsHidden()
                             .pickerStyle(.menu)
                             .fixedSize()
-                            .disabled(!playCopySound)
-                            .onChange(of: copySoundName) { _, newValue in
-                                CopySound(stored: newValue).play()
+                            .disabled(!playActionSound)
+                            .onChange(of: actionSoundName) { _, newValue in
+                                ActionSound(stored: newValue).play()
                             }
-                            .onChange(of: playCopySound) { _, isOn in
-                                if isOn { CopySound.prepareIfEnabled() }
+                            .onChange(of: playActionSound) { _, isOn in
+                                if isOn { ActionSound.prepareIfEnabled() }
                             }
 
-                            Toggle("", isOn: $playCopySound)
+                            Button {
+                                isShowingSoundActions.toggle()
+                            } label: {
+                                Image(systemName: "slider.horizontal.3")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(playActionSound ? SettingsDesignTokens.primaryText : SettingsDesignTokens.tertiaryText)
+                                    .frame(width: 24, height: 24)
+                                    .settingsGlassCircle()
+                                    .contentShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(!playActionSound)
+                            .help(String(localized: "Choose actions that play the sound"))
+                            .popover(isPresented: $isShowingSoundActions, arrowEdge: .top) {
+                                ActionSoundPopoverView()
+                            }
+
+                            Toggle("", isOn: $playActionSound)
                                 .labelsHidden()
                                 .toggleStyle(.switch)
-                                .accessibilityLabel("Play Sound on Copy")
+                                .accessibilityLabel("Play Sound")
                         }
                     }
-                    .id(GeneralSearchTarget.playCopySound)
-                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.playCopySound))
+                    .id(GeneralSearchTarget.playActionSound)
+                    .modifier(GeneralSearchHighlight(isHighlighted: highlightedControlID == GeneralSearchTarget.playActionSound))
 
                     SettingsDivider()
 

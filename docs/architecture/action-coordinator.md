@@ -1,10 +1,8 @@
-# Action Coordinator & Registry Architecture
+# Action coordinator and registry architecture
 
-The [`ActionCoordinator`](../../Sources/Core/Actions/ActionCoordinator.swift) serves as the **Action Coordinator & Composition** of OpenClip. It bridges domain managers (`ExtensionManager`, `RuleEngine`) with the central [`ActionRegistry`](../../Sources/Core/Actions/ActionRegistry.swift) catalog, resolving available actions based on user configuration, current text selection, and active application policy rules.
+The [`ActionCoordinator`](../../Sources/Core/Actions/ActionCoordinator.swift) is the Action Coordinator & Composition layer of OpenClip. It bridges domain managers (`ExtensionManager`, `RuleEngine`) with the central [`ActionRegistry`](../../Sources/Core/Actions/ActionRegistry.swift) catalog, resolving available actions based on user configuration, current text selection, and active application policy rules.
 
----
-
-## Architectural Responsibilities
+## Architectural responsibilities
 
 ```mermaid
 flowchart TD
@@ -28,13 +26,13 @@ flowchart TD
 4. **Action Reordering**: Exposes reordering primitives (`moveActions(from:to:)`) that mutate user preferences stored via `SettingsStore`.
 5. **Custom Action Groups Lifecycle**: Manages user-defined group CRUD operations and synchronization with `ActionRegistry`.
 
----
+## Action registration mechanics
 
-## Action Registration Mechanics
+> Current state (2026-08): the `onRegister`/`onUnregister` callback seam described below is implemented. `ActionCoordinator.loadInitialState()` wires `ExtensionManager` to the registry via those callbacks; the manager never calls `ActionRegistry.shared` directly. GUI-authored custom actions are single-action manifest packages (written by `CustomActionManifestWriter`) and load through the same extension scan, `custom_actions.json`/`CustomActionManager` are retired.
 
-> **Current reality (2026-08):** the `onRegister`/`onUnregister` callback seam described below is implemented. `ActionCoordinator.loadInitialState()` wires `ExtensionManager` to the registry via those callbacks; the manager never calls `ActionRegistry.shared` directly. GUI-authored custom actions are single-action manifest packages (written by `CustomActionManifestWriter`) and load through the same extension scan — `custom_actions.json`/`CustomActionManager` are retired.
+### Initial loading lifecycle
 
-### Initial Loading Lifecycle
+Core builtins (Copy, Cut, Paste, Define, Search, Calculate) are registered first. Application rules load next, then installed extensions (manifests, standalone scripts, snippets) are scanned. Custom action groups load last.
 
 ```swift
 @MainActor
@@ -43,35 +41,29 @@ public func loadInitialState(
     rulesURL: URL = Constants.rulesFileURL,
     dictionaryLookup: @escaping @Sendable (String) -> String? = { _ in nil }
 ) async {
-    // 1. Register Core Builtin Actions (Copy, Cut, Paste, Define, Search, Calculate)
     let coreBuiltins = BuiltinRegistry.makeCoreBuiltins(
         settingsStore: settingsStore,
         dictionaryLookup: dictionaryLookup
     )
     registry.register(builtIns: coreBuiltins)
 
-    // 2. Load application rules and scan installed extensions (manifests, standalone scripts, snippets)
     await ruleEngine.loadRules(from: rulesURL)
     await extensionManager.loadExtensions(from: extensionsDirectory)
-
-    // 3. Load custom action groups
     loadGroupDefs()
 }
 ```
 
-### Registration & Unregistration
+### Registration and unregistration
 When extension packages are added, updated, or removed:
 - `ExtensionManager.loadExtensions()` unregisters previous extension actions and reports newly discovered ones through the `onRegister`/`onUnregister` callbacks (wired to the registry by `ActionCoordinator.loadInitialState()`).
 - Custom action group definitions (`ActionGroupDef`) in `SettingsStore` persist across extension unregistrations, reloads, and updates. Absent members are dynamically filtered out at runtime by `CustomGroupAction.subActions(in:)` without mutating the saved user configuration.
 - Neither Core domain manager touches `ActionRegistry.shared` directly; `ActionCoordinator` is the only type that does.
 
----
-
-## Action Registry & Ordering Policy
+## Action registry and ordering policy
 
 The [`ActionRegistry`](../../Sources/Core/Actions/ActionRegistry.swift) is responsible for maintaining the in-memory array of registered actions and enforcing sorting order based on user preferences.
 
-### Dynamic Ordering Math & Custom Groups
+### Dynamic ordering math and custom groups
 
 Actions are stored in an internal `@Published` array. Whenever new actions are registered or group definitions change, `sortActions()` evaluates their index against the user's saved preference array (`SettingKey.actionOrder`) using a three-tier ranking:
 1. **Tier 0**: Actions explicitly ordered by the user in `SettingKey.actionOrder`.
@@ -86,7 +78,6 @@ When users drag to reorder actions in the Preferences UI, `moveActions(from:to:)
 
 ```swift
 public func moveActions(from source: IndexSet, to destination: Int) {
-    // Reorder in-memory list ...
     let newOrder = actions
         .filter { !ActionIdentity.isAIPreset($0) && !($0 is CustomGroupAction) }
         .map { $0.id }
@@ -94,49 +85,34 @@ public func moveActions(from source: IndexSet, to destination: Int) {
 }
 ```
 
----
-
-## Custom Action Groups & Lifecycle
+## Custom action groups and lifecycle
 
 Custom action groups allow users to bundle multiple actions under a single expandable popup row.
 
-### Core Domain Models
+### Core domain models
 
 - **`ActionGroupDef`** (`Sources/Core/Actions/ActionGroupDef.swift`): Pure Codable model representing the persistent definition (`id`, `title`, `iconName`, `memberActionIDs`), stored as JSON in `SettingKey.actionGroups`.
 - **`CustomGroupAction`** (`Sources/Core/Actions/CustomGroupAction.swift`): Pure domain action conforming to `Action` and `SubActionProviding`. It defines `popupBehavior = .showSubActions` and dynamically resolves its sub-actions from the catalog by matching canonical IDs in `memberActionIDs`.
 
-### Group Membership Rules
+### Group membership rules
 
-A custom group is a **folder**, not a fixed-size set, so the enforced rule is *not* a hard minimum
-of two members. What is enforced is that a group **emptied by a mutation** is dissolved, while a
-group that is empty or single-member by intent is kept:
+A custom group is a folder, not a fixed-size set. There is no minimum of two members. The enforced rule is narrower: a group emptied by a mutation is dissolved, while a group that is empty or single-member by intent is kept.
 
-- `createGroup` accepts zero or more eligible member IDs. A group created empty is kept on purpose —
-  it is a folder the user intends to fill later. Duplicate/blank/ineligible IDs are filtered, not
-  rejected.
+- `createGroup` accepts zero or more eligible member IDs. A group created empty is kept on purpose: it is a folder the user intends to fill later. Duplicate, blank, or ineligible IDs are filtered, not rejected.
 - `updateGroup` stores exactly what the editor saves, including an empty or single-member group.
-- A group **emptied by a mutation** — `removeFromGroup`, `addToGroup` moving its last member into
-  another group, or `deleteCustomAction` removing its last member — is dissolved.
-  `saveAndApplyGroupDefs(pruningEmptiedFrom:)` distinguishes a group that *had* members before the
-  mutation from one that was already empty, so only the former disappears.
-- Member IDs that no longer resolve to a registered action are filtered when the group is
-  materialized (`CustomGroupAction.subActions(in:)`) and on mutating saves, but an existing member
-  that is merely unregistered this session is **retained**, so the group survives an extension
-  reload and heals when the action returns. `loadGroupDefs` deliberately does not rewrite the saved
-  configuration on boot, and there is **no `pruneOrphans` pass**.
+- A group emptied by a mutation is dissolved. This covers `removeFromGroup`, `addToGroup` moving its last member into another group, and `deleteCustomAction` removing its last member. `saveAndApplyGroupDefs(pruningEmptiedFrom:)` distinguishes a group that had members before the mutation from one that was already empty, so only the former disappears.
+- Member IDs that no longer resolve to a registered action are filtered when the group is materialized (`CustomGroupAction.subActions(in:)`) and on mutating saves. An existing member that is merely unregistered this session is retained, so the group survives an extension reload and heals when the action returns. `loadGroupDefs` does not rewrite the saved configuration on boot, and there is no `pruneOrphans` pass.
 
 Pinned by `ActionCoordinatorGroupTests` (`testGroupMembershipContractIsFolderRulesNotAMinimumOfTwo`,
 `testAGroupWithNoMembersIsKept`, `testCreateGroupWithSingleMember`,
 `testUpdateGroupKeepsGroupWithFewerThanTwoMembers`, `testRemovingTheLastMemberRemovesTheGroup`,
 `testUnregisterExtensionRetainsGroupMembershipInDefs`).
 
----
-
-## Action Availability & Context Resolution
+## Action availability and context resolution
 
 When selected text is detected, `ActionCoordinator.resolveActions(for:)` converts the raw [`SelectionContext`](../../Sources/Core/Selection/SelectionContext.swift) into an evaluated context using `RuleEngine.resolvePolicies(for:)`.
 
-### Filtering Pipeline
+### Filtering pipeline
 
 `ActionRegistry.availableActions(for:)` applies multiple policy filters before returning actions to the UI:
 
@@ -182,9 +158,7 @@ public func availableActions(for context: ActionContext) -> [any Action] {
             .map { $0.id }
     )
 
-    // Custom groups: hide members of a disabled custom group.
-    // This parallels the prefix-based hiding above but uses the explicit
-    // memberActionIDs list since custom group members keep canonical IDs.
+    // Custom group members keep canonical IDs, so they are hidden through the explicit memberActionIDs list, not a prefix.
     let customGroupMemberToGroupID: [String: String] = {
         var map: [String: String] = [:]
         for def in groupDefs {

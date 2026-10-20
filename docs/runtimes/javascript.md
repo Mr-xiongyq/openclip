@@ -1,4 +1,4 @@
-# JavaScript Action Runtime
+# JavaScript action runtime
 
 The JavaScript action runtime ([`OpenClipJSHost`](../../Sources/OpenClip/Platform/Runtimes/OpenClipJSHost.swift),
 reached via [`JavaScriptAction`](../../Sources/OpenClip/Platform/Runtimes/JavaScriptAction.swift)) executes
@@ -13,7 +13,7 @@ The clipboard is restored before JavaScript runs. Existing rich input is reused;
 source apps may still provide no rich representation. These flags also supply `{rtf}` / `{html}`
 and the existing shell/AppleScript inputs. They cannot be combined with inline previews.
 
-Extensions opt into **asynchronous** execution with the manifest flag `"async": true`
+Extensions opt into asynchronous execution with the manifest flag `"async": true`
 (`ExtensionActionMetadata.isAsync`). Async extensions get a `fetch()` polyfill bridged to URLSession,
 and the host awaits the action's returned promise (or the promise an entry function returns) before
 resolving. Without the flag, scripts run in the legacy synchronous mode described below and any
@@ -21,16 +21,15 @@ promise-like return is ignored (never pasted as `[object Promise]`).
 
 ## Console logging
 
-A global `console.log(...)` is available in every script (sync and async). It is variadic — e.g.
-`console.log('x', 42, { a: 1 })` — and redacts values into non-sensitive structural metadata (e.g.
+A global `console.log(...)` is available in every script (sync and async). It is variadic, e.g.
+`console.log('x', 42, { a: 1 })`, and redacts values into non-sensitive structural metadata (e.g.
 `<string len=1>`, `<number>`, `<Object keys=[a]>`) before producing a single log line.
 To adhere to OpenClip's privacy guidelines ("keep text, clipboard, and extension data private"), raw string
 contents and object property values are never logged verbatim.
-It routes to the app's `js` log category (`Log.js`), so it is a debugging aid rather than a runtime
-failure: without the shim, `console` was undefined and calling `console.log` threw a `ReferenceError`
-that broke the action. Filter it with `log stream --predicate 'subsystem == "com.openclip" && category == "js"'`.
+It routes to the app's `js` log category (`Log.js`) and is a debugging aid. Without the shim,
+`console` was undefined and calling `console.log` threw a `ReferenceError` that broke the action. Filter it with `log stream --predicate 'subsystem == "com.openclip" && category == "js"'`.
 
-## The `openclip` JS Object
+## The `openclip` JS object
 
 ```typescript
 interface OpenClipBridge {
@@ -85,15 +84,15 @@ interface OpenClipBridge {
 
 Modifier names accepted by `keyPress`: `command`/`cmd`, `shift`, `option`/`alt`,
 `control`/`ctrl`. The key is a macOS virtual-key name (QWERTY/ANSI layout is assumed), e.g.
-letters `a`–`z`, digits `0`–`9`, or named keys like `return`, `space`, `escape`.
+letters `a` through `z`, digits `0` through `9`, or named keys like `return`, `space`, `escape`.
 
 The former canvas bridge (`showContent(tree, { size })` / `h()`) has been **removed**; calling
 those names surfaces a JS error (`.toast(.error)`).
 
-## Options & Preference Integration
+## Options and preference integration
 
 Extension options declared in the manifest are resolved through the injected option store
-(`ActionOptionReading`) — **not** `UserDefaults` directly. Non-secret options come from
+(`ActionOptionReading`), **not** `UserDefaults` directly. Non-secret options come from
 `SettingsStore` (`SettingKey<String>("action.<id>.option.<identifier>")`); `.secret` options come
 from `SecretStore` (`~/.openclip/secrets.json` with POSIX 0600 permissions) via `SecretActionOptionStore`. Values land in `openclip.options` and
 `openclip.option(id)`. The wrapped script also receives them as the second argument:
@@ -114,24 +113,24 @@ Define an `action(selection, options)` or `main(selection, options)` entry funct
 ## Secondary click behavior (`isSecondaryClick`)
 
 A right-click or ⇧-click activation surfaces as `openclip.input.isSecondaryClick === true`. JS
-actions **cannot** declare a manifest `secondary` (rejected at validation), so a distinct secondary
-behavior is authored **imperatively**: branch on the flag and emit an explicit effect for each path —
-`openclip.paste(...)` for the primary, `openclip.copy(...)` for the secondary — rather than relying
+actions cannot declare a manifest `secondary` (validation rejects it), so a distinct secondary
+behavior is written in code. Branch on the flag and emit an explicit effect for each path:
+`openclip.paste(...)` for the primary, `openclip.copy(...)` for the secondary, rather than relying
 on a string-return convention.
 
 ```javascript
 function action(selection) {
   const result = selection.toUpperCase();
   if (openclip.input.isSecondaryClick) {
-    openclip.copy(result);   // secondary click → copy
+    openclip.copy(result);
   } else {
-    openclip.paste(result);  // primary click → paste
+    openclip.paste(result);
   }
 }
 ```
 
 The effect the branch picks becomes the action's primary result, so the standard delivery pipeline
-still applies to it (the paste→copy probe, and the click's declared `toast`/`secondaryToast`, see
+still applies to it (the paste-then-copy probe, and the click's declared `toast`/`secondaryToast`, see
 [`Extensions/AGENTS.md` §5b/§5c](../../Extensions/AGENTS.md)).
 
 ## Pasteboard API (`openclip.pasteboard`)
@@ -148,10 +147,10 @@ still applies to it (the paste→copy probe, and the click's declared `toast`/`s
 
 *Privacy Guard*: If the clipboard contains concealed types from password managers (e.g. `org.nspasteboard.ConcealedType`, `com.agilebits.onepassword`), `hasContent` returns `false` and text/html/rtf values are redacted to empty strings.
 
-## Async Mode (`"async": true`)
+## Async mode (`"async": true`)
 
 In async mode the entry function may return a `Promise`. The wrapped script dispatches the entry
-point through an internal `__openclip_dispatch` that settles the host's promise bridge — immediately
+point through an internal `__openclip_dispatch` that settles the host's promise bridge, immediately
 for synchronous returns, via `.then`/catch for promises. A script with no `action`/`main` entry
 (top-level side effects only) still settles, so it never hangs. A rejected promise surfaces as
 `.toast(.error, message)`.
@@ -191,9 +190,9 @@ This applies with or without `requirements.content`. Other URL schemes use their
 handlers. Call `openclip.openURL` repeatedly to queue multiple links in call order; scripts
 choose whether to deduplicate.
 
-### Execution model & watchdog
+### Execution model and watchdog
 
-Every run executes inside a `Task.detached` on a background thread — never the `MainActor`. All
+Every run executes inside a `Task.detached` on a background thread, never the `MainActor`. All
 JavaScript VM access is confined to that single thread; URLSession completions hop back onto the
 thread's CFRunLoop via `CFRunLoopPerformBlock` + `CFRunLoopWakeUp`, and the host pumps the runloop
 until the promise settles. A per-evaluation exception handler rejects the promise bridge and exits
@@ -205,15 +204,13 @@ Runs with no budget (the default for extension and custom actions) have no timer
 promise settles or the caller cancels. Running async tasks can be cancelled immediately by clicking
 the loading toast, which cancels in-flight fetch requests. A fetch response that arrives after the
 evaluation ends is discarded; the host does not call the JavaScript VM for it. This holds on every
-exit path (success, JS exception, promise rejection, timeout, cancellation, thrown error), not only
-timeout.
+exit path: success, JS exception, promise rejection, timeout, cancellation, and thrown error.
 
-**Synchronous evaluations are capped.** A CPU-bound synchronous script cannot be interrupted when it
+Synchronous evaluations are capped. A CPU-bound synchronous script cannot be interrupted when it
 runs without a budget (`JSVirtualMachine.invalidate` no longer exists), so a stuck sync script would
 permanently park a cooperative-pool thread. `OpenClipJSHost` refuses new synchronous evaluations
 (including the top-level synchronous evaluation phase of async scripts) once
-`Constants.maxConcurrentSyncScriptEvaluations` (4) are in flight — logging at `.error` and throwing —
-so thread accumulation stays bounded. (Once an async script enters its promise pump loop, the sync
+`Constants.maxConcurrentSyncScriptEvaluations` (4) are in flight, logging at `.error` and throwing, so thread accumulation stays bounded. (Once an async script enters its promise pump loop, the sync
 gate is released while the watchdog + pump loop bounds the async phase.)
 
 > **Compiler landmine:** inside the `Task.detached` closure, static members must be referenced by
@@ -221,28 +218,28 @@ gate is released while the watchdog + pump loop bounds the async phase.)
 > detached-task closure trips a Swift 6 region-based-isolation checker bug (`"pattern that the
 > region-based isolation checker does not understand how to check"`).
 
-## Result Resolution
+## Result resolution
 
 `OpenClipJSHost.run` resolves the outcome in a deterministic order:
 
-1. A JavaScript exception → `.toast(.error, message)` (never thrown as a Swift error).
-2. `requireConfiguration(...)` → `.openConfiguration`.
-3. `toast(...)` — alone → `.toast`, or coexisting with effects → `.sequence([.toast, …effects])`.
-4. Effects (paste/copy/pasteContent/copyContent/cut/openURL/keyPress/runShortcut/notify/file/copyFile/saveFile) → single
-   `.paste`/`.copy`/etc, or `.sequence` of them when multiple were called. `pasteContent`/
+1. A JavaScript exception: `.toast(.error, message)` (never thrown as a Swift error).
+2. `requireConfiguration(...)`: `.openConfiguration`.
+3. `toast(...)`, alone: `.toast`, or coexisting with effects: `.sequence([.toast, …effects])`.
+4. Effects (paste/copy/pasteContent/copyContent/cut/openURL/keyPress/runShortcut/notify/file/copyFile/saveFile) resolve to a single
+   `.paste`/`.copy`/etc, or to a `.sequence` of them when multiple were called. `pasteContent`/
    `copyContent` payloads are read via either key style (`public.utf8-plain-text`/`public.html`/
    `public.rtf` or `text`/`html`/`rtf`); a payload with none of the three is ignored (no effect).
-5. File / Object return value → returning an object with `type: "file"`, `type: "copyFile"`, or `type: "saveFile"` resolves directly to `.file(...)`, `.copyFile(...)`, or `.saveFile(...)`.
-6. String return value → `.text(string)` — implicitly returned text, delivered per the user's
+5. File / Object return value: returning an object with `type: "file"`, `type: "copyFile"`, or `type: "saveFile"` resolves directly to `.file(...)`, `.copyFile(...)`, or `.saveFile(...)`.
+6. String return value: `.text(string)`, implicitly returned text, delivered per the user's
    per-click preference (preview/paste/copy).
-7. Otherwise → `.success`.
+7. Otherwise: `.success`.
 
 A JavaScript exception produces `.toast(.error, message)` instead of throwing; the toast dismisses
 the popup by default (`keepVisible: true` keeps it open).
 
-## Practical Examples
+## Practical examples
 
-### Prettify JSON (returns a string → pasted)
+### Prettify JSON (returns a string, which is pasted)
 
 ```javascript
 function action(selection) {
@@ -256,7 +253,7 @@ function action(selection) {
 }
 ```
 
-### Search Web (opens a URL)
+### Search web (opens a URL)
 
 ```javascript
 function action(selection) {
@@ -273,11 +270,10 @@ function action(selection) {
 }
 ```
 
-### Display File Preview Card (Image / Document)
+### Display file preview card (image or document)
 
 ```javascript
 function action(selection) {
-  // Return an existing file or base64 data to display in the result card
   openclip.file({
     path: "/tmp/generated_qr.png",
     filename: "QRCode.png",

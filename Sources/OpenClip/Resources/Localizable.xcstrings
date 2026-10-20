@@ -3249,34 +3249,6 @@
         }
       }
     },
-    "Bubble": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "气泡"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "氣泡"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bulle"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "バブル"
-          }
-        }
-      }
-    },
     "Built-in": {
       "localizations": {
         "zh-Hans": {
@@ -3921,6 +3893,34 @@
         }
       }
     },
+    "Choose actions that play the sound": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择播放声音的操作"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇播放聲音的動作"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisir les actions qui jouent le son"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サウンドを再生するアクションを選択"
+          }
+        }
+      }
+    },
     "Choose an application to add a rule for it.": {
       "localizations": {
         "zh-Hans": {
@@ -4113,6 +4113,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "クリア"
+          }
+        }
+      }
+    },
+    "Click": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "点击"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "點擊"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clic"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クリック"
           }
         }
       }
@@ -7277,6 +7305,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "ドラッグしてサイズ変更"
+          }
+        }
+      }
+    },
+    "Drop": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "水滴"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "水滴"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Goutte"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ドロップ"
           }
         }
       }
@@ -12209,6 +12265,34 @@
         }
       }
     },
+    "No matching actions.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有匹配的操作。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有符合的動作。"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune action correspondante."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一致するアクションがありません。"
+          }
+        }
+      }
+    },
     "No response generated": {
       "localizations": {
         "zh-Hans": {
@@ -14281,30 +14365,114 @@
         }
       }
     },
-    "Play Sound on Copy": {
+    "Play Sound": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "复制时播放提示音"
+            "value": "播放声音"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "複製時播放提示音"
+            "value": "播放聲音"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Jouer un son lors de la copie"
+            "value": "Jouer un son"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "コピー時にサウンドを再生"
+            "value": "サウンドを再生"
+          }
+        }
+      }
+    },
+    "Play Sound When Finished": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成时播放声音"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成時播放聲音"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jouer un son à la fin"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完了時にサウンドを再生"
+          }
+        }
+      }
+    },
+    "Play sound for %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "为“%@”播放声音"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "為「%@」播放聲音"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jouer un son pour « %@ »"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」のサウンドを再生"
+          }
+        }
+      }
+    },
+    "Plays when an action finishes. Use the slider button to choose which actions.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "操作完成时播放。用滑块按钮选择哪些操作。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "動作完成時播放。用滑桿按鈕選擇哪些動作。"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joué à la fin d’une action. Utilisez le bouton à curseurs pour choisir lesquelles."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アクションの完了時に再生されます。スライダーボタンで対象を選べます。"
           }
         }
       }
@@ -14333,6 +14501,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "有効なWebサイトのURLまたはドメインを入力してください。"
+          }
+        }
+      }
+    },
+    "Pop": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啵"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啵"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pop"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ポップ"
           }
         }
       }
@@ -17305,6 +17501,34 @@
         }
       }
     },
+    "Search actions": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索操作"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋動作"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher des actions"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アクションを検索"
+          }
+        }
+      }
+    },
     "Search actions, shortcuts, or aliases": {
       "localizations": {
         "zh-Hans": {
@@ -19685,34 +19909,6 @@
         }
       }
     },
-    "Swoosh": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "嗖嗖"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "咻咻"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Swoosh"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "スウッ"
-          }
-        }
-      }
-    },
     "Synthesizing action…": {
       "localizations": {
         "zh-Hans": {
@@ -20609,58 +20805,30 @@
         }
       }
     },
-    "Thock": {
+    "Tink": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "笃"
+            "value": "叮"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "篤"
+            "value": "叮"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Toc"
+            "value": "Tink"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "トン"
-          }
-        }
-      }
-    },
-    "Tick": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "滴答"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "滴答"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tic"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "カチッ"
+            "value": "ティンク"
           }
         }
       }
