@@ -39,6 +39,7 @@ public enum SettingsCatalog {
             SettingKey.captureTextAutoCopy.erased,
             SettingKey.playActionSound.erased,
             SettingKey.actionSoundName.erased,
+            SettingKey.actionSoundCustomName.erased,
 
             // Updates
             SettingKey.automaticallyChecksForUpdates.erased,

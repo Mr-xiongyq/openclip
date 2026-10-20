@@ -7,6 +7,7 @@
 // Styled with inset SettingsCards (outside headers, rounded cards, inset hairline dividers).
 
 import SwiftUI
+import UniformTypeIdentifiers
 import Core
 import KeyboardShortcuts
 
@@ -24,7 +25,10 @@ struct GeneralTab: View {
     @ObservedObject private var permissionManager = PermissionManager.shared
     @ObservedObject private var router = SettingsRouter.shared
     @State private var highlightedControlID: String?
+    @Setting(SettingKey.actionSoundCustomName) private var actionSoundCustomName
     @State private var isShowingSoundActions = false
+    @State private var soundImportError: String?
+    private static let chooseSoundTag = "__choose-file__"
 
     /// Initializes preference state from the shared settings store.
     init() {
@@ -160,15 +164,27 @@ struct GeneralTab: View {
                         plainIcon: true
                     ) {
                         HStack(spacing: 10) {
-                            Picker("Sound", selection: Binding(get: { ActionSound(stored: actionSoundName).rawValue }, set: { actionSoundName = $0 })) {
-                                ForEach(ActionSound.allCases) { sound in
+                            Picker("Sound", selection: Binding(get: { ActionSound(stored: actionSoundName).rawValue }, set: { $0 == Self.chooseSoundTag ? chooseSoundFile() : (actionSoundName = $0) })) {
+                                ForEach(ActionSound.builtIn) { sound in
                                     Text(LocalizedStringKey(sound.title)).tag(sound.rawValue)
                                 }
+                                if ActionSound(stored: actionSoundName) == .custom || !actionSoundCustomName.isEmpty, CustomActionSound.storedURL() != nil {
+                                    Divider()
+                                    Text(actionSoundCustomName.isEmpty ? String(localized: "Custom") : actionSoundCustomName)
+                                        .tag(ActionSound.custom.rawValue)
+                                }
+                                Divider()
+                                Text("Choose File…").tag(Self.chooseSoundTag)
                             }
                             .labelsHidden()
                             .pickerStyle(.menu)
                             .fixedSize()
                             .disabled(!playActionSound)
+                            .alert("Can't use this sound", isPresented: Binding(get: { soundImportError != nil }, set: { if !$0 { soundImportError = nil } })) {
+                                Button("OK", role: .cancel) {}
+                            } message: {
+                                Text(soundImportError ?? "")
+                            }
                             .onChange(of: actionSoundName) { _, newValue in
                                 ActionSound(stored: newValue).play()
                             }
@@ -355,6 +371,29 @@ struct GeneralTab: View {
             return Text("Downloads (Default)")
         }
         return Text(verbatim: (fileSaveLocation as NSString).abbreviatingWithTildeInPath)
+    }
+
+    /// Lets the user pick their own sound file and makes it the action sound.
+    private func chooseSoundFile() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.audio]
+        panel.prompt = String(localized: "Choose")
+        panel.message = String(localized: "Choose a short sound (up to 5 seconds)")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let name = try CustomActionSound.importFile(from: url)
+            ActionSound.evict(.custom)
+            actionSoundCustomName = name
+            actionSoundName = ActionSound.custom.rawValue
+            ActionSound.custom.play()
+        } catch let error as CustomActionSound.ImportError {
+            soundImportError = error.message
+        } catch {
+            soundImportError = error.localizedDescription
+        }
     }
 
     /// Presents a directory picker and persists the selected file-output location.

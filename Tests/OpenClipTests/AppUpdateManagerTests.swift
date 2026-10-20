@@ -11,6 +11,7 @@ final class AppUpdateManagerTests: XCTestCase {
     override func setUp() {
         super.setUp()
         TestIsolation.reset()
+        AppActivationPolicy.isSuppressed = false
         cancellables.removeAll()
         AppUpdateManager.shared.setAvailableUpdateVersionForTesting(nil)
     }
@@ -18,6 +19,7 @@ final class AppUpdateManagerTests: XCTestCase {
     override func tearDown() {
         AppUpdateManager.shared.setAvailableUpdateVersionForTesting(nil)
         cancellables.removeAll()
+        AppActivationPolicy.isSuppressed = true
         super.tearDown()
     }
 

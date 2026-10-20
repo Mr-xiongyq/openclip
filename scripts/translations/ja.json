@@ -840,5 +840,11 @@
   "Play sound for %@": "「%@」のサウンドを再生",
   "Click": "クリック",
   "Drop": "ドロップ",
-  "Plays when an action finishes. Use the slider button to choose which actions.": "アクションの完了時に再生されます。スライダーボタンで対象を選べます。"
+  "Plays when an action finishes. Use the slider button to choose which actions.": "アクションの完了時に再生されます。スライダーボタンで対象を選べます。",
+  "Can't use this sound": "このサウンドは使用できません",
+  "Choose a short sound (up to 5 seconds)": "短いサウンドを選んでください（最大5秒）",
+  "This file can't be played. Use WAV, AIFF, CAF, MP3, M4A, AAC or FLAC.": "このファイルは再生できません。WAV、AIFF、CAF、MP3、M4A、AAC、FLAC を使用してください。",
+  "This sound is longer than 5 seconds. Choose a shorter one.": "このサウンドは5秒を超えています。短いものを選んでください。",
+  "This file is larger than 5 MB. Choose a smaller one.": "このファイルは5 MBを超えています。小さいものを選んでください。",
+  "Choose File…": "ファイルを選択…"
 }

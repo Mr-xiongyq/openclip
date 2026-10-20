@@ -144,6 +144,8 @@ public extension SettingKey where Value == Data? {
 public extension SettingKey where Value == String {
     /// Which action sound plays (an `ActionSound` raw value); unknown values fall back to the default.
     static var actionSoundName: SettingKey<String> { SettingKey<String>("actionSoundName", defaultValue: "click") }
+    /// Display name of the imported custom action sound; empty when none is imported.
+    static var actionSoundCustomName: SettingKey<String> { SettingKey<String>("actionSoundCustomName", defaultValue: "") }
     static var lastAppUpdateNotificationIdentifier: SettingKey<String> { SettingKey<String>("lastAppUpdateNotificationIdentifier", defaultValue: "") }
     static var lastAnnouncedAppUpdateVersion: SettingKey<String> { SettingKey<String>("lastAnnouncedAppUpdateVersion", defaultValue: "") }
     /// Which side of the main bar the contextual actions island sits on; see `ContextualPillPosition`.

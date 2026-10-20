@@ -2,7 +2,8 @@
 // OpenClip
 //
 // The short sounds offered for the "Play Sound" setting: two bundled recordings (see
-// docs/developer-guide/action-sounds.md) and two macOS system sounds played from their own files.
+// docs/developer-guide/action-sounds.md), two macOS system sounds played from their own files, and the user's own
+// file (see CustomActionSound).
 // `prepareIfEnabled` loads the chosen sound and wakes the audio output ahead of the first action, so the first play
 // is as prompt as later ones.
 import AppKit
@@ -12,6 +13,7 @@ public enum ActionSound: String, CaseIterable, Identifiable, Sendable {
     case click, drop
     case systemTink = "system.tink"
     case systemPop = "system.pop"
+    case custom
 
     public var id: String { rawValue }
     public static let `default`: ActionSound = .click
@@ -23,11 +25,19 @@ public enum ActionSound: String, CaseIterable, Identifiable, Sendable {
         case .drop: return "Drop"
         case .systemTink: return "Tink"
         case .systemPop: return "Pop"
+        case .custom: return "Custom"
         }
     }
 
-    /// Unknown values, including the retired sounds, fall back to the default.
-    public init(stored: String) { self = ActionSound(rawValue: stored) ?? .default }
+    /// Unknown values, including the retired sounds, fall back to the default. A custom choice whose file is gone
+    /// falls back too.
+    public init(stored: String) {
+        let parsed = ActionSound(rawValue: stored) ?? .default
+        self = parsed == .custom && CustomActionSound.storedURL() == nil ? .default : parsed
+    }
+
+    /// Built-in sounds, in picker order; the custom sound is offered only once a file has been imported.
+    public static let builtIn: [ActionSound] = [.click, .drop, .systemTink, .systemPop]
 
     private var soundFileURL: URL? {
         switch self {
@@ -35,6 +45,7 @@ public enum ActionSound: String, CaseIterable, Identifiable, Sendable {
         case .drop: return Bundle.main.url(forResource: "ActionDrop", withExtension: "caf")
         case .systemTink: return URL(fileURLWithPath: "/System/Library/Sounds/Tink.aiff")
         case .systemPop: return URL(fileURLWithPath: "/System/Library/Sounds/Pop.aiff")
+        case .custom: return CustomActionSound.storedURL()
         }
     }
 
@@ -43,6 +54,7 @@ public enum ActionSound: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .systemTink: return 0.35
         case .click, .drop, .systemPop: return 0.5
+        case .custom: return 0.7
         }
     }
 

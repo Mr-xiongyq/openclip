@@ -15,7 +15,12 @@ public enum AppActivationPolicy {
     private static var count = 0
     private static var previousPolicy: NSApplication.ActivationPolicy?
 
+    /// The test host is the app itself, so a window opened by a test would give it a Dock icon that outlives an
+    /// interrupted run. Tests that assert the policy switch turn this off.
+    static var isSuppressed = NSClassFromString("XCTestCase") != nil
+
     public static func enter() {
+        guard !isSuppressed else { return }
         if count == 0 && previousPolicy == nil {
             previousPolicy = NSApp.activationPolicy()
         }
@@ -27,7 +32,7 @@ public enum AppActivationPolicy {
     }
 
     public static func leave() {
-        guard count > 0 else { return }
+        guard !isSuppressed, count > 0 else { return }
         count -= 1
         guard count == 0 else { return }
         Task { @MainActor in

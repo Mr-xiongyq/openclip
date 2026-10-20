@@ -3445,6 +3445,34 @@
         }
       }
     },
+    "Can't use this sound": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法使用此声音"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法使用此聲音"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d’utiliser ce son"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサウンドは使用できません"
+          }
+        }
+      }
+    },
     "Cancel": {
       "localizations": {
         "zh-Hans": {
@@ -3837,6 +3865,34 @@
         }
       }
     },
+    "Choose File…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择文件…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇檔案…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisir un fichier…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ファイルを選択…"
+          }
+        }
+      }
+    },
     "Choose Icon": {
       "localizations": {
         "zh-Hans": {
@@ -3889,6 +3945,34 @@
           "stringUnit": {
             "state": "translated",
             "value": ".openclipext フォルダ、.zip アーカイブ、またはスクリプトファイルを選択してください"
+          }
+        }
+      }
+    },
+    "Choose a short sound (up to 5 seconds)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择一个简短的声音（最长 5 秒）"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選擇一個簡短的聲音（最長 5 秒）"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez un son court (5 secondes maximum)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "短いサウンドを選んでください（最大5秒）"
           }
         }
       }
@@ -20777,6 +20861,62 @@
         }
       }
     },
+    "This file can't be played. Use WAV, AIFF, CAF, MP3, M4A, AAC or FLAC.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法播放此文件。请使用 WAV、AIFF、CAF、MP3、M4A、AAC 或 FLAC。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法播放此檔案。請使用 WAV、AIFF、CAF、MP3、M4A、AAC 或 FLAC。"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce fichier ne peut pas être lu. Utilisez WAV, AIFF, CAF, MP3, M4A, AAC ou FLAC."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このファイルは再生できません。WAV、AIFF、CAF、MP3、M4A、AAC、FLAC を使用してください。"
+          }
+        }
+      }
+    },
+    "This file is larger than 5 MB. Choose a smaller one.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此文件超过 5 MB，请选择更小的文件。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此檔案超過 5 MB，請選擇更小的檔案。"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce fichier dépasse 5 Mo. Choisissez-en un plus petit."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このファイルは5 MBを超えています。小さいものを選んでください。"
+          }
+        }
+      }
+    },
     "This model is not in the provider's current list. It may have been retired.": {
       "localizations": {
         "zh-Hans": {
@@ -20801,6 +20941,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "このモデルはプロバイダの現在の一覧にありません。提供終了の可能性があります。"
+          }
+        }
+      }
+    },
+    "This sound is longer than 5 seconds. Choose a shorter one.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此声音超过 5 秒，请选择更短的声音。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此聲音超過 5 秒，請選擇更短的聲音。"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce son dure plus de 5 secondes. Choisissez-en un plus court."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサウンドは5秒を超えています。短いものを選んでください。"
           }
         }
       }

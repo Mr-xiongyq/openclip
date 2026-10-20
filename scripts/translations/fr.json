@@ -840,5 +840,11 @@
   "Play sound for %@": "Jouer un son pour « %@ »",
   "Click": "Clic",
   "Drop": "Goutte",
-  "Plays when an action finishes. Use the slider button to choose which actions.": "Joué à la fin d’une action. Utilisez le bouton à curseurs pour choisir lesquelles."
+  "Plays when an action finishes. Use the slider button to choose which actions.": "Joué à la fin d’une action. Utilisez le bouton à curseurs pour choisir lesquelles.",
+  "Can't use this sound": "Impossible d’utiliser ce son",
+  "Choose a short sound (up to 5 seconds)": "Choisissez un son court (5 secondes maximum)",
+  "This file can't be played. Use WAV, AIFF, CAF, MP3, M4A, AAC or FLAC.": "Ce fichier ne peut pas être lu. Utilisez WAV, AIFF, CAF, MP3, M4A, AAC ou FLAC.",
+  "This sound is longer than 5 seconds. Choose a shorter one.": "Ce son dure plus de 5 secondes. Choisissez-en un plus court.",
+  "This file is larger than 5 MB. Choose a smaller one.": "Ce fichier dépasse 5 Mo. Choisissez-en un plus petit.",
+  "Choose File…": "Choisir un fichier…"
 }
