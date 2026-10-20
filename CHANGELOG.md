@@ -9,12 +9,15 @@ All notable user-facing changes to OpenClip.
 - **Action sounds**: play a sound when any action finishes. Choose Click, Drop, Tink, Pop or your own file, and silence individual actions.
 - **AI follow-ups as chat**, with undo and redo (⌘Z / ⇧⌘Z).
 - **Per-action AI provider and model**, with self-updating cloud model lists.
-- **Editable AI system prompt**, and a new AI tab in Settings.
+- **Editable AI system prompt**, and a new AI tab in Settings ([#161](https://github.com/ganeshmshetty/openclip/pull/161)).
 - **Smarter selections**: rich text is preserved, extensions can require detected content, and several selected links open at once.
 - **oMLX preset** for local LLM servers.
 - **Screen Recording permission** in Settings and a restyled onboarding.
 - Fixed selection missing in Chrome, Ghostty and Electron apps.
 - Fixed AI settings being lost across dev and release builds, and saved prompts being renamed when re-run.
+
+### Contributors
+- 🎉 First-time contributor: thanks to @entttom for making the AI system prompt editable ([#161](https://github.com/ganeshmshetty/openclip/pull/161))!
 
 ---
 
