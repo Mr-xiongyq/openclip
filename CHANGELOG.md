@@ -6,24 +6,15 @@ All notable user-facing changes to OpenClip.
 
 ## v1.9.0 - 2026-10-20
 
-### Features & Improvements
-- **Action sounds**: A new **Play Sound** setting plays a short sound when any action finishes. Pick Click, Drop, Tink or Pop, or choose your own file with **Choose File…** (WAV, AIFF, CAF, MP3, M4A, AAC or FLAC, up to 5 seconds). The slider button beside the picker lets you silence individual actions, with a search field and Select All.
-- **AI follow-ups as chat**: Follow-ups on an AI result are now real chat turns, with undo and redo (⌘Z / ⇧⌘Z) across versions.
-- **Per-action AI provider and model**: Each AI action can use its own provider and model, and cloud model lists update themselves.
-- **Editable AI system prompt**: Edit the system prompt in Settings. AI now has its own tab in the Settings sidebar.
-- **Native content requirements**: Extensions can require specific detected content such as links or file paths, and a selection containing several links opens each of them.
-- **Rich selections**: Rich text selections keep their formatting when passed to actions.
-- **oMLX preset**: Added oMLX to the local LLM server presets.
-- **Screen Recording permission**: Shown in General preferences and onboarding, with a restyled glass onboarding.
-- **Simpler preferences**: Preferences search is simplified and General descriptions moved into (i) info popovers. The Fit to width setting is removed; Actions Per Page always applies.
-- Result-card file buttons are labelled **Copy** without an icon.
-
-### Fixes & Stability
-- **Selection reliability**: Fixed selections missing in apps such as Chrome and Ghostty, improved Electron app support, and rejected mouse gestures on window chrome.
-- **AI settings persistence**: Provider settings are no longer overwritten at launch and carry across development and release builds.
-- **Saved AI prompts**: Re-running a saved prompt no longer renames the tool.
-- **CJK icons**: Text icons in Chinese, Japanese and Korean are sized as labels instead of badges.
-- Upgraded OpenSelection to 2.16.0.
+- **Action sounds**: play a sound when any action finishes. Choose Click, Drop, Tink, Pop or your own file, and silence individual actions.
+- **AI follow-ups as chat**, with undo and redo (⌘Z / ⇧⌘Z).
+- **Per-action AI provider and model**, with self-updating cloud model lists.
+- **Editable AI system prompt**, and a new AI tab in Settings.
+- **Smarter selections**: rich text is preserved, extensions can require detected content, and several selected links open at once.
+- **oMLX preset** for local LLM servers.
+- **Screen Recording permission** in Settings and a restyled onboarding.
+- Fixed selection missing in Chrome, Ghostty and Electron apps.
+- Fixed AI settings being lost across dev and release builds, and saved prompts being renamed when re-run.
 
 ---
 
