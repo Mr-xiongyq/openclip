@@ -468,9 +468,23 @@ restarting its timer. Hover tooltips avoid the toast. Dismissal and new sessions
 Copy uses the shared clipboard coordinator and rechecks cancellation/session validity after
 acquiring its lease, so superseded recognition does not overwrite the clipboard. Screen Recording access is
 requested by the system on
-first capture; capture errors show System Settings guidance. Selection monitoring is suppressed
-and pending OCR is cancelled through the capture request token, so stale OCR results cannot
-replace a newer popup.
+first capture. Errors are mapped by cause: only a declined permission points to System Settings,
+while a vanished display, a failed capture, and a Vision failure each get their own message. A hotkey
+pressed in a paused or excluded app shows a "Paused" toast instead of doing nothing. Selection monitoring
+is suppressed and pending OCR is cancelled through the capture request token, so stale OCR results
+cannot replace a newer popup; cancelling also cancels the Vision request itself.
+
+The region overlay is a non-activating panel that never becomes key, and OpenClip does not activate
+for it. Activating would blur the source window (the Safari AutoPiP extension enters Picture in
+Picture on window blur) and could switch away from a full-screen Space. Escape comes from the global
+cancel shortcut. Because an inactive app's cursor changes are ignored, `BackgroundCursor` sets the
+private `SetsCursorInBackground` connection property during capture; if that symbol disappears the
+overlay falls back to the arrow cursor. A "Recognizing text…" spinner shows near the release point
+until the popup or a failure toast replaces it.
+
+Recognized lines keep Vision's own order, which is already reading order including column by column;
+`RecognizedTextLayout` only joins a fragment that continues the previous line with a space. Sorting
+lines by height interleaved multi-column text.
 
 ## Unused / latent
 

@@ -2638,6 +2638,19 @@ public class PopupWindowController {
         toastController.reposition(anchorFrame: panel.frame, avoidanceRects: avoidance)
     }
 
+    /// Spinner shown while Capture Text recognizes; the OCR popup, a failure toast, or `hideCaptureProgress` replaces it.
+    func showCaptureProgress(at point: CGPoint, onCancel: @escaping () -> Void) {
+        toastController.show(StatusFeedback(message: String(localized: "Recognizing text…"), style: .info, isLoading: true),
+                             placement: .nearCursor(point), onCancel: onCancel)
+        captureToastPresentationID = toastController.presentationID
+    }
+
+    func hideCaptureProgress() {
+        guard isCaptureToastCurrent, toastController.isLoading else { return }
+        toastController.hide()
+        captureToastPresentationID = nil
+    }
+
     /// Shows feedback near an explicit point or the current cursor; popup/group frames are
     /// avoidance rectangles, not the position of the toast.
     public func showToast(_ feedback: StatusFeedback, at point: CGPoint? = nil) {

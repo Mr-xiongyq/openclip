@@ -398,6 +398,7 @@
 		E27BC38183CE54F6073EC02F /* AppFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 750ADA88A976EEF10B2481E2 /* AppFilter.swift */; };
 		E2AECBA551D3E9EBCFCF073A /* PopupResizeGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE9A2E6AABA7969BAF8C6A44 /* PopupResizeGeometry.swift */; };
 		E349DDD966C6A17A8B49DAAA /* OpenURLAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5D1E29A447351B335A4C2A4 /* OpenURLAction.swift */; };
+		E3950C3D0F98B0127DE24634 /* RecognizedTextLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50ED885195ED5F0480BB0606 /* RecognizedTextLayoutTests.swift */; };
 		E3B5093C79B8927F75486FCD /* DebugLogLevel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4EF53D5A01CA2A1884F414D /* DebugLogLevel.swift */; };
 		E41B0CF982FE94FFB711273A /* PasteAvailability.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B1CAECD556B1DF6245E0DED /* PasteAvailability.swift */; };
 		E453F32D7A7554D4A1180065 /* DefaultCustomActionJSRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE181CF145B045A773B2E3FC /* DefaultCustomActionJSRunner.swift */; };
@@ -425,6 +426,7 @@
 		EE047575D4BBDD2F0D88A15C /* OpenClipModuleLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC570E95AD00AF13279BF5F1 /* OpenClipModuleLoader.swift */; };
 		EF3BE1F10E35A392B5F686F8 /* RecommendedExtensionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EE6E52A608F70478CA1BB44 /* RecommendedExtensionsView.swift */; };
 		F0469675D9268D8B2FF96930 /* PopupPageLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DDE8FADF17FFAAA734E652D /* PopupPageLayout.swift */; };
+		F1366C19CF4DE041EB2194FB /* BackgroundCursor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12A890803B54CB49FA943B67 /* BackgroundCursor.swift */; };
 		F1F3954D6FA609E1F9A1D41F /* TextDiffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F550B3391CB67E294AE13EC /* TextDiffTests.swift */; };
 		F2C695C2AE2DC5E209DF8E29 /* SettingsCatalog+App.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78ECD0EE9D85A99ADC32BF3 /* SettingsCatalog+App.swift */; };
 		F3605465C595AC6C4AD817D6 /* SettingKey+MenuBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34FD5FB4055A0801CFE23340 /* SettingKey+MenuBar.swift */; };
@@ -513,6 +515,7 @@
 		0F4DAB73B13C780B669746CE /* ModifierFlags.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModifierFlags.swift; sourceTree = "<group>"; };
 		108E36CD124AAFD86FD11118 /* ActionChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionChrome.swift; sourceTree = "<group>"; };
 		10B923368046F4E0BDAC9106 /* ActionBindingStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionBindingStoreTests.swift; sourceTree = "<group>"; };
+		12A890803B54CB49FA943B67 /* BackgroundCursor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundCursor.swift; sourceTree = "<group>"; };
 		13203CA85D0AF255C30EC63B /* ActionSound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionSound.swift; sourceTree = "<group>"; };
 		14D700402A242D8DEE0F3686 /* LiquidGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlass.swift; sourceTree = "<group>"; };
 		14E8C5B2AC7501048B10F0D1 /* Action.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Action.swift; sourceTree = "<group>"; };
@@ -636,6 +639,7 @@
 		4FD963C9E0D372414ECC705E /* ShortcutRecorderPopover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutRecorderPopover.swift; sourceTree = "<group>"; };
 		503C3147E869802CD5FF0867 /* AIPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIPage.swift; sourceTree = "<group>"; };
 		5056C8C6C08BF8DC3FFAAC3C /* SubBarState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubBarState.swift; sourceTree = "<group>"; };
+		50ED885195ED5F0480BB0606 /* RecognizedTextLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecognizedTextLayoutTests.swift; sourceTree = "<group>"; };
 		535B6891DB044AC163B4E2CF /* RotatingFileLogSink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RotatingFileLogSink.swift; sourceTree = "<group>"; };
 		5403DA3AA5ED80810759AB76 /* ActionIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionIconView.swift; sourceTree = "<group>"; };
 		5462DE3FBF349954799E6C00 /* AIProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProvider.swift; sourceTree = "<group>"; };
@@ -1469,6 +1473,7 @@
 		BA6CA2838909F04B095764A5 /* OCR */ = {
 			isa = PBXGroup;
 			children = (
+				12A890803B54CB49FA943B67 /* BackgroundCursor.swift */,
 				209F66003D90058DCFD74DF9 /* CaptureTextController.swift */,
 			);
 			path = OCR;
@@ -1662,6 +1667,7 @@
 				AC483BDCE6EE16D011D865E8 /* PopupSpaceRecoveryTests.swift */,
 				DA2E5E713FFF659BDC452D55 /* PopupThemeModelTests.swift */,
 				8D14C28EACEC1B21C6403D97 /* PreferencesToolbarTests.swift */,
+				50ED885195ED5F0480BB0606 /* RecognizedTextLayoutTests.swift */,
 				4E0824A74806623A75D29570 /* RemoteExtensionInstallerTests.swift */,
 				9A1B2C0B1F2A2932B208F7B8 /* ReorderableRowsTests.swift */,
 				92591CBEAFDE51E7D4630274 /* RevealInFinderActionTests.swift */,
@@ -1956,6 +1962,7 @@
 				8B884D4135324DC919D8941A /* PopupSpaceRecoveryTests.swift in Sources */,
 				08B4A887BE963B687978A950 /* PopupThemeModelTests.swift in Sources */,
 				4154A3552AB906E34710D4C2 /* PreferencesToolbarTests.swift in Sources */,
+				E3950C3D0F98B0127DE24634 /* RecognizedTextLayoutTests.swift in Sources */,
 				2E0CE79B92BCBAD1F615A98E /* RemoteExtensionInstallerTests.swift in Sources */,
 				B4A6C6CD5623EB73664CC3E0 /* ReorderableRowsTests.swift in Sources */,
 				470BB95C626E3041E74CA19D /* RevealInFinderActionTests.swift in Sources */,
@@ -2142,6 +2149,7 @@
 				7EDDECF89D21D258E5A00C01 /* AppleIntelligenceProvider.swift in Sources */,
 				B4DA8361B40017E09D1FF51A /* AppleScriptAction.swift in Sources */,
 				5855A29EBF520A06EC21B4CE /* AppleScriptRunner.swift in Sources */,
+				F1366C19CF4DE041EB2194FB /* BackgroundCursor.swift in Sources */,
 				0144B49CB0F92F93428F0AA4 /* BrandColor.swift in Sources */,
 				4217ED8BFA9EB516EFC33AC0 /* BrowserTabOpener.swift in Sources */,
 				33B0F70025C8AC0BBDC59CFE /* CLIProvider.swift in Sources */,
