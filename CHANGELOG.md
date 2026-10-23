@@ -4,6 +4,12 @@ All notable user-facing changes to OpenClip.
 
 ---
 
+## Unreleased
+
+- AI Tools now shows your arranged actions on hover and in its search, including presets you moved in, moved out or reordered on the Actions page ([#175](https://github.com/ganeshmshetty/openclip/issues/175)).
+
+---
+
 ## v1.9.0 - 2026-10-20
 
 - **Action sounds**: play a sound when any action finishes. Choose Click, Drop, Tink, Pop or your own file, and silence individual actions.
