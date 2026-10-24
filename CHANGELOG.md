@@ -4,9 +4,16 @@ All notable user-facing changes to OpenClip.
 
 ---
 
-## Unreleased
+## v1.9.1 - 2026-10-24
 
-- AI Tools now shows your arranged actions on hover and in its search, including presets you moved in, moved out or reordered on the Actions page ([#175](https://github.com/ganeshmshetty/openclip/issues/175)).
+### Fixes & Stability
+- **Capture Text keeps the source app in place**: drawing a region no longer activates OpenClip, so full-screen windows and Safari Picture in Picture stay put. Escape still cancels.
+- **Capture Text reading order**: recognized text keeps Vision's line order across columns, and fragments on the same line join with a space.
+- **Clearer capture feedback**: failures name their cause, a **Recognizing text…** spinner shows progress, and a **Paused** toast explains when an app rule blocks the shortcut.
+- **Hover panels recover across Spaces**: tooltips and sub-bars left on another Space reappear instead of staying hidden until restart.
+- **Show in card on every click**: right-click and ⇧-click on a text result now show the card when **Show in card** is your preference, instead of copying.
+- **Custom URL schemes open through the right app**: only http(s) links go to the source browser, so actions such as `goodlinks://` no longer trigger the browser's "allow this website to open…" prompt ([#177](https://github.com/ganeshmshetty/openclip/pull/177)).
+- **AI Tools ordering**: AI Tools now shows your arranged actions on hover and in its search, including presets you moved in, moved out or reordered on the Actions page ([#175](https://github.com/ganeshmshetty/openclip/issues/175)).
 
 ---
 

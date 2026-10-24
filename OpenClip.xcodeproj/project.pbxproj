@@ -150,6 +150,7 @@
 		50F21860E1A529BAC77C1471 /* AISettingsSiblingImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68398DBF5595C9E8C0BECA0B /* AISettingsSiblingImportTests.swift */; };
 		5116F40F001337D7A910E311 /* StatusBarControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 831EE1ACBF685660FC4A7E1C /* StatusBarControllerTests.swift */; };
 		5126A4053F09E20D53301C0F /* CustomActionSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31BA6EC72D0F0B9DB692C71A /* CustomActionSound.swift */; };
+		51956AC1E074418FD77908C1 /* CustomSchemeBrowserRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 359ECD42EA9E405CA9AFD9D4 /* CustomSchemeBrowserRoutingTests.swift */; };
 		51EC700EB7A803FD67BDE304 /* PopupResizeHandles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 304CDBC2F9749852072668D2 /* PopupResizeHandles.swift */; };
 		5217746177125684C4C0D562 /* AIConfigureForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0840C0956DCD2948A2E47F53 /* AIConfigureForm.swift */; };
 		525E21DA64B3EB439A493E1C /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 69201994E9CE6C7F2CDED2F0 /* KeyboardShortcuts */; };
@@ -582,6 +583,7 @@
 		346B1CA246353D1E4C8FC2A6 /* AppUpdateManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateManagerTests.swift; sourceTree = "<group>"; };
 		34FD5FB4055A0801CFE23340 /* SettingKey+MenuBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingKey+MenuBar.swift"; sourceTree = "<group>"; };
 		3573C5F0E0C00C1A562BBBDC /* SelectionRetrievalMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionRetrievalMode.swift; sourceTree = "<group>"; };
+		359ECD42EA9E405CA9AFD9D4 /* CustomSchemeBrowserRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomSchemeBrowserRoutingTests.swift; sourceTree = "<group>"; };
 		36016F74951C9B2E0CAA6894 /* AboutTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutTabView.swift; sourceTree = "<group>"; };
 		36074506EE28161A7C12C456 /* FileOutputKindTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileOutputKindTests.swift; sourceTree = "<group>"; };
 		3675FDD7BC06CF3B3CBDA003 /* DynamicActionConfigView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicActionConfigView.swift; sourceTree = "<group>"; };
@@ -1606,6 +1608,7 @@
 				9206ED1D9BA1DDBC6B15C384 /* CustomActionManifestWriterTests.swift */,
 				ACDEAC9CA4D44F809DFCAE45 /* CustomActionSoundTests.swift */,
 				F5039B99D3EACB1E2BF272D2 /* CustomIconManagerTests.swift */,
+				359ECD42EA9E405CA9AFD9D4 /* CustomSchemeBrowserRoutingTests.swift */,
 				57D3417470E254AA1CA970D2 /* DebugLogBufferTests.swift */,
 				D0F292704F06603C30BB2C77 /* DebugLogCommandTests.swift */,
 				867F5FE32483EEF1ED7B18D1 /* DebugLogEntryTests.swift */,
@@ -1901,6 +1904,7 @@
 				D7E40768967837E0BB3D1F89 /* CustomActionManifestWriterTests.swift in Sources */,
 				575A79D43CDC0D812BE7BC2D /* CustomActionSoundTests.swift in Sources */,
 				E6F19F69F4A7600DE3C664AA /* CustomIconManagerTests.swift in Sources */,
+				51956AC1E074418FD77908C1 /* CustomSchemeBrowserRoutingTests.swift in Sources */,
 				4C7A369633219B87FC717CF6 /* DebugLogBufferTests.swift in Sources */,
 				4C292689D2C7C7564D4D9AFF /* DebugLogCommandTests.swift in Sources */,
 				4D95DD2D804C916472C1A427 /* DebugLogEntryTests.swift in Sources */,
@@ -2343,7 +2347,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 24;
+				CURRENT_PROJECT_VERSION = 25;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -2357,7 +2361,7 @@
 				);
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.9.0;
+				MARKETING_VERSION = 1.9.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.openclip.OpenClip.dev;
 				PRODUCT_MODULE_NAME = OpenClip;
 				SDKROOT = macosx;
@@ -2375,7 +2379,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 24;
+				CURRENT_PROJECT_VERSION = 25;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -2389,7 +2393,7 @@
 				);
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.9.0;
+				MARKETING_VERSION = 1.9.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.openclip.OpenClip;
 				PRODUCT_MODULE_NAME = OpenClip;
 				SDKROOT = macosx;
