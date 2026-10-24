@@ -121,6 +121,10 @@ final class CaptureTextController {
                         self.closePanels()
                     }
                 }
+                // A cancellation between scheduling this task and its first turn clears requestID;
+                // showing the spinner then would outlive every cleanup path, since the defer below
+                // only runs while this request is still current.
+                guard self.requestID == id, !Task.isCancelled else { return }
                 self.popupController?.showCaptureProgress(at: releasePoint) { [weak self] in self?.cancel() }
                 do {
                     let image = try await Self.capture(displayID: geometry.displayID, sourceRect: geometry.sourceRect, pixelSize: geometry.pixelSize)
