@@ -243,6 +243,12 @@ areas; stale debt notes are worse than none.
 
 ## Action-search palette and popup growth
 
+- The unscoped search palette starts with runnable contextual matches, using the bar's stable
+  contextual-first ordering and honoring both the global toggle and per-action contextual opt-outs.
+  Other actions retain their saved relative order; neither the registry nor saved preferences are
+  reordered. Typing still uses the existing alias/title/fuzzy/keyword ranking and usage tie-breaks;
+  clearing the query restores contextual-first order. Scoped palettes keep their explicit child order.
+
 - Classic popup shadows use a separate padded rendering buffer. `PopupCardChromeModifier`
   rasterizes only the solid rounded surface and its contact/ambient shadows, with
   `popupShadowInset` inside the buffer. The buttons and other live content remain outside that

@@ -68,7 +68,7 @@ public final class ActionCoordinator: ObservableObject, Sendable {
         registry.availableActions(for: context)
     }
 
-    /// Action-search catalog for `context`. Settings-disabled actions stay visible; contextually unusable ones are dropped.
+    /// Runnable action-search catalog for `context`, with matching contextual actions first.
     public func searchCatalog(for context: ActionContext) -> [any Action] {
         registry.searchCatalog(for: context)
     }
