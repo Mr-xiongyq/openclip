@@ -5,6 +5,19 @@ reached the target architecture. These change more often than the hard rules, so
 tracked here rather than in `AGENTS.md`. Keep this file current when you touch any of these
 areas; stale debt notes are worse than none.
 
+## Extension hot reload
+
+- `ExtensionsDirectoryWatcher` uses recursive FSEvents notifications and one-shot settling checks,
+  not a recurring directory scan. An unchanged tree has no scheduled snapshot work. It watches an
+  existing ancestor to detect extensions-root replacement/recreation and filters unrelated and
+  hidden paths. Reloads remain serialized through the existing loader callback.
+- Missing/unreadable roots preserve the registry and wait for another filesystem event rather than
+  retrying forever. Stream startup failure is logged; there is no polling fallback. Settling still
+  uses modification-date snapshots, so a writer paused longer than the quiet interval can appear
+  complete, and edits preserving paths and modification dates remain indistinguishable.
+- Permission-screen polling and event-driven selection listeners are unchanged. Removing idle
+  extension scans does not guarantee that app-wide CPU usage always displays exactly zero.
+
 ## Extension automatic updates
 
 - About → Extension Updates contains a persisted toggle, enabled by default. The app checks
