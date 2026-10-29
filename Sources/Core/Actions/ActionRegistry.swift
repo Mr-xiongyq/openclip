@@ -333,6 +333,19 @@ public final class ActionRegistry: ObservableObject, Sendable {
         return map
     }
 
+    /// Parent-container disable state, independent of the child's own saved switch.
+    public func isDisabledByParentGroup(
+        _ action: any Action,
+        disabledActionIDs: Set<String>,
+        disabledPackages: Set<String>
+    ) -> Bool {
+        let hiddenGroups = hiddenGroupIDs { parent in
+            !isDisabledInSettings(parent, disabledIDs: disabledActionIDs, disabledPackages: disabledPackages)
+        }
+        guard !hiddenGroups.isEmpty else { return false }
+        return belongsToHiddenGroup(action, hiddenGroupIDs: hiddenGroups, memberToGroupID: groupMembership())
+    }
+
     public func availableActions(for context: ActionContext) -> [any Action] {
         let disabledIDs = settingsStore.get(.disabledActionIDs)
         let disabledPackages = settingsStore.get(.disabledPackages)

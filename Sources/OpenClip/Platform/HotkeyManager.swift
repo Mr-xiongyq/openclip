@@ -291,16 +291,9 @@ public final class HotkeyManager {
                 return
             }
         }
-        let groupDefs = ActionCoordinator.shared.actionGroupDefs
-        if let parentGroup = groupDefs.first(where: { $0.memberActionIDs.contains(action.id) }),
-           disabledIDs.contains(parentGroup.id) {
-            return
-        }
-        if let parentExtensionGroup = ActionCoordinator.shared.actions.first(where: {
-            $0.chrome.popupBehavior == .showSubActions && action.id != $0.id && action.id.hasPrefix($0.id + ".")
-        }), disabledIDs.contains(parentExtensionGroup.id) {
-            return
-        }
+        guard !ActionCoordinator.shared.isDisabledByParentGroup(
+            action, disabledActionIDs: disabledIDs, disabledPackages: disabledPackages
+        ) else { return }
 
         if popupController.isVisible, let context = popupController.currentActionContext {
             popupController.runBoundAction(action, with: context)

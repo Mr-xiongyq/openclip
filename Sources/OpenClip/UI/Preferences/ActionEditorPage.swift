@@ -295,7 +295,8 @@ public struct ActionEditorPage: View {
         ActionEnablement.binding(
             for: action,
             disabledActionIDs: $disabledActionIDs,
-            disabledPackages: $disabledPackages
+            disabledPackages: $disabledPackages,
+            coordinator: coordinator
         )
     }
 
@@ -523,6 +524,9 @@ public struct ActionEditorPage: View {
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .controlSize(.regular)
+                        .disabled(coordinator.isDisabledByParentGroup(
+                            action, disabledActionIDs: disabledActionIDs, disabledPackages: disabledPackages
+                        ))
                 }
                 if let packageID = extensionPackageID {
                     Divider()

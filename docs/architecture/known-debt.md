@@ -137,6 +137,14 @@ areas; stale debt notes are worse than none.
 
 ## Action seams already implemented
 
+- Parent-group disable state is resolved through the registry's existing provider/custom-group
+  membership and package rules, exposed by `ActionCoordinator.isDisabledByParentGroup`. Child
+  switches in Actions, Shortcuts, extension lists, and action editors show off and are non-interactive
+  while their parent is disabled. Child settings and configuration access are preserved; re-enabling
+  a group restores each child's previous choice rather than enabling every child. Outline signatures
+  include parent state so reused rows refresh. Per-action hotkeys use the same membership gate,
+  including canonical provider-owned IDs; standalone AI presets do not inherit AI Tools' switch.
+
 - Coordinator composition is done. `ActionCoordinator.loadInitialState()` wires `ExtensionManager`
   to the registry via `onRegister`/`onUnregister`; the manager never calls `ActionRegistry.shared`
   directly. GUI-authored actions persist as manifest packages (via `CustomActionManifestWriter`);

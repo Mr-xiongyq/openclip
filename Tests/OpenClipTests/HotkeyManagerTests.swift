@@ -518,6 +518,37 @@ final class HotkeyManagerTests: XCTestCase {
         XCTAssertFalse(performed)
     }
 
+    func testHandleActionHotkeyRespectsProviderDeclaredParentMembership() async throws {
+        let manager = HotkeyManager.shared
+        let controller = PopupWindowController()
+        manager.setup(popupController: controller)
+        let performed = expectation(description: "Enabled child executes")
+        var executions = 0
+        let child = BoundTestAction(id: "test.canonical.child") {
+            executions += 1
+            performed.fulfill()
+        }
+        let parent = CustomGroupAction(
+            id: "test.provider.group", title: "Tools", iconName: "folder", memberActionIDs: [child.id]
+        )
+        ActionCoordinator.shared.register(action: parent)
+        ActionCoordinator.shared.register(action: child)
+        controller.startTestSession(for: SelectionContext(
+            text: "sample text", sourceApp: AppIdentity(NSRunningApplication.current)
+        ))
+        let store = MemorySettingsStore()
+        store.set(.disabledActionIDs, value: [parent.id])
+
+        manager.handleActionHotkey(child.id, settingsStore: store)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(executions, 0)
+
+        store.set(.disabledActionIDs, value: [])
+        manager.handleActionHotkey(child.id, settingsStore: store)
+        await fulfillment(of: [performed], timeout: 2)
+        XCTAssertEqual(executions, 1)
+    }
+
     func testCollectTriggerPreservesCompletePayloadInCachedPath() async throws {
         let manager = HotkeyManager.shared
         let mockMonitor = MockSelectionMonitor()

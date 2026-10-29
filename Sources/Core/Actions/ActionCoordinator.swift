@@ -72,6 +72,14 @@ public final class ActionCoordinator: ObservableObject, Sendable {
     public func searchCatalog(for context: ActionContext) -> [any Action] {
         registry.searchCatalog(for: context)
     }
+
+    public func isDisabledByParentGroup(
+        _ action: any Action,
+        disabledActionIDs: Set<String>,
+        disabledPackages: Set<String>
+    ) -> Bool {
+        registry.isDisabledByParentGroup(action, disabledActionIDs: disabledActionIDs, disabledPackages: disabledPackages)
+    }
     
     public func register(action: any Action) {
         registry.register(action: action)
