@@ -41,12 +41,12 @@ Download the latest `.dmg` from [Releases](https://github.com/ganeshmshetty/open
 
 ## Features
 
-- **Contextual bar** — Appears instantly near your selection with relevant actions (case transform, search, copy/cut, math, or custom scripts).
-- **Search palette (`⌥⌘C`)** — Press hotkey to fuzzy search your entire action catalog.
-- **Extensions** — Write or install custom extensions in JavaScript, Shell, AppleScript, or URL schemes.
-- **Native & fast** — Written in Swift 6 with strict concurrency; lightweight background footprint.
-- **Optional AI actions** — Run text through local Ollama models, Apple Intelligence, or OpenAI/Anthropic keys.
-- **Privacy-first** — Zero telemetry, no analytics, 100% local execution.
+- **Contextual bar**: Appears instantly near your selection with relevant actions (case transform, search, copy/cut, math, or custom scripts).
+- **Search palette (`⌥⌘C`)**: Press hotkey to fuzzy search your entire action catalog.
+- **Extensions**: Write or install custom extensions in JavaScript, Shell, AppleScript, or URL schemes.
+- **Native & fast**: Written in Swift 6 with strict concurrency; lightweight background footprint.
+- **Optional AI actions**: Run text through local Ollama models, Apple Intelligence, or OpenAI/Anthropic keys.
+- **Privacy-first**: Zero telemetry, no analytics, 100% local execution.
 
 ---
 
