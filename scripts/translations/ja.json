@@ -720,8 +720,6 @@
   "Maximum": "最大",
   "Selection": "選択範囲",
   "Clipboard": "クリップボード",
-  "Tab to switch text source": "Tab キーでテキストソースを切り替え",
-  "Press Tab to switch between selection and clipboard": "Tab キーで選択範囲とクリップボードを切り替え",
   "Capture Text Shortcut": "テキストキャプチャのショートカット",
   "Select a screen region and recognize its text.": "画面の範囲を選択してテキストを認識します。",
   "Drag to capture text · Esc to cancel": "ドラッグしてテキストをキャプチャ · Esc キーでキャンセル",

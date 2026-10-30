@@ -299,10 +299,6 @@ public class PopupWindowController {
             actions: activeActions,
             allActions: activeActions,
             context: actionContext,
-            alternateSearchContext: alternateClipboardSearchContext(for: context),
-            onSearchContextChanged: { [weak self] selection in
-                self?.updateSearchContext(selection)
-            },
             screenWidth: screenBounds.width,
             initialAICardAboveBar: cardAbove,
             modeStore: modeStore,
@@ -623,40 +619,6 @@ public class PopupWindowController {
     /// The panel width for the palette: the default column plus the shadow ring on both sides.
     private var currentSearchPanelWidth: CGFloat {
         PopupMetrics.searchPanelWidth
-    }
-
-    private func alternateClipboardSearchContext(for selection: SelectionContext) -> SelectionContext? {
-        guard !selection.isClipboardFallback,
-              !selection.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        let pasteboard = NSPasteboard.general
-        guard let text = pasteboard.string(forType: .string),
-              TextSanitizer.isSubstantial(text),
-              text.utf8.count <= Constants.maxTextLength,
-              text != selection.text else { return nil }
-        return SelectionContext(
-            text: text,
-            sourceApp: selection.sourceApp,
-            cursorPosition: selection.cursorPosition,
-            mouseDownLocation: selection.mouseDownLocation,
-            selectionBounds: nil,
-            timestamp: selection.timestamp,
-            appPolicy: selection.appPolicy,
-            isClipboardFallback: true,
-            html: pasteboard.string(forType: .html),
-            rtf: pasteboard.string(forType: .rtf),
-            isEditable: false,
-            pasteTargetAvailable: selection.pasteTargetAvailable
-        )
-    }
-
-    private func updateSearchContext(_ selection: SelectionContext) {
-        guard modeStore.mode == .search else { return }
-        currentActionContext = ActionContext(
-            selection: selection,
-            modifiers: currentActionContext?.modifiers ?? []
-        )
-        // Inline values were for the original selection; clear them so the palette can't show a stale preview.
-        modeStore.inlineResults.removeAll()
     }
 
     /// The hosting view grows the panel after the run-loop turn; nudge it back on screen once that growth lands (two retries, as in showResultCard).

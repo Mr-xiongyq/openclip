@@ -116,6 +116,10 @@ final class PopupSearchScopeTests: XCTestCase {
         XCTAssertEqual(ActionSearch.search("copy", in: index).map(\.id), ["builtin.copy"])
         XCTAssertEqual(ActionSearch.search("calc", in: index).map(\.id), ["builtin.copy", "builtin.calculate"])
         XCTAssertEqual(ActionSearch.search("  ", in: index).map(\.id), ["builtin.calculate", "builtin.copy"])
+        XCTAssertEqual(PopupSearchView.contextualBoundary(in: index, enabled: true, disabledIDs: []), 1)
+        XCTAssertNil(PopupSearchView.contextualBoundary(in: index, enabled: false, disabledIDs: []))
+        XCTAssertNil(PopupSearchView.contextualBoundary(in: index, enabled: true, disabledIDs: ["builtin.calculate"]))
+        XCTAssertNil(PopupSearchView.contextualBoundary(in: Array(index.prefix(1)), enabled: true, disabledIDs: []))
     }
 
     @MainActor
@@ -190,4 +194,5 @@ final class PopupSearchScopeTests: XCTestCase {
         )
         XCTAssertNotNil(viewAfterUsage)
     }
+
 }

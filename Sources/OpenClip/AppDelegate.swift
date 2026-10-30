@@ -117,7 +117,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
         let captureController = CaptureTextController(popupController: controller)
         captureTextController = captureController
-        macMonitor.isSuppressed = { [weak captureController] in captureController?.isCapturing ?? false }
+        macMonitor.isSuppressed = { [weak self, weak captureController] in
+            captureController?.isCapturing == true || self?.popupController?.modeStore.mode == .search
+        }
         statusBarController?.onCaptureText = { [weak captureController] sourceApp in
             captureController?.toggleCapture(sourceApp: sourceApp)
         }

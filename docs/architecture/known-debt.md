@@ -251,6 +251,15 @@ areas; stale debt notes are worse than none.
 
 ## Action-search palette and popup growth
 
+- Shortcut-opened search resolves cached selection or clipboard input synchronously and never waits
+  for AX before presenting its field. The focused palette does not start AX retrieval: the
+  system-wide focused app is OpenClip itself, and reading its SwiftUI accessibility hierarchy from
+  the inspect queue crashes the main-actor isolation check. Cold copy-only apps therefore use the
+  clipboard snapshot captured at invocation, or an empty context. In-flight passive selection work
+  is cancelled before focus moves. Per-action hotkeys retain full retrieval. The source indicator is
+  read-only, and Tab is consumed without changing focus or input. Keyboard selection gestures
+  invalidate the previous cached input before their debounce begins.
+
 - The unscoped search palette starts with runnable contextual matches, using the bar's stable
   contextual-first ordering and honoring both the global toggle and per-action contextual opt-outs.
   Other actions retain their saved relative order; neither the registry nor saved preferences are
@@ -362,9 +371,9 @@ areas; stale debt notes are worse than none.
 - The search header can move the popup. Dragging its magnifying glass or the clear strips above
   and below the text field uses the result card's panel-drag path; editing and selecting search text
   remains on the text field. The pre-search bar frame moves by the same delta so leaving search
-  returns the bar to the dragged position. The trailing source chip shows whether the active action
-  context is the selection or clipboard; Tab switches between them when a distinct clipboard text
-  snapshot is available, and the visible chip can also be clicked.
+  returns the bar to the dragged position. The trailing source indicator shows whether the active
+  action context is the selection or clipboard. It is read-only; Tab is reserved for a future
+  palette action and is currently consumed without changing focus or input.
 - Define has a single display picker. Popover mode is a system Look Up popover, not inline
   content. `DefineAction` exposes one `definitionDisplay` picker (`card` default / `popover` /
   `dictionary`), replacing the old `openInDictionaryApp` boolean; a legacy `true` migrates to

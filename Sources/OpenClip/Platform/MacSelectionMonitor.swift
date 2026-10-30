@@ -716,6 +716,7 @@ internal final class MacSelectionMonitor: SelectionMonitoring {
     /// now-frontmost app). `isSelectAll` marks a whole-container gesture (⌘A / ⌘L), which retrieval
     /// refuses on a row/list container (row selection in Finder/Mail/table views).
     internal func handleSelectionTrigger(isSelectAll: Bool) {
+        clearSelection()
         selectionSourceApp = frontmostAppProvider()
         debounceTask?.cancel()
         guard settingsStore.get(.pauseUntilTimestamp) <= Date().timeIntervalSince1970 else { return }

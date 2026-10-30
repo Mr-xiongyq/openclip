@@ -18,6 +18,19 @@ final class MacSelectionMonitorTests: XCTestCase {
         XCTAssertFalse(MacSelectionMonitor.isSelectionTrigger(keyCode: 0x00, flags: []))
     }
 
+    func testKeyboardSelectionInvalidatesCachedInputBeforeDebounce() {
+        let monitor = MacSelectionMonitor(settingsStore: MemorySettingsStore())
+        let source = AppIdentity(bundleIdentifier: "com.apple.TextEdit", localizedName: "TextEdit")
+        monitor.latestSelection = (SelectionContext(text: "previous selection", sourceApp: source), true)
+        let generation = monitor.selectionGeneration
+        defer { monitor.cancelPendingSelection() }
+
+        monitor.handleKeyDown(keyCode: 0x00, flags: [.command])
+
+        XCTAssertNil(monitor.synchronousSelection(for: source), "The instant palette must not reuse input from before a new selection gesture")
+        XCTAssertNotEqual(monitor.selectionGeneration, generation)
+    }
+
     /// ⌘L selects the address bar in a browser and the current line in editors — a selection
     /// gesture like any other, and one that produced no popup at all before.
     func testCommandLTriggersSelectionRetrieval() {

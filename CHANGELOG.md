@@ -4,10 +4,18 @@ All notable user-facing changes to OpenClip.
 
 ---
 
-## Unreleased
+## v1.9.2 - 2026-10-30
+
+### Improvements
+- **Contextual actions in search**: matching contextual actions appear before other available actions, with a small gap separating the two groups.
+- **Lower idle overhead**: extension monitoring no longer polls the extensions directory while idle.
+- **Faster search shortcut**: the palette opens using the current cached selection, clipboard, or an empty context without waiting for a fresh selection read. The source indicator is now read-only; switching between selection and clipboard in the palette is no longer available.
 
 ### Fixes & Stability
 - **Brave Origin support**: Search and URL actions now open in Brave Origin (and Origin Beta) when that's where you selected the text, instead of your default browser ([#180](https://github.com/ganeshmshetty/openclip/issues/180)).
+- **Group settings**: disabling a group also disables its child actions while preserving their individual settings.
+- **Sub-bar navigation**: moving toward an open sub-bar no longer immediately switches to an adjacent group ([#194](https://github.com/ganeshmshetty/openclip/issues/194)).
+- **Search input safety**: pending selection reads are cancelled before the palette takes focus, preventing a late copy from reaching its search field.
 
 ---
 

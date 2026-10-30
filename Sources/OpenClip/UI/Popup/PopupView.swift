@@ -17,8 +17,6 @@ public struct PopupView: View {
     public let actions: [any Action]
     public let allActions: [any Action]
     public let context: ActionContext
-    private let alternateSearchContext: SelectionContext?
-    private let onSearchContextChanged: (@MainActor (SelectionContext) -> Void)?
     public let onResult: @MainActor (ActionResult) -> Void
     public let onContentSizeChange: (@MainActor (CGSize) -> Void)?
     /// active=true while AI runs or shows a result; cardAboveBar=true when the card renders above the bar.
@@ -149,8 +147,6 @@ public struct PopupView: View {
         actions: [any Action],
         allActions: [any Action]? = nil,
         context: ActionContext,
-        alternateSearchContext: SelectionContext? = nil,
-        onSearchContextChanged: (@MainActor (SelectionContext) -> Void)? = nil,
         screenWidth: CGFloat = NSScreen.main?.visibleFrame.width ?? 1440.0,
         initialAICardAboveBar: Bool = false,
         hoverState: PopupHoverState = .shared,
@@ -204,8 +200,6 @@ public struct PopupView: View {
         self.actions = actions
         self.allActions = allActions ?? actions
         self.context = context
-        self.alternateSearchContext = alternateSearchContext
-        self.onSearchContextChanged = onSearchContextChanged
         self.onResult = onResult
         self.onContentSizeChange = onContentSizeChange
         self.onAIStateChange = onAIStateChange
@@ -526,8 +520,6 @@ public struct PopupView: View {
         PopupSearchView(
             catalog: searchCatalog,
             context: context,
-            alternateContext: alternateSearchContext,
-            onContextChanged: onSearchContextChanged,
             resultsAbove: false,
             presenter: presenter,
             modeStore: modeStore,

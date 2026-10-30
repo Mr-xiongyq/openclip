@@ -11,8 +11,6 @@ import Core
 public struct PopupSearchView: View {
     public let catalog: [any Action]
     public let context: ActionContext
-    public let alternateContext: SelectionContext?
-    private let onContextChanged: (@MainActor (SelectionContext) -> Void)?
     public let resultsAbove: Bool
     public let onResult: @MainActor (ActionResult) -> Void
     public let onExit: @MainActor () -> Void
@@ -53,6 +51,8 @@ public struct PopupSearchView: View {
     @Environment(\.popupEffectiveTheme) private var environmentEffectiveTheme
     @Setting(SettingKey.popupTheme) private var selectedTheme
     @Setting(SettingKey.popupThemeColor) private var themeColor
+    @Setting(SettingKey.contextualActionsEnabled) private var contextualActionsEnabled
+    @Setting(SettingKey.disabledContextualActionIDs) private var disabledContextualIDs
     @Environment(\.colorScheme) private var colorScheme
 
     /// Hover uses the AX global-mouse location (instant), falling back to `.onHover`.
@@ -64,7 +64,6 @@ public struct PopupSearchView: View {
     @State private var hoveredTarget: SearchHoverTarget?
     @State private var hoveredFooterButton: FooterButton?
     @State private var isDraggingSearch = false
-    @State private var isContextHovered = false
     @State private var lastClickedRowIndex: Int?
     @State private var lastClickTimestamp: TimeInterval = 0
 
@@ -100,6 +99,7 @@ public struct PopupSearchView: View {
     static let searchHeaderHeight: CGFloat = 48.0
     static let footerHeight: CGFloat = 34.0
     private static let rowSpacing: CGFloat = 2.0
+    private static let contextualGroupSpacing: CGFloat = 8.0
     private static let listBottomPadding: CGFloat = 6.0
 
     /// The AI rows under the results for the current query: Ask + Save when nothing matched, none otherwise.
@@ -115,6 +115,18 @@ public struct PopupSearchView: View {
     static func height(forRows rows: Int) -> CGFloat {
         searchHeaderHeight + CGFloat(rows) * PopupMetrics.searchResultRowHeight
             + CGFloat(max(0, rows - 1)) * rowSpacing + footerHeight + listBottomPadding
+    }
+
+    static func contextualBoundary(in results: [ActionSearchIndex], enabled: Bool, disabledIDs: Set<String>) -> Int? {
+        guard enabled else { return nil }
+        let firstRegular = results.firstIndex { !$0.action.isContextual || disabledIDs.contains($0.id) }
+        guard let firstRegular, firstRegular > 0 else { return nil }
+        return firstRegular
+    }
+
+    private var contextualBoundary: Int? {
+        guard scope == nil, query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return Self.contextualBoundary(in: results, enabled: contextualActionsEnabled, disabledIDs: disabledContextualIDs)
     }
 
     /// `searchMaxRows` rows behind the field.
@@ -165,8 +177,6 @@ public struct PopupSearchView: View {
     public init(
         catalog: [any Action],
         context: ActionContext,
-        alternateContext: SelectionContext? = nil,
-        onContextChanged: (@MainActor (SelectionContext) -> Void)? = nil,
         resultsAbove: Bool = false,
         presenter: any ActionPresenting = ActionCustomizationManager.shared,
         modeStore: PopupModeStore = PopupModeStore(),
@@ -187,8 +197,6 @@ public struct PopupSearchView: View {
     ) {
         self.catalog = catalog
         self.context = context
-        self.alternateContext = alternateContext
-        self.onContextChanged = onContextChanged
         self.resultsAbove = resultsAbove
         self.presenter = presenter
         self._modeStore = ObservedObject(wrappedValue: modeStore)
@@ -220,10 +228,15 @@ public struct PopupSearchView: View {
         _searchIndex = State(initialValue: initialIndex)
         _results = State(initialValue: initialIndex)
         _naturalRowWidth = State(initialValue: Self.naturalRowWidth(for: initialIndex))
+        let initialBoundary = scope == nil && Self.contextualBoundary(
+            in: initialIndex,
+            enabled: DefaultSettingsStore.shared.get(.contextualActionsEnabled),
+            disabledIDs: DefaultSettingsStore.shared.get(.disabledContextualActionIDs)
+        ) != nil
         _cardHeight = State(initialValue: Self.bounded(
-            Self.height(forRows: initialIndex.count),
+            Self.height(forRows: initialIndex.count) + (initialBoundary ? Self.contextualGroupSpacing : 0),
             min: PopupMetrics.searchPaletteMinHeight,
-            max: Self.defaultHeight
+            max: Self.defaultHeight + (initialBoundary ? Self.contextualGroupSpacing : 0)
         ))
     }
 
@@ -314,27 +327,6 @@ public struct PopupSearchView: View {
         )
     }
 
-    private var canSwitchContext: Bool {
-        alternateContext != nil
-    }
-
-    private var selectionSourceAvailable: Bool {
-        !context.selection.isClipboardFallback
-            && !context.selection.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private var clipboardSourceAvailable: Bool {
-        let clipboardContext = activeSelectionContext.isClipboardFallback ? activeSelectionContext : alternateContext
-        guard let clipboardContext else { return false }
-        return !clipboardContext.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private var selectionTitle: String {
-        context.selection.source == .ocr
-            ? String(localized: "OCR")
-            : String(localized: "Selection")
-    }
-
     private var activeContextTitle: String {
         if activeSelectionContext.source == .ocr {
             return String(localized: "OCR")
@@ -362,57 +354,13 @@ public struct PopupSearchView: View {
         }
     }
 
-    private func toggleContextSource() {
-        guard let alternateContext else { return }
-        let nextContext = activeSelectionContext.isClipboardFallback ? context.selection : alternateContext
-        setContextSource(nextContext)
-    }
-
-    private func setContextSource(_ nextContext: SelectionContext?) {
-        guard let nextContext else { return }
-        activeSelectionContext = nextContext
-        onContextChanged?(nextContext)
-        isFocused = true
-    }
-
-    private struct ContextIndicatorButtonStyle: ButtonStyle {
-        func makeBody(configuration: Configuration) -> some View {
-            configuration.label
-                .opacity(configuration.isPressed ? 0.65 : 1.0)
-                .animation(.easeInOut(duration: 0.08), value: configuration.isPressed)
-        }
-    }
-
-    private var customSourceSwitcher: some View {
-        Button {
-            toggleContextSource()
-        } label: {
-            activeSourceIcon
-                .foregroundColor(
-                    canSwitchContext
-                        ? (isContextHovered
-                            ? PopupThemeModel.restForeground(for: effectiveTheme)
-                            : PopupThemeModel.restSecondary(for: effectiveTheme).opacity(0.85))
-                        : PopupThemeModel.restSecondary(for: effectiveTheme).opacity(0.5)
-                )
-                .frame(width: 24, height: 24)
-                .background {
-                    if canSwitchContext && isContextHovered {
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(Color.primary.opacity(colorScheme == .dark ? 0.10 : 0.06))
-                    }
-                }
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(ContextIndicatorButtonStyle())
-        .disabled(!canSwitchContext)
-        .animation(.easeInOut(duration: 0.12), value: isContextHovered)
-        .onHover { hovering in
-            isContextHovered = hovering && canSwitchContext
-        }
-        .help(canSwitchContext ? String(localized: "Tab to switch text source") : activeContextTitle)
-        .accessibilityLabel(activeContextTitle)
-        .accessibilityHint(canSwitchContext ? String(localized: "Press Tab to switch between selection and clipboard") : "")
+    private var sourceIndicator: some View {
+        activeSourceIcon
+            .foregroundColor(PopupThemeModel.restSecondary(for: effectiveTheme).opacity(0.85))
+            .frame(width: 24, height: 24)
+            .help(activeContextTitle)
+            .accessibilityElement()
+            .accessibilityLabel(activeContextTitle)
     }
 
     private var searchFieldRow: some View {
@@ -432,11 +380,8 @@ public struct PopupSearchView: View {
             .font(.system(size: 14, weight: .regular))
             .foregroundColor(PopupThemeModel.restForeground(for: effectiveTheme))
             .focused($isFocused)
-            .onKeyPress(.tab) {
-                guard alternateContext != nil else { return .ignored }
-                toggleContextSource()
-                return .handled
-            }
+            // Tab is reserved for a future palette action; consume it so it cannot move focus.
+            .onKeyPress(.tab) { .handled }
             .onSubmit { runSelected(replace: NSEvent.modifierFlags.contains(.shift)) }
             .onKeyPress { press in
                 if press.key == .escape {
@@ -460,7 +405,7 @@ public struct PopupSearchView: View {
 
             Spacer(minLength: 4)
 
-            customSourceSwitcher
+            sourceIndicator
         }
         .padding(.horizontal, 18)
         .offset(y: 2)
@@ -544,6 +489,7 @@ public struct PopupSearchView: View {
                     LazyVStack(spacing: 2) {
                         ForEach(Array(results.enumerated()), id: \.element.id) { index, item in
                             resultRow(item: item, index: index)
+                                .padding(.top, index == contextualBoundary ? Self.contextualGroupSpacing : 0)
                                 .id(item.id)
                         }
                         // AI rows follow the results (Ask + Save, or Save after recent-prompt matches).

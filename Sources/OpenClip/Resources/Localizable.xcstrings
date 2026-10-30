@@ -14897,34 +14897,6 @@
         }
       }
     },
-    "Press Tab to switch between selection and clipboard": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "按 Tab 键在选中文本和剪贴板之间切换"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "按 Tab 鍵在選取文字和剪貼簿之間切換"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Appuyez sur Tab pour basculer entre la sélection et le presse-papiers"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tab キーで選択範囲とクリップボードを切り替え"
-          }
-        }
-      }
-    },
     "Press and hold without moving the mouse to summon the popup.": {
       "localizations": {
         "zh-Hans": {
@@ -20185,34 +20157,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "システムプロンプト"
-          }
-        }
-      }
-    },
-    "Tab to switch text source": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "按 Tab 键切换文本来源"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "按 Tab 鍵切換文字來源"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tab pour changer la source du texte"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tab キーでテキストソースを切り替え"
           }
         }
       }

@@ -118,6 +118,73 @@ final class HotkeyManagerTests: XCTestCase {
         XCTAssertEqual(response.context?.selectionGeneration, monitor.selectionGeneration)
     }
 
+    func testPaletteOpensSynchronouslyFromCachedSelection() {
+        let manager = HotkeyManager.shared
+        let controller = PopupWindowController(pasteProbe: ImmediateSearchPasteProbe())
+        manager.setup(popupController: controller)
+        let monitor = MockSelectionMonitor()
+        let app = MockFrontmostApp(bundleID: "com.apple.TextEdit")
+        monitor.latestSelection = (SelectionContext(text: "cached selection", sourceApp: AppIdentity(app)), true)
+        manager.selectionMonitor = monitor
+        manager.retriever = SelectionRetrievalCoordinator(inspect: { _ in
+            XCTFail("A valid cached selection must not trigger a new read")
+            return AXElementInspector.Target()
+        })
+        defer { controller.hide() }
+
+        manager.handleTogglePopup(frontmostApp: app)
+
+        XCTAssertTrue(controller.isVisible)
+        XCTAssertEqual(controller.modeStore.mode, .search)
+        XCTAssertEqual(controller.currentActionContext?.selection.text, "cached selection")
+    }
+
+    func testColdPaletteUsesClipboardWithoutInspection() {
+        let manager = HotkeyManager.shared
+        let controller = PopupWindowController(pasteProbe: ImmediateSearchPasteProbe())
+        manager.setup(popupController: controller)
+        manager.selectionMonitor = MockSelectionMonitor()
+        manager.retriever = SelectionRetrievalCoordinator(inspect: { _ in
+            XCTFail("A focused palette must not inspect itself or wait for AX")
+            return AXElementInspector.Target()
+        }, copyCapture: { _ in XCTFail("A focused palette must not post copy"); return nil })
+        let board = NSPasteboard.general
+        let snapshot = PasteboardSnapshot.capture(board)
+        defer { controller.hide(); snapshot.restore(to: board) }
+        board.clearContents()
+        board.setString("clipboard at invocation", forType: .string)
+
+        manager.handleTogglePopup(frontmostApp: MockFrontmostApp(bundleID: "com.apple.TextEdit"))
+        board.clearContents()
+        board.setString("new clipboard while searching", forType: .string)
+
+        XCTAssertTrue(controller.isVisible)
+        XCTAssertEqual(controller.modeStore.mode, .search)
+        XCTAssertEqual(controller.currentActionContext?.selection.text, "clipboard at invocation")
+        XCTAssertEqual(controller.currentActionContext?.selection.source, .clipboard)
+        XCTAssertEqual(board.string(forType: .string), "new clipboard while searching")
+    }
+
+    func testOpeningPaletteCancelsPendingPassiveSelectionBeforeTakingFocus() {
+        let manager = HotkeyManager.shared
+        let controller = PopupWindowController(pasteProbe: ImmediateSearchPasteProbe())
+        manager.setup(popupController: controller)
+        let monitor = MacSelectionMonitor(settingsStore: MemorySettingsStore())
+        let pending = Task<Void, Never> { @MainActor in try? await Task.sleep(for: .seconds(10)) }
+        monitor.debounceTask = pending
+        let generation = monitor.selectionGeneration
+        manager.selectionMonitor = monitor
+        manager.retriever = SelectionRetrievalCoordinator(inspect: { _ in AXElementInspector.Target() })
+        defer { controller.hide() }
+
+        manager.handleTogglePopup(frontmostApp: MockFrontmostApp(bundleID: "com.apple.TextEdit"))
+
+        XCTAssertTrue(pending.isCancelled)
+        XCTAssertNil(monitor.debounceTask)
+        XCTAssertNotEqual(monitor.selectionGeneration, generation)
+        XCTAssertTrue(controller.isVisible)
+    }
+
     /// "Appear Automatically" off stops the popup following selections; the explicit hotkey must still work.
     func testAutomaticAppearanceOffStillAllowsTheHotkey() {
         let store = MemorySettingsStore()
@@ -365,28 +432,7 @@ final class HotkeyManagerTests: XCTestCase {
 
         let frontmost = MockFrontmostApp(bundleID: "com.apple.TextEdit", pid: 99999)
         // With a requestedPID that does not match the actual frontmost app, trigger is refused
-        let trigger = await manager.collectTrigger(frontmostApp: frontmost, requestID: nil, requestedPID: 99999)
-        XCTAssertNil(trigger)
-    }
-
-    func testCollectTriggerRejectsMismatchedRequestID() async throws {
-        let manager = HotkeyManager.shared
-        let monitor = MockSelectionMonitor()
-        let app = AppIdentity(bundleIdentifier: "com.apple.TextEdit", localizedName: "TextEdit")
-        let selection = SelectionContext(
-            text: "monitored text",
-            sourceApp: app,
-            cursorPosition: CGPoint(x: 50, y: 50),
-            selectionBounds: CGRect(x: 10, y: 10, width: 100, height: 20),
-            timestamp: Date(),
-            appPolicy: .default
-        )
-        monitor.latestSelection = (context: selection, canPaste: true)
-        manager.selectionMonitor = monitor
-
-        let frontmost = MockFrontmostApp(bundleID: "com.apple.TextEdit")
-        // Random request ID never matches popupTriggerRequestID.
-        let trigger = await manager.collectTrigger(frontmostApp: frontmost, requestID: UUID())
+        let trigger = await manager.collectTrigger(frontmostApp: frontmost, requestedPID: 99999)
         XCTAssertNil(trigger)
     }
 
@@ -672,6 +718,10 @@ private final class MockSelectionMonitor: SelectionMonitoring {
 
     func start() {}
     func stop() {}
+}
+
+private struct ImmediateSearchPasteProbe: PasteAvailabilityProbing {
+    func canPaste(in app: NSRunningApplication?, policy: AppPolicyContext) async -> Bool? { true }
 }
 
 private struct BoundTestAction: Action {
