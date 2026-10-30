@@ -20,8 +20,8 @@ jobs:
         run: |
           cp scripts/validate_uninstall_ci.py "$RUNNER_TEMP/validate_uninstall_ci.py"
           git fetch origin fix/uninstall-group-options
-          git checkout a887b8bb368b57214ccfae080b3673637dbcae4e
-          test "$(git rev-parse HEAD)" = a887b8bb368b57214ccfae080b3673637dbcae4e
+          git checkout 190e8b08444c19ad04d5b3a7c8a30712e2db175b
+          test "$(git rev-parse HEAD)" = 190e8b08444c19ad04d5b3a7c8a30712e2db175b
           xcodegen generate
           sw_vers
           xcodebuild -version
